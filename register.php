@@ -26,7 +26,7 @@ $country = trim($data["country"]);
 $role = trim($data["role"]);
 
 // Hash the password
-$hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
 
 // Check if email exists
 $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
@@ -40,8 +40,8 @@ if ($result->num_rows > 0) {
 }
 
 // Insert user
-$stmt = $conn->prepare("INSERT INTO users (fullname, email, password, country, role) VALUES (?, ?, ?, ?, ?)");
-$stmt->bind_param("sssss", $fullname, $email, $hashedPassword, $country, $role);
+$stmt = $conn->prepare("INSERT INTO users (fullname, email, password, role, country) VALUES (?, ?, ?, ?, ?)");
+$stmt->bind_param("sssss", $fullname, $email, $password, $role, $country);
 
 if ($stmt->execute()) {
     echo json_encode(["status" => "success", "message" => "User registered successfully"]);

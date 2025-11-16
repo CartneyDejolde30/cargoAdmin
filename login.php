@@ -1,16 +1,20 @@
 <?php
-
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
-header("Access-Control-Allow-Methods: POST");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Content-Type: application/json");
+
+// Handle CORS preflight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    exit;
+}
 
 include "include/db.php";
 
-// Read input
+// Read input JSON
 $data = json_decode(file_get_contents("php://input"), true);
 
 if (!$data || !isset($data["email"], $data["password"])) {
@@ -18,12 +22,12 @@ if (!$data || !isset($data["email"], $data["password"])) {
     exit;
 }
 
-// Trim input
+// Trim inputs
 $email = trim($data["email"]);
 $password = trim($data["password"]);
 
-// Fetch user
-$stmt = $conn->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
+// Fetch user from database
+$stmt = $conn->prepare("SELECT id, fullname, email, phone, address, role, profile_image, password FROM users WHERE email = ? LIMIT 1");
 $stmt->bind_param("s", $email);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -35,21 +39,27 @@ if ($result->num_rows === 0) {
 
 $row = $result->fetch_assoc();
 
-
-error_log("Input password: '$password'");
-error_log("Stored hash: '{$row['password']}'");
-
-// Verify password
-if (password_verify($password, $row["password"])) {
+// Compare password
+// ⚠️ If you are storing hashed passwords, use password_verify($password, $row['password'])
+if ($password === $row["password"]) {
     echo json_encode([
         "status" => "success",
         "message" => "Login successful",
+        "id" => $row["id"],
+        "fullname" => $row["fullname"],
+        "email" => $row["email"],
+        "phone" => $row["phone"] ?? "",
+        "address" => $row["address"] ?? "",
         "role" => $row["role"],
-        "fullname" => $row["fullname"]
+        "profile_image" => $row["profile_image"] ?? ""
     ]);
 } else {
-    echo json_encode(["status" => "error", "message" => "Invalid password"]);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Invalid password"
+    ]);
 }
 
+$stmt->close();
 $conn->close();
 ?>

@@ -2,7 +2,7 @@
 $user = "root";
 $host = "localhost";
 $pass = "";
-$db = "cargodb";
+$db = "dbcargo";
 
 $conn = New mysqli($host,$user,$pass,$db);
 
