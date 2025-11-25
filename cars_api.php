@@ -224,7 +224,7 @@ if ($action === "insert") {
 /* ---------- FETCH CARS ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['owner_id'])) {
 
-    $stmt = $conn->prepare("SELECT * FROM cars WHERE owner_id=? ORDER BY id DESC");
+    $stmt = $conn->prepare("SELECT * FROM cars WHERE owner_id=? AND status='approved' ORDER BY id DESC");
     $stmt->bind_param("i", $_GET['owner_id']);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -236,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['owner_id'])) {
         $row["extra_images"] = $row["extra_images"] ? json_decode($row["extra_images"], true) : [];
 
         // Fix outdated key names so Flutter won't break
-        $row["photo_urls"] = $row["extra_images"]; 
+        $row["photo_urls"] = $row["extra_images"];
 
         $cars[] = $row;
     }
@@ -244,5 +244,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['owner_id'])) {
     echo json_encode($cars);
     exit;
 }
+
 
 ?>

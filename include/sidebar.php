@@ -11,7 +11,7 @@
       <i class="bi bi-grid"></i>
       <span>Dashboard</span>
     </a>
-    <a href="car-listings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'car-listings.php' ? 'active' : ''; ?>">
+    <a href="get_cars_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'car-listings.php' ? 'active' : ''; ?>">
       <i class="bi bi-car-front"></i>
       <span>Car Listing</span>
     </a>

@@ -25,6 +25,8 @@
         <li class="nav-item"><a class="nav-link text-light" href="dashboard.php"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a></li>
         <li class="nav-item"><a class="nav-link text-light" href="users.php"><i class="bi bi-people me-1"></i> Users</a></li>
         <li class="nav-item"><a class="nav-link text-light" href="verification.php"><i class="bi bi-check-circle me-1"></i> Verification</a></li>
+        <li class="nav-item"><a class="nav-link text-light" href="get_cars_admin.php">Car Listings</a></li>
+
         <li class="nav-item"><a class="nav-link text-light" href="bookings.php"><i class="bi bi-calendar-check me-1"></i> Bookings</a></li>
         <li class="nav-item"><a class="nav-link text-light" href="reports.php"><i class="bi bi-flag me-1"></i> Reports</a></li>
         <li class="nav-item"><a class="nav-link text-light" href="settings.php"><i class="bi bi-gear me-1"></i> Settings</a></li>
