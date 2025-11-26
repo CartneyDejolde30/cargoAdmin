@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $limit      = $_POST['mileage_limit'] ?? 0;
 
     $rate       = $_POST['price_per_day'] ?? 0;
-    $address    = $_POST['address'] ?? "";
+    $location    = $_POST['location'] ?? "";
     $lat        = $_POST['latitude'] ?? 0;
     $lng        = $_POST['longitude'] ?? 0;
 
@@ -125,14 +125,14 @@ if ($action === "insert") {
             owner_id, status, car_year, brand, model, body_style, trim,
             plate_number, color, description, advance_notice, min_trip_duration,
             max_trip_duration, delivery_types, features, rules,
-            has_unlimited_mileage, mileage_limit, price_per_day, address,
+            has_unlimited_mileage, mileage_limit, price_per_day, location,
             latitude, longitude, image, official_receipt, certificate_of_registration,
             extra_images
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ");
 
     $stmt->bind_param(
-    "issssssssssiisssiidddsssss",
+    "issssssssssiisssiidsddssss",
     $owner_id,
     $status,
     $year,
@@ -152,7 +152,7 @@ if ($action === "insert") {
     $unlim,
     $limit,
     $rate,
-    $address,
+    $location,
     $lat,
     $lng,
     $main,
@@ -176,12 +176,12 @@ if ($action === "insert") {
                 owner_id=?, status=?, car_year=?, brand=?, model=?, body_style=?, trim=?,
                 plate_number=?, color=?, description=?, advance_notice=?, min_trip_duration=?, max_trip_duration=?,
                 delivery_types=?, features=?, rules=?, unlimited_mileage=?, mileage_limit=?, price_per_day=?,
-                address=?, latitude=?, longitude=?, image=?, official_receipt=?, certificate_of_registration=?,
+                location=?, latitude=?, longitude=?, image=?, official_receipt=?, certificate_of_registration=?,
                 extra_images=? WHERE id=?
         ");
 
         $stmt->bind_param(
-    "issssssssssiisssiidddsssssi",
+    "issssssssssiisssiidsddssssi",
     $owner_id,
     $status,
     $year,
@@ -201,7 +201,7 @@ if ($action === "insert") {
     $unlim,
     $limit,
     $rate,
-    $address,
+    $location,
     $lat,
     $lng,
     $main,
