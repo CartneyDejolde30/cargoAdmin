@@ -13,20 +13,17 @@ include "include/db.php";
 // Read input
 $data = json_decode(file_get_contents("php://input"), true);
 
-if (!$data || !isset($data["fullname"], $data["email"], $data["password"], $data["country"], $data["role"])) {
+if (!$data || !isset($data["fullname"], $data["email"], $data["password"], $data["municipality"], $data["role"])) {
     echo json_encode(["status" => "error", "message" => "Missing fields"]);
     exit;
 }
 
 // Trim input to remove spaces
-$fullname = trim($data["fullname"]);
-$email = trim($data["email"]);
-$password = trim($data["password"]);
-$country = trim($data["country"]);
-$role = trim($data["role"]);
-
-// Hash the password
-
+$fullname     = trim($data["fullname"]);
+$email        = trim($data["email"]);
+$password     = trim($data["password"]); // secure hash
+$municipality = trim($data["municipality"]);
+$role         = trim($data["role"]);
 
 // Check if email exists
 $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
@@ -40,8 +37,8 @@ if ($result->num_rows > 0) {
 }
 
 // Insert user
-$stmt = $conn->prepare("INSERT INTO users (fullname, email, password, role, country) VALUES (?, ?, ?, ?, ?)");
-$stmt->bind_param("sssss", $fullname, $email, $password, $role, $country);
+$stmt = $conn->prepare("INSERT INTO users (fullname, email, password, role, municipality) VALUES (?, ?, ?, ?, ?)");
+$stmt->bind_param("sssss", $fullname, $email, $password, $role, $municipality);
 
 if ($stmt->execute()) {
     echo json_encode(["status" => "success", "message" => "User registered successfully"]);

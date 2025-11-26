@@ -8,7 +8,7 @@ if (!isset($_POST['id']) || !isset($_POST['status'])) {
 }
 
 $car_id = intval($_POST['id']);
-$status = strtolower($_POST['status']); // ensure exact match
+$status = strtolower($_POST['status']); 
 $remarks = $_POST['remarks'] ?? "";
 
 // Fetch owner details
@@ -30,16 +30,16 @@ $stmt = $conn->prepare("UPDATE cars SET status=?, remarks=? WHERE id=?");
 $stmt->bind_param("ssi", $status, $remarks, $car_id);
 $stmt->execute();
 
-// Create notification message
+
 if ($status === "approved") {
-    $title = "Car Approved 🚗";
+    $title = "Car Approved ✔️";
     $msg = "Your vehicle '$car_name' has been approved and is now visible to renters.";
 } elseif ($status === "rejected") {
     $title = "Car Rejected ❌";
     $msg = "Your vehicle '$car_name' was rejected. Reason: $remarks";
-} elseif ($status === "disabled") {
+} elseif ($status === "pending") {
     $title = "Car Disabled ⚠️";
-    $msg = "Your vehicle '$car_name' has been disabled by admin.";
+    $msg = "Your vehicle '$car_name' is pending.";
 } else {
     $title = "Car Status Updated";
     $msg = "Your vehicle '$car_name' has been updated.";
@@ -51,6 +51,7 @@ $noti->bind_param("iss", $owner_id, $title, $msg);
 $noti->execute();
 
 // Redirect back to admin page
-header("Location: get_cars_admin.php");
+header("Location: " . $_SERVER['HTTP_REFERER']);
 exit;
+
 ?>
