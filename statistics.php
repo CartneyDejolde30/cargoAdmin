@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bookings Management - CarGo Admin</title>
+  <title>User Management - CarGo Admin</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -185,7 +185,7 @@
       object-fit: cover;
     }
 
-    /* Stats Cards */
+    /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -324,7 +324,7 @@
       border-color: #1a1a1a;
     }
 
-    .export-btn {
+    .add-user-btn {
       padding: 12px 24px;
       background: #1a1a1a;
       color: white;
@@ -339,7 +339,7 @@
       gap: 8px;
     }
 
-    .export-btn:hover {
+    .add-user-btn:hover {
       background: #000;
       transform: translateY(-2px);
     }
@@ -442,16 +442,56 @@
     }
 
     .user-avatar-small {
-      width: 38px;
-      height: 38px;
+      width: 42px;
+      height: 42px;
       border-radius: 10px;
       overflow: hidden;
+      border: 2px solid #f0f0f0;
     }
 
     .user-avatar-small img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .user-name {
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .user-email {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .role-badge {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .role-badge.owner {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .role-badge.renter {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+
+    .role-badge.both {
+      background: #f3e5f5;
+      color: #7b1fa2;
     }
 
     .status-badge {
@@ -462,52 +502,19 @@
       display: inline-block;
     }
 
+    .status-badge.verified {
+      background: #d1e7dd;
+      color: #0f5132;
+    }
+
     .status-badge.pending {
       background: #fff3cd;
       color: #856404;
     }
 
-    .status-badge.confirmed {
-      background: #d1ecf1;
-      color: #0c5460;
-    }
-
-    .status-badge.ongoing {
-      background: #cfe2ff;
-      color: #084298;
-    }
-
-    .status-badge.completed {
-      background: #d1e7dd;
-      color: #0f5132;
-    }
-
-    .status-badge.cancelled {
+    .status-badge.suspended {
       background: #f8d7da;
       color: #842029;
-    }
-
-    .payment-badge {
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      display: inline-block;
-    }
-
-    .payment-badge.paid {
-      background: #d1e7dd;
-      color: #0f5132;
-    }
-
-    .payment-badge.unpaid {
-      background: #f8d7da;
-      color: #842029;
-    }
-
-    .payment-badge.partial {
-      background: #fff3cd;
-      color: #856404;
     }
 
     .action-buttons {
@@ -538,22 +545,32 @@
       color: white;
     }
 
-    .action-btn.approve {
+    .action-btn.verify {
       background: #e8f5e9;
       color: #388e3c;
     }
 
-    .action-btn.approve:hover {
+    .action-btn.verify:hover {
       background: #388e3c;
       color: white;
     }
 
-    .action-btn.reject {
+    .action-btn.suspend {
+      background: #fff3cd;
+      color: #f57c00;
+    }
+
+    .action-btn.suspend:hover {
+      background: #f57c00;
+      color: white;
+    }
+
+    .action-btn.delete {
       background: #ffebee;
       color: #d32f2f;
     }
 
-    .action-btn.reject:hover {
+    .action-btn.delete:hover {
       background: #d32f2f;
       color: white;
     }
@@ -629,55 +646,93 @@
       font-weight: 600;
     }
 
-    .timeline {
-      position: relative;
-      padding-left: 30px;
+    .documents-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
     }
 
-    .timeline::before {
-      content: '';
-      position: absolute;
-      left: 8px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: #e0e0e0;
-    }
-
-    .timeline-item {
-      position: relative;
-      margin-bottom: 20px;
-    }
-
-    .timeline-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .timeline-dot {
-      position: absolute;
-      left: -26px;
-      top: 2px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: white;
-      border: 3px solid #1a1a1a;
-    }
-
-    .timeline-content {
+    .document-card {
       background: #f8f9fa;
+      border-radius: 12px;
       padding: 15px;
-      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.3s ease;
+      cursor: pointer;
     }
 
-    .timeline-title {
+    .document-card:hover {
+      background: #e9ecef;
+    }
+
+    .document-icon {
+      width: 45px;
+      height: 45px;
+      background: white;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #1a1a1a;
+    }
+
+    .document-info {
+      flex: 1;
+    }
+
+    .document-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 3px;
+    }
+
+    .document-status {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .activity-item {
+      display: flex;
+      gap: 12px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 12px;
+    }
+
+    .activity-icon {
+      width: 40px;
+      height: 40px;
+      background: white;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .activity-content {
+      flex: 1;
+    }
+
+    .activity-title {
       font-size: 14px;
       font-weight: 600;
       color: #1a1a1a;
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
 
-    .timeline-time {
+    .activity-time {
       font-size: 12px;
       color: #999;
     }
@@ -707,21 +762,30 @@
       background: #e8e8e8;
     }
 
-    .modal-btn.approve {
+    .modal-btn.verify {
       background: #28a745;
       color: white;
     }
 
-    .modal-btn.approve:hover {
+    .modal-btn.verify:hover {
       background: #218838;
     }
 
-    .modal-btn.reject {
+    .modal-btn.suspend {
+      background: #f57c00;
+      color: white;
+    }
+
+    .modal-btn.suspend:hover {
+      background: #ef6c00;
+    }
+
+    .modal-btn.delete {
       background: #dc3545;
       color: white;
     }
 
-    .modal-btn.reject:hover {
+    .modal-btn.delete:hover {
       background: #c82333;
     }
 
@@ -818,11 +882,11 @@
         <i class="bi bi-car-front"></i>
         <span>Car Listing</span>
       </a>
-      <a href="users.php" class="menu-item">
+      <a href="users.php" class="menu-item active">
         <i class="bi bi-person"></i>
         <span>Users Verification</span>
       </a>
-      <a href="bookings.php" class="menu-item active">
+      <a href="bookings.php" class="menu-item">
         <i class="bi bi-book"></i>
         <span>Bookings</span>
       </a>
@@ -856,11 +920,11 @@
   <main class="main-content">
     <!-- Top Bar -->
     <div class="top-bar">
-      <h1 class="page-title">Bookings Management</h1>
+      <h1 class="page-title">Users Management</h1>
       <div class="user-profile">
         <button class="notification-btn">
           <i class="bi bi-bell"></i>
-          <span class="notification-badge">7</span>
+          <span class="notification-badge">3</span>
         </button>
         <div class="user-avatar">
           <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
@@ -873,43 +937,43 @@
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
-            <i class="bi bi-clock-history"></i>
+            <i class="bi bi-people"></i>
           </div>
           <div class="stat-trend">
             <i class="bi bi-arrow-up"></i>
-            +12%
+            +15%
           </div>
         </div>
-        <div class="stat-value">23</div>
-        <div class="stat-label">Pending Bookings</div>
+        <div class="stat-value">142</div>
+        <div class="stat-label">Total Users</div>
       </div>
 
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
-            <i class="bi bi-check-circle"></i>
-          </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +18%
-          </div>
-        </div>
-        <div class="stat-value">156</div>
-        <div class="stat-label">Confirmed Bookings</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="bi bi-car-front-fill"></i>
+            <i class="bi bi-shield-check"></i>
           </div>
           <div class="stat-trend">
             <i class="bi bi-arrow-up"></i>
             +8%
           </div>
         </div>
-        <div class="stat-value">42</div>
-        <div class="stat-label">Ongoing Rentals</div>
+        <div class="stat-value">98</div>
+        <div class="stat-label">Verified Users</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <div class="stat-icon">
+            <i class="bi bi-clock-history"></i>
+          </div>
+          <div class="stat-trend">
+            <i class="bi bi-arrow-up"></i>
+            +12
+          </div>
+        </div>
+        <div class="stat-value">31</div>
+        <div class="stat-label">Pending Verification</div>
       </div>
 
       <div class="stat-card">
@@ -919,11 +983,11 @@
           </div>
           <div class="stat-trend down">
             <i class="bi bi-arrow-down"></i>
-            -5%
+            -3
           </div>
         </div>
-        <div class="stat-value">8</div>
-        <div class="stat-label">Cancelled Bookings</div>
+        <div class="stat-value">13</div>
+        <div class="stat-label">Suspended Accounts</div>
       </div>
     </div>
 
@@ -931,32 +995,30 @@
     <div class="filter-section">
       <div class="filter-row">
         <div class="search-box">
-          <input type="text" placeholder="Search by renter, owner, or car type...">
+          <input type="text" placeholder="Search by name, email, or phone number...">
           <i class="bi bi-search"></i>
         </div>
         <select class="filter-dropdown">
+          <option>All Roles</option>
+          <option>Car Owners</option>
+          <option>Renters</option>
+          <option>Both</option>
+        </select>
+        <select class="filter-dropdown">
           <option>All Status</option>
+          <option>Verified</option>
           <option>Pending</option>
-          <option>Confirmed</option>
-          <option>Ongoing</option>
-          <option>Completed</option>
-          <option>Cancelled</option>
+          <option>Suspended</option>
         </select>
         <select class="filter-dropdown">
-          <option>Payment Status</option>
-          <option>Paid</option>
-          <option>Unpaid</option>
-          <option>Partial</option>
+          <option>Registration Date</option>
+          <option>Last 7 Days</option>
+          <option>Last 30 Days</option>
+          <option>Last 90 Days</option>
         </select>
-        <select class="filter-dropdown">
-          <option>This Month</option>
-          <option>Last Month</option>
-          <option>Last 3 Months</option>
-          <option>This Year</option>
-        </select>
-        <button class="export-btn">
-          <i class="bi bi-download"></i>
-          Export
+        <button class="add-user-btn">
+          <i class="bi bi-person-plus"></i>
+          Add User
         </button>
       </div>
     </div>
@@ -964,11 +1026,11 @@
     <!-- Table Section -->
     <div class="table-section">
       <div class="section-header">
-        <h2 class="section-title">All Bookings</h2>
+        <h2 class="section-title">All Users</h2>
         <div class="table-controls">
-          <button class="table-btn active">All (229)</button>
-          <button class="table-btn">Pending (23)</button>
-          <button class="table-btn">Active (42)</button>
+          <button class="table-btn active">All (142)</button>
+          <button class="table-btn">Pending (31)</button>
+          <button class="table-btn">Verified (98)</button>
         </div>
       </div>
 
@@ -977,259 +1039,202 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Renter</th>
-              <th>Owner</th>
-              <th>Car Details</th>
-              <th>Rental Period</th>
-              <th>Location</th>
-              <th>Amount</th>
+              <th>User</th>
+              <th>Phone Number</th>
+              <th>Role</th>
+              <th>Joined Date</th>
               <th>Status</th>
-              <th>Payment</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>#BK-2451</strong></td>
+              <td><strong>#USR-1024</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Juan+Cruz&background=1a1a1a&color=fff" alt="Juan">
                   </div>
-                  <span>Juan Dela Cruz</span>
-                </div>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Pedro+Santos&background=1a1a1a&color=fff" alt="Pedro">
+                  <div class="user-info">
+                    <span class="user-name">Juan Dela Cruz</span>
+                    <span class="user-email">juan.delacruz@email.com</span>
                   </div>
-                  <span>Pedro Santos</span>
                 </div>
               </td>
-              <td>
-                <div>
-                  <strong>Toyota Vios</strong><br>
-                  <small style="color: #999;">Sedan • 2022</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Nov 20 - Nov 25</strong><br>
-                  <small style="color: #999;">5 days</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>San Francisco</strong><br>
-                  <small style="color: #999;">to Butuan City</small>
-                </div>
-              </td>
-              <td><strong>₱5,000.00</strong></td>
-              <td><span class="status-badge pending">Pending</span></td>
-              <td><span class="payment-badge unpaid">Unpaid</span></td>
+              <td>+63 912 345 6789</td>
+              <td><span class="role-badge owner">Car Owner</span></td>
+              <td>Jan 15, 2024</td>
+              <td><span class="status-badge verified">Verified</span></td>
               <td>
                 <div class="action-buttons">
-                  <button class="action-btn view" data-bs-toggle="modal" data-bs-target="#bookingModal1" title="View Details">
+                  <button class="action-btn view" data-bs-toggle="modal" data-bs-target="#userModal1" title="View Details">
                     <i class="bi bi-eye"></i>
                   </button>
-                  <button class="action-btn approve" title="Approve">
-                    <i class="bi bi-check-lg"></i>
+                  <button class="action-btn suspend" title="Suspend Account">
+                    <i class="bi bi-ban"></i>
                   </button>
-                  <button class="action-btn reject" title="Reject">
-                    <i class="bi bi-x-lg"></i>
+                  <button class="action-btn delete" title="Delete User">
+                    <i class="bi bi-trash"></i>
                   </button>
                 </div>
               </td>
             </tr>
 
             <tr>
-              <td><strong>#BK-2450</strong></td>
+              <td><strong>#USR-1023</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Maria+Garcia&background=1a1a1a&color=fff" alt="Maria">
+                    <img src="https://ui-avatars.com/api/?name=Maria+Santos&background=1a1a1a&color=fff" alt="Maria">
                   </div>
-                  <span>Maria Garcia</span>
+                  <div class="user-info">
+                    <span class="user-name">Maria Santos</span>
+                    <span class="user-email">maria.santos@email.com</span>
+                  </div>
                 </div>
               </td>
+              <td>+63 917 234 5678</td>
+              <td><span class="role-badge renter">Renter</span></td>
+              <td>Feb 20, 2024</td>
+              <td><span class="status-badge pending">Pending</span></td>
+              <td>
+                <div class="action-buttons">
+                  <button class="action-btn view" data-bs-toggle="modal" data-bs-target="#userModal2" title="View Details">
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  <button class="action-btn verify" title="Verify User">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                  <button class="action-btn delete" title="Delete User">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td><strong>#USR-1022</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Carlos+Reyes&background=1a1a1a&color=fff" alt="Carlos">
                   </div>
-                  <span>Carlos Reyes</span>
+                  <div class="user-info">
+                    <span class="user-name">Carlos Reyes</span>
+                    <span class="user-email">carlos.reyes@email.com</span>
+                  </div>
                 </div>
               </td>
-              <td>
-                <div>
-                  <strong>Honda City</strong><br>
-                  <small style="color: #999;">Sedan • 2023</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Nov 22 - Nov 27</strong><br>
-                  <small style="color: #999;">5 days</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Davao City</strong><br>
-                  <small style="color: #999;">to Cagayan de Oro</small>
-                </div>
-              </td>
-              <td><strong>₱6,500.00</strong></td>
-              <td><span class="status-badge confirmed">Confirmed</span></td>
-              <td><span class="payment-badge paid">Paid</span></td>
+              <td>+63 918 345 6789</td>
+              <td><span class="role-badge both">Owner & Renter</span></td>
+              <td>Mar 10, 2024</td>
+              <td><span class="status-badge verified">Verified</span></td>
               <td>
                 <div class="action-buttons">
-                  <button class="action-btn view" data-bs-toggle="modal" data-bs-target="#bookingModal2" title="View Details">
+                  <button class="action-btn view" title="View Details">
                     <i class="bi bi-eye"></i>
+                  </button>
+                  <button class="action-btn suspend" title="Suspend Account">
+                    <i class="bi bi-ban"></i>
+                  </button>
+                  <button class="action-btn delete" title="Delete User">
+                    <i class="bi bi-trash"></i>
                   </button>
                 </div>
               </td>
             </tr>
 
             <tr>
-              <td><strong>#BK-2449</strong></td>
+              <td><strong>#USR-1021</strong></td>
+              <td>
+                <div class="user-cell">
+                  <div class="user-avatar-small">
+                    <img src="https://ui-avatars.com/api/?name=Ana+Lopez&background=1a1a1a&color=fff" alt="Ana">
+                  </div>
+                  <div class="user-info">
+                    <span class="user-name">Ana Lopez</span>
+                    <span class="user-email">ana.lopez@email.com</span>
+                  </div>
+                </div>
+              </td>
+              <td>+63 919 456 7890</td>
+              <td><span class="role-badge owner">Car Owner</span></td>
+              <td>Apr 05, 2024</td>
+              <td><span class="status-badge pending">Pending</span></td>
+              <td>
+                <div class="action-buttons">
+                  <button class="action-btn view" title="View Details">
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  <button class="action-btn verify" title="Verify User">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                  <button class="action-btn delete" title="Delete User">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td><strong>#USR-1020</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Robert+Tan&background=1a1a1a&color=fff" alt="Robert">
                   </div>
-                  <span>Robert Tan</span>
-                </div>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Anna+Lopez&background=1a1a1a&color=fff" alt="Anna">
+                  <div class="user-info">
+                    <span class="user-name">Robert Tan</span>
+                    <span class="user-email">robert.tan@email.com</span>
                   </div>
-                  <span>Anna Lopez</span>
                 </div>
               </td>
-              <td>
-                <div>
-                  <strong>Mitsubishi Montero</strong><br>
-                  <small style="color: #999;">SUV • 2021</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Nov 18 - Nov 24</strong><br>
-                  <small style="color: #999;">6 days</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Manila</strong><br>
-                  <small style="color: #999;">to Baguio City</small>
-                </div>
-              </td>
-              <td><strong>₱12,000.00</strong></td>
-              <td><span class="status-badge ongoing">Ongoing</span></td>
-              <td><span class="payment-badge paid">Paid</span></td>
+              <td>+63 920 567 8901</td>
+              <td><span class="role-badge renter">Renter</span></td>
+              <td>May 12, 2024</td>
+              <td><span class="status-badge suspended">Suspended</span></td>
               <td>
                 <div class="action-buttons">
                   <button class="action-btn view" title="View Details">
                     <i class="bi bi-eye"></i>
+                  </button>
+                  <button class="action-btn verify" title="Reactivate Account">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                  <button class="action-btn delete" title="Delete User">
+                    <i class="bi bi-trash"></i>
                   </button>
                 </div>
               </td>
             </tr>
 
             <tr>
-              <td><strong>#BK-2448</strong></td>
+              <td><strong>#USR-1019</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Lisa+Ramos&background=1a1a1a&color=fff" alt="Lisa">
+                    <img src="https://ui-avatars.com/api/?name=Lisa+Garcia&background=1a1a1a&color=fff" alt="Lisa">
                   </div>
-                  <span>Lisa Ramos</span>
-                </div>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Mark+Santos&background=1a1a1a&color=fff" alt="Mark">
+                  <div class="user-info">
+                    <span class="user-name">Lisa Garcia</span>
+                    <span class="user-email">lisa.garcia@email.com</span>
                   </div>
-                  <span>Mark Santos</span>
                 </div>
               </td>
-              <td>
-                <div>
-                  <strong>Toyota Fortuner</strong><br>
-                  <small style="color: #999;">SUV • 2022</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Nov 15 - Nov 20</strong><br>
-                  <small style="color: #999;">5 days</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Cebu City</strong><br>
-                  <small style="color: #999;">to Bohol</small>
-                </div>
-              </td>
-              <td><strong>₱9,000.00</strong></td>
-              <td><span class="status-badge completed">Completed</span></td>
-              <td><span class="payment-badge paid">Paid</span></td>
+              <td>+63 921 678 9012</td>
+              <td><span class="role-badge owner">Car Owner</span></td>
+              <td>Jun 18, 2024</td>
+              <td><span class="status-badge verified">Verified</span></td>
               <td>
                 <div class="action-buttons">
                   <button class="action-btn view" title="View Details">
                     <i class="bi bi-eye"></i>
                   </button>
-                </div>
-              </td>
-            </tr>
-
-            <tr>
-              <td><strong>#BK-2447</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=David+Cruz&background=1a1a1a&color=fff" alt="David">
-                  </div>
-                  <span>David Cruz</span>
-                </div>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Sofia+Martin&background=1a1a1a&color=fff" alt="Sofia">
-                  </div>
-                  <span>Sofia Martin</span>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Nissan Navara</strong><br>
-                  <small style="color: #999;">Pickup • 2023</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Nov 10 - Nov 12</strong><br>
-                  <small style="color: #999;">2 days</small>
-                </div>
-              </td>
-              <td>
-                <div>
-                  <strong>Iloilo City</strong><br>
-                  <small style="color: #999;">to Bacolod City</small>
-                </div>
-              </td>
-              <td><strong>₱3,500.00</strong></td>
-              <td><span class="status-badge cancelled">Cancelled</span></td>
-              <td><span class="payment-badge unpaid">Refunded</span></td>
-              <td>
-                <div class="action-buttons">
-                  <button class="action-btn view" title="View Details">
-                    <i class="bi bi-eye"></i>
+                  <button class="action-btn suspend" title="Suspend Account">
+                    <i class="bi bi-ban"></i>
+                  </button>
+                  <button class="action-btn delete" title="Delete User">
+                    <i class="bi bi-trash"></i>
                   </button>
                 </div>
               </td>
@@ -1241,7 +1246,7 @@
       <!-- Pagination -->
       <div class="pagination-section">
         <div class="pagination-info">
-          Showing <strong>1-6</strong> of <strong>229</strong> bookings
+          Showing <strong>1-6</strong> of <strong>142</strong> users
         </div>
         <div class="pagination-controls">
           <button class="page-btn"><i class="bi bi-chevron-left"></i></button>
@@ -1257,48 +1262,29 @@
   </main>
 </div>
 
-<!-- Booking Details Modal -->
-<div class="modal fade" id="bookingModal1" tabindex="-1" aria-hidden="true">
+<!-- User Details Modal -->
+<div class="modal fade" id="userModal1" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Booking Details - #BK-2451</h5>
+        <h5 class="modal-title">User Details - Juan Dela Cruz</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <!-- Booking Information -->
+        <!-- Personal Information -->
         <div class="detail-section">
-          <div class="detail-section-title">Booking Information</div>
+          <div class="detail-section-title">Personal Information</div>
           <div class="detail-row">
             <div class="detail-item">
-              <span class="detail-label">Booking ID</span>
-              <span class="detail-value">#BK-2451</span>
+              <span class="detail-label">User ID</span>
+              <span class="detail-value">#USR-1024</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Booking Date</span>
-              <span class="detail-value">November 15, 2025 - 10:30 AM</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Status</span>
-              <span class="status-badge pending">Pending Approval</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Payment Status</span>
-              <span class="payment-badge unpaid">Awaiting Payment</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Renter Information -->
-        <div class="detail-section">
-          <div class="detail-section-title">Renter Information</div>
-          <div class="detail-row">
             <div class="detail-item">
               <span class="detail-label">Full Name</span>
               <span class="detail-value">Juan Dela Cruz</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Email</span>
+              <span class="detail-label">Email Address</span>
               <span class="detail-value">juan.delacruz@email.com</span>
             </div>
             <div class="detail-item">
@@ -1306,194 +1292,324 @@
               <span class="detail-value">+63 912 345 6789</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Driver's License</span>
-              <span class="detail-value">N01-12-345678</span>
+              <span class="detail-label">Date of Birth</span>
+              <span class="detail-value">March 15, 1990</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Verification Status</span>
-              <span class="status-badge confirmed">Verified</span>
+              <span class="detail-label">Gender</span>
+              <span class="detail-value">Male</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Member Since</span>
-              <span class="detail-value">January 2024</span>
+              <span class="detail-label">Address</span>
+              <span class="detail-value">123 Main St, San Francisco, Agusan del Sur</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Registration Date</span>
+              <span class="detail-value">January 15, 2024</span>
             </div>
           </div>
         </div>
 
-        <!-- Owner Information -->
+        <!-- Account Information -->
         <div class="detail-section">
-          <div class="detail-section-title">Car Owner Information</div>
+          <div class="detail-section-title">Account Information</div>
           <div class="detail-row">
             <div class="detail-item">
-              <span class="detail-label">Full Name</span>
-              <span class="detail-value">Pedro Santos</span>
+              <span class="detail-label">Account Role</span>
+              <span class="role-badge owner">Car Owner</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Email</span>
-              <span class="detail-value">pedro.santos@email.com</span>
+              <span class="detail-label">Verification Status</span>
+              <span class="status-badge verified">Verified</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Total Cars Listed</span>
+              <span class="detail-value">3 Vehicles</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Total Bookings</span>
+              <span class="detail-value">24 Completed</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Average Rating</span>
+              <span class="detail-value">4.8 ⭐ (45 reviews)</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Total Earnings</span>
+              <span class="detail-value">₱45,000.00</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Last Login</span>
+              <span class="detail-value">November 28, 2025 - 2:30 PM</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Account Status</span>
+              <span class="status-badge verified">Active</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Verification Documents -->
+        <div class="detail-section">
+          <div class="detail-section-title">Verification Documents</div>
+          <div class="documents-grid">
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-file-earmark-person"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Government ID</div>
+                <div class="document-status">✓ Verified</div>
+              </div>
+            </div>
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-credit-card"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Driver's License</div>
+                <div class="document-status">✓ Verified - N01-12-345678</div>
+              </div>
+            </div>
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-camera"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Selfie Verification</div>
+                <div class="document-status">✓ Verified</div>
+              </div>
+            </div>
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-house"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Proof of Address</div>
+                <div class="document-status">✓ Verified</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bank Details -->
+        <div class="detail-section">
+          <div class="detail-section-title">Payment Information</div>
+          <div class="detail-row">
+            <div class="detail-item">
+              <span class="detail-label">Bank Name</span>
+              <span class="detail-value">BDO Unibank</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Account Number</span>
+              <span class="detail-value">•••• •••• 1234</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Account Name</span>
+              <span class="detail-value">Juan Dela Cruz</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Payment Method</span>
+              <span class="detail-value">GCash, Bank Transfer</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Listed Vehicles -->
+        <div class="detail-section">
+          <div class="detail-section-title">Listed Vehicles (3)</div>
+          <div class="activity-list">
+            <div class="activity-item">
+              <div class="activity-icon">
+                <i class="bi bi-car-front"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-title">Toyota Vios 2022 - ABC 1234</div>
+                <div class="activity-time">Listed: Jan 20, 2024 • Status: Active • ₱1,000/day</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon">
+                <i class="bi bi-car-front"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-title">Honda City 2023 - DEF 5678</div>
+                <div class="activity-time">Listed: Feb 10, 2024 • Status: Rented • ₱1,200/day</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon">
+                <i class="bi bi-car-front"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-title">Mitsubishi Mirage 2021 - GHI 9012</div>
+                <div class="activity-time">Listed: Mar 05, 2024 • Status: Active • ₱850/day</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="detail-section">
+          <div class="detail-section-title">Recent Activity</div>
+          <div class="activity-list">
+            <div class="activity-item">
+              <div class="activity-icon">
+                <i class="bi bi-check-circle" style="color: #28a745;"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-title">Booking Completed - Toyota Vios</div>
+                <div class="activity-time">November 25, 2025 - Earned ₱5,000</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon">
+                <i class="bi bi-calendar-check" style="color: #1976d2;"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-title">New Booking Received - Honda City</div>
+                <div class="activity-time">November 22, 2025</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon">
+                <i class="bi bi-star" style="color: #f57c00;"></i>
+              </div>
+              <div class="activity-content">
+                <div class="activity-title">Received 5-Star Review</div>
+                <div class="activity-time">November 20, 2025</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="modal-btn secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="modal-btn suspend">Suspend Account</button>
+        <button type="button" class="modal-btn delete">Delete User</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- User Details Modal 2 (Pending User) -->
+<div class="modal fade" id="userModal2" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">User Details - Maria Santos (Pending Verification)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Personal Information -->
+        <div class="detail-section">
+          <div class="detail-section-title">Personal Information</div>
+          <div class="detail-row">
+            <div class="detail-item">
+              <span class="detail-label">User ID</span>
+              <span class="detail-value">#USR-1023</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Full Name</span>
+              <span class="detail-value">Maria Santos</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Email Address</span>
+              <span class="detail-value">maria.santos@email.com</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Phone Number</span>
               <span class="detail-value">+63 917 234 5678</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Total Cars Listed</span>
-              <span class="detail-value">3 vehicles</span>
+              <span class="detail-label">Date of Birth</span>
+              <span class="detail-value">June 22, 1995</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Gender</span>
+              <span class="detail-value">Female</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Address</span>
+              <span class="detail-value">456 Park Avenue, Butuan City</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Registration Date</span>
+              <span class="detail-value">February 20, 2024</span>
             </div>
           </div>
         </div>
 
-        <!-- Vehicle Information -->
+        <!-- Account Information -->
         <div class="detail-section">
-          <div class="detail-section-title">Vehicle Information</div>
+          <div class="detail-section-title">Account Information</div>
           <div class="detail-row">
             <div class="detail-item">
-              <span class="detail-label">Vehicle Make & Model</span>
-              <span class="detail-value">Toyota Vios</span>
+              <span class="detail-label">Account Role</span>
+              <span class="role-badge renter">Renter</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Year</span>
-              <span class="detail-value">2022</span>
+              <span class="detail-label">Verification Status</span>
+              <span class="status-badge pending">Pending Review</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Plate Number</span>
-              <span class="detail-value">ABC 1234</span>
+              <span class="detail-label">Total Bookings</span>
+              <span class="detail-value">0 (New User)</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Vehicle Type</span>
-              <span class="detail-value">Sedan</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Transmission</span>
-              <span class="detail-value">Automatic</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Fuel Type</span>
-              <span class="detail-value">Gasoline</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Seating Capacity</span>
-              <span class="detail-value">5 persons</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Insurance Status</span>
-              <span class="status-badge confirmed">Active</span>
+              <span class="detail-label">Documents Submitted</span>
+              <span class="detail-value">4 of 4</span>
             </div>
           </div>
         </div>
 
-        <!-- Rental Details -->
+        <!-- Verification Documents -->
         <div class="detail-section">
-          <div class="detail-section-title">Rental Details</div>
-          <div class="detail-row">
-            <div class="detail-item">
-              <span class="detail-label">Pickup Date & Time</span>
-              <span class="detail-value">November 20, 2025 - 9:00 AM</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Drop-off Date & Time</span>
-              <span class="detail-value">November 25, 2025 - 6:00 PM</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Rental Duration</span>
-              <span class="detail-value">5 Days</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Daily Rate</span>
-              <span class="detail-value">₱1,000.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Pickup Location</span>
-              <span class="detail-value">San Francisco, Agusan del Sur</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Drop-off Location</span>
-              <span class="detail-value">Butuan City, Agusan del Norte</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Payment Breakdown -->
-        <div class="detail-section">
-          <div class="detail-section-title">Payment Breakdown</div>
-          <div class="detail-row">
-            <div class="detail-item">
-              <span class="detail-label">Base Rental (5 days × ₱1,000)</span>
-              <span class="detail-value">₱5,000.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Service Fee (10%)</span>
-              <span class="detail-value">₱500.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Insurance Coverage</span>
-              <span class="detail-value">₱300.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Delivery Fee</span>
-              <span class="detail-value">₱200.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Discount Applied</span>
-              <span class="detail-value" style="color: #28a745;">-₱500.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Security Deposit</span>
-              <span class="detail-value">₱2,000.00 (Refundable)</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label" style="font-size: 14px; color: #1a1a1a;">Total Amount</span>
-              <span class="detail-value" style="font-size: 24px; color: #1a1a1a;">₱7,500.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Payment Method</span>
-              <span class="detail-value">GCash</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Activity Timeline -->
-        <div class="detail-section">
-          <div class="detail-section-title">Activity Timeline</div>
-          <div class="timeline">
-            <div class="timeline-item">
-              <div class="timeline-dot"></div>
-              <div class="timeline-content">
-                <div class="timeline-title">Booking Created</div>
-                <div class="timeline-time">November 15, 2025 - 10:30 AM</div>
+          <div class="detail-section-title">Verification Documents - Awaiting Review</div>
+          <div class="documents-grid">
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-file-earmark-person"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Government ID</div>
+                <div class="document-status">⏳ Pending Review</div>
               </div>
             </div>
-            <div class="timeline-item">
-              <div class="timeline-dot"></div>
-              <div class="timeline-content">
-                <div class="timeline-title">Awaiting Owner Approval</div>
-                <div class="timeline-time">November 15, 2025 - 10:31 AM</div>
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-credit-card"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Driver's License</div>
+                <div class="document-status">⏳ Pending - N02-22-987654</div>
               </div>
             </div>
-            <div class="timeline-item">
-              <div class="timeline-dot" style="border-color: #dc3545; background: #dc3545;"></div>
-              <div class="timeline-content">
-                <div class="timeline-title">Pending Admin Review</div>
-                <div class="timeline-time">Current Status</div>
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-camera"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Selfie Verification</div>
+                <div class="document-status">⏳ Pending Review</div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- Additional Notes -->
-        <div class="detail-section">
-          <div class="detail-section-title">Special Requests / Notes</div>
-          <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
-            <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-              "Please ensure the car is fully fueled and clean. I will be using it for a family trip. Contact me at the provided number for pickup coordination."
-            </p>
+            <div class="document-card">
+              <div class="document-icon">
+                <i class="bi bi-house"></i>
+              </div>
+              <div class="document-info">
+                <div class="document-title">Proof of Address</div>
+                <div class="document-status">⏳ Pending Review</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="modal-btn secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="modal-btn reject">Reject Booking</button>
-        <button type="button" class="modal-btn approve">Approve Booking</button>
+        <button type="button" class="modal-btn delete">Reject Application</button>
+        <button type="button" class="modal-btn verify">Approve & Verify</button>
       </div>
     </div>
   </div>

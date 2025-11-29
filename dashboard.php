@@ -1,22 +1,12 @@
-<?php
-include 'include/db.php';
-$num = 0;
-$query = $conn->query("
-    SELECT cars.*, users.fullname 
-    FROM cars 
-    JOIN users ON users.id = cars.owner_id 
-    ORDER BY cars.created_at DESC LIMIT 10
-");
-
-?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CarGo Admin Dashboard</title>
-  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -35,7 +25,98 @@ $query = $conn->query("
       min-height: 100vh;
     }
 
-    
+    /* Sidebar Styles */
+    .sidebar {
+      width: 260px;
+      background: white;
+      padding: 30px 20px;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 40px;
+      padding: 0 10px;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: #1a1a1a;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: 2px;
+    }
+
+    .menu-section {
+      margin-bottom: 35px;
+    }
+
+    .menu-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 0 10px;
+      margin-bottom: 12px;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      color: #666;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .menu-item:hover {
+      background: #f5f5f5;
+      color: #1a1a1a;
+    }
+
+    .menu-item.active {
+      background: #1a1a1a;
+      color: white;
+    }
+
+    .menu-item i {
+      font-size: 18px;
+      width: 20px;
+      text-align: center;
+    }
+
+    .logout-item {
+      color: #dc3545;
+      margin-top: 20px;
+    }
+
+    .logout-item:hover {
+      background: #fff5f5;
+      color: #dc3545;
+    }
 
     /* Main Content */
     .main-content {
@@ -563,103 +644,87 @@ $query = $conn->query("
             <th>#</th>
             <th>Owner Name</th>
             <th>Car Type</th>
-            <th>Plate Number</th>
+            <th>Car Number</th>
             <th>Status</th>
-            <th>Documents</th>
-             <th>Image</th>
-            <th>Actions</th>
-           
           </tr>
         </thead>
         <tbody>
-<?php while($row = $query->fetch_assoc()) { $num++?>
-  
-<tr>
-    <td><?= $num ?></td>
-    <td><?= $row['fullname'] ?></td>
-    <td><?= $row['brand'] . " " . $row['model'] ?></td>
-    <td><?= $row['plate_number'] ?></td>
-
-    <td>
-        <span class="badge 
-    <?php 
-        if ($row['status'] === 'approved') {
-            echo 'bg-success';
-        } elseif ($row['status'] === 'rejected') {
-            echo 'bg-danger';
-        } elseif ($row['status'] === 'pending') {
-            echo 'bg-warning text-dark';
-        } else {
-            echo 'bg-secondary'; 
-        }
-    ?>">
-    <?= ucfirst($row['status']) ?>
-</span>
-
-    </td>
-
-    <td>
-        <a href="<?= $row['official_receipt'] ?>" target="_blank" class="btn btn-sm btn-primary">OR</a>
-        <a href="<?= $row['certificate_of_registration'] ?>" target="_blank" class="btn btn-sm btn-dark">CR</a>
-    </td>
-
-    <!-- ⭐ Car Image Preview -->
-    <td>
-        <?php if(!empty($row['image'])) { ?>
-            <img src="<?= $row['image'] ?>" 
-                 alt="Car Image"
-                 class="car-thumb"
-                 style="width:60px;height:40px;object-fit:cover;border-radius:6px;cursor:pointer;"
-                 onclick="viewCarImage('<?= $row['image'] ?>')">
-        <?php } else { ?>
-            <span class="text-muted">No Image</span>
-        <?php } ?>
-    </td>
-
-    <td>
-        <form method="POST" action="update_car_status.php" style="display:inline">
-    <input type="hidden" name="id" value="<?= $row['id'] ?>">
-
-    <?php if($row['status'] !== 'approved') { ?>
-        <button type="submit" name="status" value="approved" class="btn btn-success btn-sm">
-            Approve
-        </button>
-    <?php } ?>
-
-    <button type="submit" name="status" value="rejected" class="btn btn-danger btn-sm">
-        Reject
-    </button>
-</form>
-
-    </td>
-</tr>
-<?php } ?>
-</tbody>
-<!-- Image Modal -->
-<div class="modal fade" id="carImageModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content p-2" style="background:transparent;border:none;">
-      <img id="carImagePreview" src="" class="img-fluid rounded" style="border-radius:10px;">
-    </div>
-  </div>
-</div>
-
-
-
+          <tr>
+            <td>1</td>
+            <td>
+              <div class="user-cell">
+                <div class="user-avatar-small">
+                  <img src="https://ui-avatars.com/api/?name=Liam+Johnson&background=1a1a1a&color=fff" alt="Liam Johnson">
+                </div>
+                <span>Liam Johnson</span>
+              </div>
+            </td>
+            <td>Honda Brio</td>
+            <td>010 MDB</td>
+            <td><span class="status-badge on-going">On Going</span></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>
+              <div class="user-cell">
+                <div class="user-avatar-small">
+                  <img src="https://ui-avatars.com/api/?name=Noah+Anderson&background=1a1a1a&color=fff" alt="Noah Anderson">
+                </div>
+                <span>Noah Anderson</span>
+              </div>
+            </td>
+            <td>Pagani Sport</td>
+            <td>690 TCM</td>
+            <td><span class="status-badge available">Available</span></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>
+              <div class="user-cell">
+                <div class="user-avatar-small">
+                  <img src="https://ui-avatars.com/api/?name=Ethan+Smith&background=1a1a1a&color=fff" alt="Ethan Smith">
+                </div>
+                <span>Ethan Smith</span>
+              </div>
+            </td>
+            <td>Apple</td>
+            <td>660 ECT</td>
+            <td><span class="status-badge available">Available</span></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>
+              <div class="user-cell">
+                <div class="user-avatar-small">
+                  <img src="https://ui-avatars.com/api/?name=Mason+Davis&background=1a1a1a&color=fff" alt="Mason Davis">
+                </div>
+                <span>Mason Davis</span>
+              </div>
+            </td>
+            <td>Aiza</td>
+            <td>710 BCD</td>
+            <td><span class="status-badge completed">Completed</span></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>
+              <div class="user-cell">
+                <div class="user-avatar-small">
+                  <img src="https://ui-avatars.com/api/?name=Jackson+Williams&background=1a1a1a&color=fff" alt="Jackson Williams">
+                </div>
+                <span>Jackson Williams</span>
+              </div>
+            </td>
+            <td>Honda Brio</td>
+            <td>324 WW1</td>
+            <td><span class="status-badge available">Available</span></td>
+          </tr>
+        </tbody>
       </table>
     </div>
   </main>
 </div>
 
-
-<script>
-function viewCarImage(src) {
-    document.getElementById("carImagePreview").src = src;
-    let modal = new bootstrap.Modal(document.getElementById('carImageModal'));
-    modal.show();
-}
-</script>
-
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

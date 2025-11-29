@@ -117,11 +117,11 @@
       <i class="bi bi-grid"></i>
       <span>Dashboard</span>
     </a>
-    <a href="get_cars_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'car-listings.php' ? 'active' : ''; ?>">
+    <a href="get_cars_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'get_cars_admin.php' ? 'active' : ''; ?>">
       <i class="bi bi-car-front"></i>
       <span>Car Listing</span>
     </a>
-    <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users-verification.php' ? 'active' : ''; ?>">
+    <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
       <i class="bi bi-person"></i>
       <span>Users Verification</span>
     </a>
@@ -133,7 +133,7 @@
 
   <div class="menu-section">
     <div class="menu-label">Report</div>
-    <a href="sales-statistics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'sales-statistics.php' ? 'active' : ''; ?>">
+    <a href="statistics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'statistics.php' ? 'active' : ''; ?>">
       <i class="bi bi-bar-chart"></i>
       <span>Sales Statistics</span>
     </a>
