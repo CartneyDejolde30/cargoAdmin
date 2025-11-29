@@ -1,3 +1,24 @@
+<?php
+include 'include/db.php';
+
+$sql = "
+    SELECT cars.*, users.fullname 
+    FROM cars 
+    JOIN users ON users.id = cars.owner_id 
+    ORDER BY cars.created_at DESC 
+    LIMIT 5
+";
+
+$query = $conn->query($sql);
+
+
+
+
+?>
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -314,13 +335,7 @@
     }
 
     /* Table Section */
-    .table-section {
-      background: white;
-      border-radius: 18px;
-      padding: 30px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      margin-bottom: 30px;
-    }
+    
 
     .section-header {
       display: flex;
@@ -372,6 +387,15 @@
       color: white;
     }
 
+    
+
+     .table-section {
+      background: white;
+      border-radius: 18px;
+      padding: 30px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+
     table {
       width: 100%;
       border-collapse: separate;
@@ -403,17 +427,139 @@
       border-bottom: 1px solid #f0f0f0;
       font-size: 14px;
       color: #1a1a1a;
+      vertical-align: middle;
     }
 
     tbody tr:hover {
       background: #f8f9fa;
     }
 
+    /* Car Thumbnail */
+    .car-thumb {
+      width: 80px;
+      height: 60px;
+      border-radius: 10px;
+      object-fit: cover;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+
+    .car-thumb:hover {
+      transform: scale(1.05);
+    }
+
+    /* Status Badges */
+    .status-badge {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .status-badge.approved {
+      background: #e8f8f0;
+      color: #009944;
+    }
+
+    .status-badge.pending {
+      background: #fff8e1;
+      color: #f57c00;
+    }
+
+    .status-badge.rejected {
+      background: #ffe8e8;
+      color: #cc0000;
+    }
+
+    /* Document Buttons */
+    .doc-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .doc-btn.or {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .doc-btn.or:hover {
+      background: #1976d2;
+      color: white;
+    }
+
+    .doc-btn.cr {
+      background: #f3e5f5;
+      color: #7b1fa2;
+    }
+
+    .doc-btn.cr:hover {
+      background: #7b1fa2;
+      color: white;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .action-btn.approve {
+      background: #e8f8f0;
+      color: #009944;
+    }
+
+    .action-btn.approve:hover {
+      background: #009944;
+      color: white;
+    }
+
+    .action-btn.reject {
+      background: #ffe8e8;
+      color: #cc0000;
+    }
+
+    .action-btn.reject:hover {
+      background: #cc0000;
+      color: white;
+    }
+
+    .action-btn.view {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .action-btn.view:hover {
+      background: #1976d2;
+      color: white;
+    }
     .user-cell {
       display: flex;
       align-items: center;
       gap: 12px;
     }
+
+
 
     .user-avatar-small {
       width: 38px;
@@ -638,89 +784,86 @@
         <button class="filter-btn">Status</button>
       </div>
 
+      <div class="table-section">
       <table>
         <thead>
           <tr>
             <th>#</th>
-            <th>Owner Name</th>
-            <th>Car Type</th>
-            <th>Car Number</th>
+            <th>Owner</th>
+            <th>Car Details</th>
+            <th>Plate Number</th>
             <th>Status</th>
+            <th>Image</th>
+            <th>Documents</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
+          <?php 
+          if ($query->num_rows === 0) {
+            echo '<tr><td colspan="8" class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <h4>No cars found</h4>
+                    <p>Try adjusting your search or filter criteria</p>
+                  </td></tr>';
+          }
+
+          $num = 1;
+          while($row = $query->fetch_assoc()) { ?>
           <tr>
-            <td>1</td>
+            <td><?= $num++ ?></td>
+            <td><strong><?= htmlspecialchars($row['fullname']) ?></strong></td>
             <td>
-              <div class="user-cell">
-                <div class="user-avatar-small">
-                  <img src="https://ui-avatars.com/api/?name=Liam+Johnson&background=1a1a1a&color=fff" alt="Liam Johnson">
-                </div>
-                <span>Liam Johnson</span>
+              <strong><?= htmlspecialchars($row['brand']) ?></strong><br>
+              <small class="text-muted"><?= htmlspecialchars($row['model']) ?></small>
+            </td>
+            <td><strong><?= htmlspecialchars($row['plate_number']) ?></strong></td>
+            <td>
+              <span class="status-badge <?= $row['status'] ?>">
+                <?= ucfirst($row['status']) ?>
+              </span>
+            </td>
+            <td>
+              <?php if(!empty($row['image'])) { ?>
+                <img src="<?= htmlspecialchars($row['image']) ?>" class="car-thumb" 
+                     onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>')" alt="Car">
+              <?php } else { ?>
+                <span class="text-muted">No Image</span>
+              <?php } ?>
+            </td>
+            <td>
+              <a href="<?= htmlspecialchars($row['official_receipt']) ?>" 
+                 class="doc-btn or" target="_blank" title="Official Receipt">OR</a>
+              <a href="<?= htmlspecialchars($row['certificate_of_registration']) ?>" 
+                 class="doc-btn cr" target="_blank" title="Certificate of Registration">CR</a>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <form method="POST" action="update_car_status.php" style="display: contents;">
+                  <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                  
+                  <?php if($row['status'] !== 'approved') { ?>
+                    <button name="status" value="approved" class="action-btn approve">
+                      <i class="bi bi-check-lg"></i> Approve
+                    </button>
+                  <?php } ?>
+
+                  <?php if($row['status'] !== 'rejected') { ?>
+                    <button type="button" 
+                            class="action-btn reject rejectBtn" 
+                            data-id="<?= $row['id'] ?>">
+                      <i class="bi bi-x-lg"></i> Reject
+                    </button>
+                  <?php } ?>
+                </form>
               </div>
             </td>
-            <td>Honda Brio</td>
-            <td>010 MDB</td>
-            <td><span class="status-badge on-going">On Going</span></td>
           </tr>
-          <tr>
-            <td>2</td>
-            <td>
-              <div class="user-cell">
-                <div class="user-avatar-small">
-                  <img src="https://ui-avatars.com/api/?name=Noah+Anderson&background=1a1a1a&color=fff" alt="Noah Anderson">
-                </div>
-                <span>Noah Anderson</span>
-              </div>
-            </td>
-            <td>Pagani Sport</td>
-            <td>690 TCM</td>
-            <td><span class="status-badge available">Available</span></td>
-          </tr>
-          <tr>
-            <td>3</td>
-            <td>
-              <div class="user-cell">
-                <div class="user-avatar-small">
-                  <img src="https://ui-avatars.com/api/?name=Ethan+Smith&background=1a1a1a&color=fff" alt="Ethan Smith">
-                </div>
-                <span>Ethan Smith</span>
-              </div>
-            </td>
-            <td>Apple</td>
-            <td>660 ECT</td>
-            <td><span class="status-badge available">Available</span></td>
-          </tr>
-          <tr>
-            <td>4</td>
-            <td>
-              <div class="user-cell">
-                <div class="user-avatar-small">
-                  <img src="https://ui-avatars.com/api/?name=Mason+Davis&background=1a1a1a&color=fff" alt="Mason Davis">
-                </div>
-                <span>Mason Davis</span>
-              </div>
-            </td>
-            <td>Aiza</td>
-            <td>710 BCD</td>
-            <td><span class="status-badge completed">Completed</span></td>
-          </tr>
-          <tr>
-            <td>5</td>
-            <td>
-              <div class="user-cell">
-                <div class="user-avatar-small">
-                  <img src="https://ui-avatars.com/api/?name=Jackson+Williams&background=1a1a1a&color=fff" alt="Jackson Williams">
-                </div>
-                <span>Jackson Williams</span>
-              </div>
-            </td>
-            <td>Honda Brio</td>
-            <td>324 WW1</td>
-            <td><span class="status-badge available">Available</span></td>
-          </tr>
+          <?php } ?>
         </tbody>
       </table>
+    </div>
+
     </div>
   </main>
 </div>

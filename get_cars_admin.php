@@ -5,10 +5,14 @@ include "include/db.php";
 $search = $_GET['search'] ?? '';
 $status = $_GET['status'] ?? 'all';
 
+// Escape for safety
+$search = $conn->real_escape_string($search);
+$status = $conn->real_escape_string($status);
+
 // Pagination settings
-$limit = 10; // rows per page
-$page = $_GET['page'] ?? 1;
-$page = ($page < 1) ? 1 : $page;
+$limit = 5; // rows per page
+$page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+$page = max($page, 1);
 $offset = ($page - 1) * $limit;
 
 // Base query
@@ -21,10 +25,12 @@ $sql = "
 
 // Search filter
 if (!empty($search)) {
-    $sql .= " AND (cars.brand LIKE '%$search%' 
-                OR cars.model LIKE '%$search%' 
-                OR cars.plate_number LIKE '%$search%' 
-                OR users.fullname LIKE '%$search%')";
+    $sql .= " AND (
+        cars.brand LIKE '%$search%' OR
+        cars.model LIKE '%$search%' OR
+        cars.plate_number LIKE '%$search%' OR
+        users.fullname LIKE '%$search%'
+    )";
 }
 
 // Status filter
@@ -32,16 +38,17 @@ if ($status !== "all") {
     $sql .= " AND cars.status = '$status'";
 }
 
-// Count total rows for pagination (before applying LIMIT)
+// Count total rows for pagination
 $countQuery = $conn->query($sql);
 $totalRows = $countQuery->num_rows;
 $totalPages = ceil($totalRows / $limit);
 
-// Final query with pagination
+// Final query with sorting + limit
 $sql .= " ORDER BY cars.created_at DESC LIMIT $limit OFFSET $offset";
-$query = $conn->query($sql);
 
+$query = $conn->query($sql);
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
