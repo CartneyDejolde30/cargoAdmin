@@ -1,122 +1,110 @@
 <?php
-// Enable error reporting for debugging
 
+// --- ERROR LOGGING (Recommended in development only) ---
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/php_errors.log');
 error_reporting(E_ALL);
-ini_set('display_errors', 0);       // disable HTML errors
-ini_set('log_errors', 1);           // enable logging to file
-ini_set('error_log', __DIR__.'/php_errors.log'); // log file
-error_reporting(E_ALL);
-
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 
 // Handle preflight request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit;
+if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") exit;
+
+include "include/db.php";
+
+// ---------- READ INPUT SAFE ----------
+$user_id  = isset($_POST["user_id"]) ? intval($_POST["user_id"]) : 0;
+$fullname = trim($_POST["fullname"] ?? "");
+$phone    = trim($_POST["phone"] ?? "");
+$address  = trim($_POST["address"] ?? "");
+
+if ($user_id <= 0 || empty($fullname)) {
+    response(false, "Missing required fields", $_POST);
 }
 
-include "include/db.php"; // Make sure your DB connection works
-
-// Read POST fields safely
-$user_id  = isset($_POST['user_id']) ? intval($_POST['user_id']) : 0;
-$fullname = isset($_POST['fullname']) ? trim($_POST['fullname']) : '';
-$phone    = isset($_POST['phone']) ? trim($_POST['phone']) : '';
-$address  = isset($_POST['address']) ? trim($_POST['address']) : '';
-
-// Validate required fields
-if ($user_id <= 0 || $fullname === '') {
-    echo json_encode([
-        "status" => "error",
-        "message" => "Missing required fields",
-        "received" => $_POST
-    ]);
-    exit;
-}
-
-// Fetch existing profile image
-$stmt = $conn->prepare("SELECT profile_image FROM users WHERE id=? LIMIT 1");
+// ---------- GET EXISTING DATA ----------
+$stmt = $conn->prepare("SELECT profile_image, email FROM users WHERE id=? LIMIT 1");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
-$row = $result->fetch_assoc();
-$existingImage = $row ? $row['profile_image'] : "";
+$userData = $result->fetch_assoc();
 $stmt->close();
 
+if (!$userData) response(false, "User not found");
+
+$existingImage = $userData['profile_image'] ?? "";
 $profile_image = $existingImage;
 
-// ✅ Ensure uploads folder exists and is writable
-$uploadDir = "uploads/";
-if (!is_dir($uploadDir)) {
-    if (!mkdir($uploadDir, 0777, true)) {
-        echo json_encode([
-            "status" => "error",
-            "message" => "Failed to create uploads directory"
-        ]);
-        exit;
-    }
-}
+// ---------- UPLOADS DIRECTORY ----------
+$uploadDir = "uploads/profile_images/";
 
-// Make sure folder is writable
-if (!is_writable($uploadDir)) {
-    chmod($uploadDir, 0777);
-}
+if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+if (!is_writable($uploadDir)) chmod($uploadDir, 0777);
 
-// Handle new image upload
-if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
+// ---------- HANDLE IMAGE UPLOAD ----------
+if (!empty($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
 
-    $fileTmpPath = $_FILES['profile_image']['tmp_name'];
-    $fileName = $_FILES['profile_image']['name'];
-    $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-    $allowedExt = ['jpg', 'jpeg', 'png', 'gif'];
+    $tmp = $_FILES['profile_image']['tmp_name'];
+    $ext = strtolower(pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION));
+    $allowed = ['jpg', 'jpeg', 'png', 'gif'];
 
-    if (!in_array($fileExt, $allowedExt)) {
-        echo json_encode([
-            "status" => "error",
-            "message" => "Invalid file type"
-        ]);
-        exit;
+    if (!in_array($ext, $allowed)) {
+        response(false, "Invalid image format: jpg, jpeg, png, gif allowed.");
     }
 
-    $newFileName = "profile_" . $user_id . "_" . time() . "." . $fileExt;
+    $newFileName = "user_" . $user_id . "_" . time() . "." . $ext;
 
-    if (move_uploaded_file($fileTmpPath, $uploadDir . $newFileName)) {
-        $profile_image = $newFileName;
+    if (move_uploaded_file($tmp, $uploadDir . $newFileName)) {
 
-        // Delete old image if exists
+        // Delete previous image
         if (!empty($existingImage) && file_exists($uploadDir . $existingImage)) {
             @unlink($uploadDir . $existingImage);
         }
-    } else {
-        echo json_encode([
-            "status" => "error",
-            "message" => "Image upload failed"
-        ]);
-        exit;
-    }
+
+        $profile_image = $newFileName;
+
+    } else response(false, "Failed to upload image.");
 }
 
-// Update database
+// ---------- UPDATE DATABASE ----------
 $stmt = $conn->prepare("UPDATE users SET fullname=?, phone=?, address=?, profile_image=? WHERE id=?");
 $stmt->bind_param("ssssi", $fullname, $phone, $address, $profile_image, $user_id);
 
-if ($stmt->execute()) {
-    echo json_encode([
-        "status" => "success",
-        "message" => "Profile updated successfully",
-        "fullname" => $fullname,
-        "phone" => $phone,
-        "address" => $address,
-        "profile_image" => $profile_image
-    ]);
-} else {
-    echo json_encode([
-        "status" => "error",
-        "message" => $stmt->error
-    ]);
+if (!$stmt->execute()) {
+    response(false, "Database error: " . $stmt->error);
 }
 
 $stmt->close();
+
+// ---------- BUILD FINAL USER RESPONSE ----------
+$user = [
+    "id" => $user_id,
+    "fullname" => $fullname,
+    "email" => $userData["email"],
+    "phone" => $phone,
+    "address" => $address,
+    "profile_image" => !empty($profile_image)
+        ? "http://10.72.15.180/carGOAdmin/$uploadDir$profile_image"
+        : ""
+];
+
+// ---------- SEND SUCCESS ----------
+response(true, "Profile updated successfully", $user);
+
+
+// ---------- REUSABLE RESPONSE FUNCTION ----------
+function response($success, $message, $user = null) {
+    echo json_encode([
+        "success" => $success,
+        "message" => $message,
+        "user"    => $user
+    ]);
+
+    exit;
+}
+
 $conn->close();
 ?>
