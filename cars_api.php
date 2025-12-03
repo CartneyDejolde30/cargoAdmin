@@ -37,7 +37,8 @@ function uploadMultiple($field, $prefix) {
         if ($_FILES[$field]['error'][$i] !== UPLOAD_ERR_OK) continue;
 
         $ext = pathinfo($file, PATHINFO_EXTENSION) ?: 'jpg';
-        $name = $prefix . time() . "_$i_" . rand(1000,9999) . ".$ext";
+        $name = $prefix . time() . "_" . $i . "_" . rand(1000,9999) . "." . $ext;
+
 
         $folder = __DIR__ . "/uploads/";
         if (!is_dir($folder)) mkdir($folder, 0777, true);
