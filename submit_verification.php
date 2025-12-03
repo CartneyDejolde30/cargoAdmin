@@ -1,56 +1,100 @@
 <?php
+error_reporting(0);
+ini_set('display_errors', 0);
 
-require_once "db.php"; // contains $conn
-
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json");
 
-if (!isset($_POST['userId'])) {
-    echo json_encode(["error" => "Missing user ID"]);
+require_once __DIR__ . "/include/db.php";
+
+// Allow OPTIONS preflight request
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$uploadDir = "../uploads/verification/";
-if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
-
-function saveFile($field, $uploadDir) {
-    if (!isset($_FILES[$field])) return null;
-    $ext = pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION);
-    $filename = uniqid() . "." . $ext;
-    move_uploaded_file($_FILES[$field]['tmp_name'], $uploadDir . $filename);
-    return "uploads/verification/" . $filename;
+// Ensure request is multipart/form-data (required for image upload)
+if (!isset($_POST['user_id'])) {
+    echo json_encode(["success" => false, "message" => "No form data received"]);
+    exit;
 }
 
-// Save images
-$idFront = saveFile("id_front_photo", $uploadDir);
-$idBack  = saveFile("id_back_photo", $uploadDir);
-$selfie  = saveFile("selfie_photo", $uploadDir);
+// Extract normal form fields
+$user_id        = $_POST['user_id'];
+$first_name     = $_POST['first_name'] ?? null;
+$last_name      = $_POST['last_name'] ?? null;
+$email          = $_POST['email'] ?? null;
+$mobile         = $_POST['mobile'] ?? null;
+$gender         = $_POST['gender'] ?? null;
+$dob            = $_POST['dob'] ?? null;
+$region         = $_POST['region'] ?? null;
+$province       = $_POST['province'] ?? null;
+$municipality   = $_POST['municipality'] ?? null;
+$barangay       = $_POST['barangay'] ?? null;
+$id_type        = $_POST['id_type'] ?? null;
 
-// Insert
+// Prevent duplicate submission
+$check = $conn->prepare("SELECT id FROM user_verification WHERE user_id = ?");
+$check->bind_param("i", $user_id);
+$check->execute();
+$check->store_result();
+
+if ($check->num_rows > 0) {
+    echo json_encode(["success" => false, "message" => "Verification already submitted."]);
+    exit;
+}
+
+// Folder for images
+$uploadDir = "uploads/";
+if (!is_dir($uploadDir)) {
+    mkdir($uploadDir, 0777, true);
+}
+
+// Helper function to upload file
+function uploadFile($fileKey, $uploadDir) {
+    if (!isset($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] !== UPLOAD_ERR_OK) {
+        return null;
+    }
+
+    $fileName = time() . "_" . basename($_FILES[$fileKey]["name"]);
+    $filePath = $uploadDir . $fileName;
+
+    if (move_uploaded_file($_FILES[$fileKey]["tmp_name"], $filePath)) {
+        return $filePath;
+    }
+
+    return null;
+}
+
+// Upload 3 images
+$id_front_photo = uploadFile("id_front_photo", $uploadDir);
+$id_back_photo  = uploadFile("id_back_photo", $uploadDir);
+$selfie_photo   = uploadFile("selfie_photo", $uploadDir);
+
+// Ensure all images uploaded
+if (!$id_front_photo || !$id_back_photo || !$selfie_photo) {
+    echo json_encode(["success" => false, "message" => "Image upload failed."]);
+    exit;
+}
+
+// Insert into database
 $stmt = $conn->prepare("
-    INSERT INTO user_verifications (
-      user_id, first_name, middle_name, last_name, suffix, nationality, 
-      gender, date_of_birth, permRegion, permProvince, permCity, permBarangay,
-      permZipCode, permAddressLine, sameAsPermanent, presRegion, presProvince,
-      presCity, presBarangay, presZipCode, presAddressLine, email,
-      mobileNumber, id_type, id_front_photo, id_back_photo, selfie_photo
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO user_verification 
+    (user_id, first_name, last_name, email, mobile, gender, dob, region, province, municipality, barangay, id_type, id_front_photo, id_back_photo, selfie_photo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
 
 $stmt->bind_param(
-  "issssssssssssssssssssssssss",
-  $_POST['userId'], $_POST['firstName'], $_POST['middleName'], $_POST['lastName'], $_POST['suffix'], 
-  $_POST['nationality'], $_POST['gender'], $_POST['dateOfBirth'], 
-  $_POST['permRegion'], $_POST['permProvince'], $_POST['permCity'], $_POST['permBarangay'],
-  $_POST['permZipCode'], $_POST['permAddressLine'], $_POST['sameAsPermanent'],
-  $_POST['presRegion'], $_POST['presProvince'], $_POST['presCity'], $_POST['presBarangay'],
-  $_POST['presZipCode'], $_POST['presAddressLine'], $_POST['email'], $_POST['mobileNumber'],
-  $_POST['idType'], $idFront, $idBack, $selfie
+    "issssssssssssss",
+    $user_id, $first_name, $last_name, $email, $mobile, $gender, $dob, $region, $province,
+    $municipality, $barangay, $id_type, $id_front_photo, $id_back_photo, $selfie_photo
 );
 
 if ($stmt->execute()) {
-  echo json_encode(["success" => true]);
+    echo json_encode(["success" => true, "message" => "Verification submitted successfully"]);
 } else {
-  echo json_encode(["error" => $stmt->error]);
+    echo json_encode(["success" => false, "message" => $stmt->error]);
 }
 
 $stmt->close();
