@@ -4,14 +4,19 @@ header("Content-Type: application/json");
 
 include "../include/db.php";
 
-// Updated query WITH rating + seats support
+// Updated query WITH owner info
 $query = $conn->query("
     SELECT 
         cars.id,
+        cars.owner_id,
         cars.brand,
         cars.model,
+        cars.car_year,
         cars.price_per_day AS price,
         cars.image,
+        cars.seat,
+        cars.has_unlimited_mileage,
+        users.fullname AS owner_name,
         users.municipality AS location,
         COALESCE(cars.rating, 5) AS rating,
         COALESCE(cars.seat, 4) AS seats
