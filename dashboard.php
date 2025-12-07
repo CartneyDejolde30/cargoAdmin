@@ -1,15 +1,51 @@
 <?php
 include 'include/db.php';
+include 'include/dashboard_stats.php';
 
-$sql = "
-    SELECT cars.*, users.fullname 
-    FROM cars 
-    JOIN users ON users.id = cars.owner_id 
-    ORDER BY cars.created_at DESC 
-    LIMIT 5
-";
+// ============================================================================
+// GET ALL DASHBOARD STATISTICS USING HELPER FUNCTIONS
+// ============================================================================
 
-$query = $conn->query($sql);
+// Get all dashboard statistics
+$stats = getDashboardStats($conn);
+
+// Extract statistics for easier access
+$earnings = $stats['earnings'];
+$bookings = $stats['cars']; // Since you're using cars as bookings
+$users = $stats['users'];
+$issues = $stats['notifications'];
+$verifications = $stats['verifications'];
+$growth = $stats['growth'];
+
+// Get recent cars for the table
+$query = getRecentCars($conn, 5);
+
+// Set values for display
+$totalEarnings = $earnings['estimated_monthly'];
+$earningsGrowth = $growth['earnings'];
+
+$totalBookingsCount = $bookings['active'];
+$bookingsGrowth = $growth['cars'];
+
+$totalUsersCount = $users['total'];
+$usersGrowth = $growth['users'];
+
+$pendingIssues = $issues['unread'];
+$issuesChange = $growth['notifications'];
+
+$topCars = getTopPerformingCars($conn, 5);
+
+// Get revenue breakdown
+$revenue = getRevenueByPeriod($conn);
+echo formatCurrency($revenue['this_month']); // This month's revenue
+
+// Get recent bookings
+$recentBookings = getRecentBookings($conn, 10);
+
+// Get metrics
+$avgBookingValue = getAverageBookingValue($conn);
+$utilizationRate = getCarUtilizationRate($conn);
+$cancellationRate = getCancellationRate($conn);
 ?>
 
 <!DOCTYPE html>
@@ -21,8 +57,6 @@ $query = $conn->query($sql);
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- Include shared CSS -->
   <link href="include/admin-styles.css" rel="stylesheet">
 </head>
 <body>
@@ -30,7 +64,6 @@ $query = $conn->query($sql);
 <div class="dashboard-wrapper">
   <?php include('include/sidebar.php'); ?>
 
-  <!-- Main Content -->
   <main class="main-content">
     <!-- Top Bar -->
     <div class="top-bar">
@@ -38,9 +71,12 @@ $query = $conn->query($sql);
       <div class="user-profile">
         <button class="notification-btn">
           <i class="bi bi-bell"></i>
+          <?php if ($pendingIssues > 0): ?>
+            <span class="badge bg-danger position-absolute top-0 start-100 translate-middle rounded-pill"><?= $pendingIssues ?></span>
+          <?php endif; ?>
         </button>
         <div class="user-avatar">
-          <img src="https://ui-avatars.com/api/?name=Olivia+Deny&background=1a1a1a&color=fff" alt="User">
+          <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="User">
         </div>
       </div>
     </div>
@@ -49,7 +85,7 @@ $query = $conn->query($sql);
     <div class="welcome-card">
       <div class="welcome-content">
         <h2>Get where you need to go<br>with our service</h2>
-        <p>Connect car owners with renters. Manage your peer-to-peer platform with comprehensive coverage and the highest quality service.</p>
+        <p>Connect car owners with renters across Agusan del Sur. Manage your peer-to-peer platform with comprehensive coverage and the highest quality service.</p>
         <button class="welcome-btn">Start Exploring</button>
       </div>
       <svg class="welcome-illustration" viewBox="0 0 200 150" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -61,89 +97,136 @@ $query = $conn->query($sql);
       </svg>
     </div>
 
-    <!-- Stats Grid -->
+    <!-- Stats Grid with REAL DATA from Helper Functions -->
     <div class="stats-grid">
+      <!-- Total Earnings -->
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
             <i class="bi bi-currency-dollar"></i>
           </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +12.5%
+          <div class="stat-trend <?= $earningsGrowth >= 0 ? '' : 'down' ?>">
+            <i class="bi bi-arrow-<?= $earningsGrowth >= 0 ? 'up' : 'down' ?>"></i>
+            <?= abs($earningsGrowth) ?>%
           </div>
         </div>
-        <div class="stat-value">₱12,500</div>
-        <div class="stat-label">Total Earnings</div>
-        <div class="stat-detail">Net Profit Last Month: ₱9,200</div>
+        <div class="stat-value"><?= formatCurrency($totalEarnings) ?></div>
+        <div class="stat-label">Estimated Monthly Earnings</div>
+        <div class="stat-detail">Weekly: <?= formatCurrency($earnings['estimated_weekly']) ?></div>
       </div>
 
+      <!-- Total Cars/Bookings -->
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
-            <i class="bi bi-calendar-check"></i>
+            <i class="bi bi-car-front-fill"></i>
           </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +8.3%
+          <div class="stat-trend <?= $bookingsGrowth >= 0 ? '' : 'down' ?>">
+            <i class="bi bi-arrow-<?= $bookingsGrowth >= 0 ? 'up' : 'down' ?>"></i>
+            <?= abs($bookingsGrowth) ?>%
           </div>
         </div>
-        <div class="stat-value">45</div>
-        <div class="stat-label">Total Bookings</div>
-        <div class="stat-detail">Active: 12 | Completed: 33</div>
+        <div class="stat-value"><?= formatNumber($bookings['total']) ?></div>
+        <div class="stat-label">Total Cars Listed</div>
+        <div class="stat-detail">Active: <?= formatNumber($bookings['active']) ?> | Pending: <?= formatNumber($bookings['pending']) ?></div>
       </div>
 
+      <!-- Total Users -->
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
             <i class="bi bi-people"></i>
           </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +5.2%
+          <div class="stat-trend <?= $usersGrowth >= 0 ? '' : 'down' ?>">
+            <i class="bi bi-arrow-<?= $usersGrowth >= 0 ? 'up' : 'down' ?>"></i>
+            <?= abs($usersGrowth) ?>%
           </div>
         </div>
-        <div class="stat-value">58</div>
+        <div class="stat-value"><?= formatNumber($totalUsersCount) ?></div>
         <div class="stat-label">Total Users</div>
-        <div class="stat-detail">Owners: 20 | Renters: 38</div>
+        <div class="stat-detail">Owners: <?= formatNumber($users['owners']) ?> | Renters: <?= formatNumber($users['renters']) ?></div>
       </div>
 
+      <!-- Notifications/Issues -->
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
-            <i class="bi bi-flag"></i>
+            <i class="bi bi-bell-fill"></i>
           </div>
-          <div class="stat-trend down">
-            <i class="bi bi-arrow-down"></i>
-            -2.1%
+          <div class="stat-trend <?= $issuesChange >= 0 ? 'down' : '' ?>">
+            <i class="bi bi-arrow-<?= $issuesChange >= 0 ? 'up' : 'down' ?>"></i>
+            <?= abs($issuesChange) ?>%
           </div>
         </div>
-        <div class="stat-value">3</div>
-        <div class="stat-label">Reported Issues</div>
-        <div class="stat-detail">Resolved: 24 | Pending: 3</div>
+        <div class="stat-value"><?= formatNumber($pendingIssues) ?></div>
+        <div class="stat-label">Unread Notifications</div>
+        <div class="stat-detail">Total: <?= formatNumber($issues['total']) ?></div>
       </div>
 
+      <!-- Pending Verifications -->
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
-            <i class="bi bi-check-circle"></i>
+            <i class="bi bi-shield-check"></i>
           </div>
           <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +15%
+            <i class="bi bi-hourglass-split"></i>
+            Review
           </div>
         </div>
-        <div class="stat-value">3</div>
+        <div class="stat-value"><?= formatNumber($verifications['pending']) ?></div>
         <div class="stat-label">Pending Verification</div>
-        <div class="stat-detail">Awaiting Review</div>
+        <div class="stat-detail">Approved: <?= formatNumber($verifications['approved']) ?> | Rejected: <?= formatNumber($verifications['rejected']) ?></div>
       </div>
     </div>
 
-    <!-- Car Listings Table -->
+    <!-- Additional Summary Cards -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Platform Statistics</h5>
+          </div>
+          <div class="card-body">
+            <div class="row text-center">
+              <div class="col-6 border-end">
+                <h3 class="text-success"><?= formatNumber($verifications['approved']) ?></h3>
+                <p class="text-muted mb-0">Verified Users</p>
+              </div>
+              <div class="col-6">
+                <h3 class="text-info"><?= formatNumber($bookings['active']) ?></h3>
+                <p class="text-muted mb-0">Active Listings</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card shadow-sm">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-geo-alt-fill me-2"></i>Agusan del Sur Coverage</h5>
+          </div>
+          <div class="card-body">
+            <div class="row text-center">
+              <div class="col-6 border-end">
+                <h3 class="text-primary">14</h3>
+                <p class="text-muted mb-0">Municipalities</p>
+              </div>
+              <div class="col-6">
+                <h3 class="text-warning"><?= formatNumber($users['owners']) ?></h3>
+                <p class="text-muted mb-0">Car Owners</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Car Listings Table -->
     <div class="table-section">
       <div class="section-header">
-        <h2 class="section-title">Car Listing</h2>
-        <a href="#" class="view-all">
+        <h2 class="section-title">Recent Car Listings</h2>
+        <a href="get_cars_admin.php" class="view-all">
           View All
           <i class="bi bi-arrow-right"></i>
         </a>
@@ -168,7 +251,7 @@ $query = $conn->query($sql);
             echo '<tr><td colspan="8" class="empty-state">
                     <i class="bi bi-inbox"></i>
                     <h4>No cars found</h4>
-                    <p>Try adjusting your search or filter criteria</p>
+                    <p>No car listings available yet</p>
                   </td></tr>';
           }
 
@@ -283,8 +366,6 @@ function viewCarImage(imageUrl, carName) {
   modal.classList.add('active');
   modalImg.src = imageUrl;
   caption.textContent = carName || 'Car Image';
-  
-  // Prevent body scroll when modal is open
   document.body.style.overflow = 'hidden';
 }
 
@@ -296,16 +377,10 @@ function closeImageModal() {
 
 function downloadImage() {
   if (!currentImageUrl) return;
-  
-  // Create a temporary link element
   const link = document.createElement('a');
   link.href = currentImageUrl;
-  
-  // Extract filename from URL or use default
   const filename = currentImageUrl.split('/').pop() || 'car-image.jpg';
   link.download = filename;
-  
-  // Trigger download
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -317,30 +392,24 @@ function viewDocument(docUrl, docType) {
   const modalTitle = document.getElementById('docModalTitle');
   const downloadBtn = document.getElementById('docDownloadBtn');
   
-  // Set title and download link
   modalTitle.textContent = docType;
   downloadBtn.href = docUrl;
   downloadBtn.download = docType.replace(/\s+/g, '_') + '_' + docUrl.split('/').pop();
   
-  // Clear previous content
   modalBody.innerHTML = '';
   
-  // Check file extension
   const extension = docUrl.split('.').pop().toLowerCase();
   
   if (extension === 'pdf') {
-    // For PDF files, use iframe
     const iframe = document.createElement('iframe');
     iframe.src = docUrl;
     modalBody.appendChild(iframe);
   } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
-    // For image files, use img tag
     const img = document.createElement('img');
     img.src = docUrl;
     img.alt = docType;
     modalBody.appendChild(img);
   } else {
-    // For other file types, use iframe with fallback
     const iframe = document.createElement('iframe');
     iframe.src = docUrl;
     modalBody.appendChild(iframe);
@@ -356,21 +425,14 @@ function closeDocModal() {
   document.body.style.overflow = 'auto';
 }
 
-// Close image modal when clicking outside
 document.getElementById('imageModal').addEventListener('click', function(e) {
-  if (e.target === this) {
-    closeImageModal();
-  }
+  if (e.target === this) closeImageModal();
 });
 
-// Close document modal when clicking outside
 document.getElementById('docModal').addEventListener('click', function(e) {
-  if (e.target === this) {
-    closeDocModal();
-  }
+  if (e.target === this) closeDocModal();
 });
 
-// Close modals with Escape key
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeImageModal();
