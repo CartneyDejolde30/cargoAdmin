@@ -7,856 +7,19 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Poppins', sans-serif;
-      background: #f8f9fa;
-      min-height: 100vh;
-    }
-
-    .dashboard-wrapper {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    /* Sidebar Styles */
-    .sidebar {
-      width: 260px;
-      background: white;
-      padding: 30px 20px;
-      box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-      position: fixed;
-      height: 100vh;
-      overflow-y: auto;
-    }
-
-    .logo-section {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 40px;
-      padding: 0 10px;
-    }
-
-    .logo-icon {
-      width: 40px;
-      height: 40px;
-      background: #1a1a1a;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 20px;
-      font-weight: 800;
-    }
-
-    .logo-text {
-      font-size: 20px;
-      font-weight: 800;
-      color: #1a1a1a;
-      letter-spacing: 2px;
-    }
-
-    .menu-section {
-      margin-bottom: 35px;
-    }
-
-    .menu-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: #999;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      padding: 0 10px;
-      margin-bottom: 12px;
-    }
-
-    .menu-item {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 14px 16px;
-      border-radius: 12px;
-      color: #666;
-      text-decoration: none;
-      transition: all 0.3s ease;
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 6px;
-    }
-
-    .menu-item:hover {
-      background: #f5f5f5;
-      color: #1a1a1a;
-    }
-
-    .menu-item.active {
-      background: #1a1a1a;
-      color: white;
-    }
-
-    .menu-item i {
-      font-size: 18px;
-      width: 20px;
-      text-align: center;
-    }
-
-    /* Main Content */
-    .main-content {
-      flex: 1;
-      margin-left: 260px;
-      padding: 30px 40px;
-    }
-
-    .top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 35px;
-    }
-
-    .page-title {
-      font-size: 28px;
-      font-weight: 800;
-      color: #1a1a1a;
-    }
-
-    .user-profile {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
-
-    .notification-btn {
-      width: 45px;
-      height: 45px;
-      background: white;
-      border: none;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      color: #666;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-      position: relative;
-    }
-
-    .notification-btn:hover {
-      background: #f5f5f5;
-    }
-
-    .notification-badge {
-      position: absolute;
-      top: -5px;
-      right: -5px;
-      background: #dc3545;
-      color: white;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      font-size: 10px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .user-avatar {
-      width: 45px;
-      height: 45px;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #1a1a1a;
-    }
-
-    .user-avatar img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    /* Stats Cards */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      margin-bottom: 30px;
-    }
-
-    .stat-card {
-      background: white;
-      border-radius: 18px;
-      padding: 25px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 4px;
-      height: 100%;
-      background: #1a1a1a;
-    }
-
-    .stat-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-    }
-
-    .stat-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 15px;
-    }
-
-    .stat-icon {
-      width: 50px;
-      height: 50px;
-      background: #f5f5f5;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      color: #1a1a1a;
-    }
-
-    .stat-trend {
-      font-size: 12px;
-      color: #28a745;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .stat-trend.down {
-      color: #dc3545;
-    }
-
-    .stat-value {
-      font-size: 32px;
-      font-weight: 800;
-      color: #1a1a1a;
-      margin-bottom: 5px;
-    }
-
-    .stat-label {
-      font-size: 14px;
-      color: #666;
-      font-weight: 500;
-    }
-
-    /* Filter Section */
-    .filter-section {
-      background: white;
-      border-radius: 18px;
-      padding: 25px;
-      margin-bottom: 30px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    }
-
-    .filter-row {
-      display: flex;
-      gap: 15px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .search-box {
-      flex: 1;
-      min-width: 300px;
-      position: relative;
-    }
-
-    .search-box input {
-      width: 100%;
-      padding: 12px 45px 12px 20px;
-      border: 2px solid #f0f0f0;
-      border-radius: 12px;
-      font-size: 14px;
-      transition: all 0.3s ease;
-    }
-
-    .search-box input:focus {
-      outline: none;
-      border-color: #1a1a1a;
-    }
-
-    .search-box i {
-      position: absolute;
-      right: 18px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #666;
-      font-size: 16px;
-    }
-
-    .filter-dropdown {
-      padding: 12px 20px;
-      border: 2px solid #f0f0f0;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      background: white;
-    }
-
-    .filter-dropdown:focus {
-      outline: none;
-      border-color: #1a1a1a;
-    }
-
-    .export-btn {
-      padding: 12px 24px;
-      background: #1a1a1a;
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .export-btn:hover {
-      background: #000;
-      transform: translateY(-2px);
-    }
-
-    /* Table Section */
-    .table-section {
-      background: white;
-      border-radius: 18px;
-      padding: 30px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      margin-bottom: 30px;
-    }
-
-    .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 25px;
-    }
-
-    .section-title {
-      font-size: 20px;
-      font-weight: 700;
-      color: #1a1a1a;
-    }
-
-    .table-controls {
-      display: flex;
-      gap: 12px;
-    }
-
-    .table-btn {
-      padding: 10px 18px;
-      background: #f5f5f5;
-      border: none;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #666;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .table-btn:hover {
-      background: #e8e8e8;
-      color: #1a1a1a;
-    }
-
-    .table-btn.active {
-      background: #1a1a1a;
-      color: white;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-    }
-
-    thead th {
-      background: #f8f9fa;
-      padding: 16px;
-      text-align: left;
-      font-size: 12px;
-      font-weight: 700;
-      color: #666;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border: none;
-    }
-
-    thead th:first-child {
-      border-radius: 10px 0 0 10px;
-    }
-
-    thead th:last-child {
-      border-radius: 0 10px 10px 0;
-    }
-
-    tbody td {
-      padding: 18px 16px;
-      border-bottom: 1px solid #f0f0f0;
-      font-size: 14px;
-      color: #1a1a1a;
-      vertical-align: middle;
-    }
-
-    tbody tr:hover {
-      background: #f8f9fa;
-    }
-
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    .user-cell {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .user-avatar-small {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-
-    .user-avatar-small img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .status-badge {
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      display: inline-block;
-    }
-
-    .status-badge.pending {
-      background: #fff3cd;
-      color: #856404;
-    }
-
-    .status-badge.confirmed {
-      background: #d1ecf1;
-      color: #0c5460;
-    }
-
-    .status-badge.ongoing {
-      background: #cfe2ff;
-      color: #084298;
-    }
-
-    .status-badge.completed {
-      background: #d1e7dd;
-      color: #0f5132;
-    }
-
-    .status-badge.cancelled {
-      background: #f8d7da;
-      color: #842029;
-    }
-
-    .payment-badge {
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      display: inline-block;
-    }
-
-    .payment-badge.paid {
-      background: #d1e7dd;
-      color: #0f5132;
-    }
-
-    .payment-badge.unpaid {
-      background: #f8d7da;
-      color: #842029;
-    }
-
-    .payment-badge.partial {
-      background: #fff3cd;
-      color: #856404;
-    }
-
-    .action-buttons {
-      display: flex;
-      gap: 8px;
-    }
-
-    .action-btn {
-      width: 35px;
-      height: 35px;
-      border-radius: 8px;
-      border: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-size: 16px;
-    }
-
-    .action-btn.view {
-      background: #e3f2fd;
-      color: #1976d2;
-    }
-
-    .action-btn.view:hover {
-      background: #1976d2;
-      color: white;
-    }
-
-    .action-btn.approve {
-      background: #e8f5e9;
-      color: #388e3c;
-    }
-
-    .action-btn.approve:hover {
-      background: #388e3c;
-      color: white;
-    }
-
-    .action-btn.reject {
-      background: #ffebee;
-      color: #d32f2f;
-    }
-
-    .action-btn.reject:hover {
-      background: #d32f2f;
-      color: white;
-    }
-
-    /* Modal Styles */
-    .modal-content {
-      border-radius: 18px;
-      border: none;
-      overflow: hidden;
-    }
-
-    .modal-header {
-      background: #1a1a1a;
-      color: white;
-      padding: 25px 30px;
-      border: none;
-    }
-
-    .modal-title {
-      font-weight: 700;
-      font-size: 20px;
-    }
-
-    .btn-close {
-      filter: brightness(0) invert(1);
-    }
-
-    .modal-body {
-      padding: 30px;
-    }
-
-    .detail-section {
-      margin-bottom: 30px;
-    }
-
-    .detail-section:last-child {
-      margin-bottom: 0;
-    }
-
-    .detail-section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #999;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 15px;
-    }
-
-    .detail-row {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-      margin-bottom: 15px;
-    }
-
-    .detail-item {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .detail-label {
-      font-size: 12px;
-      color: #999;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .detail-value {
-      font-size: 15px;
-      color: #1a1a1a;
-      font-weight: 600;
-    }
-
-    .timeline {
-      position: relative;
-      padding-left: 30px;
-    }
-
-    .timeline::before {
-      content: '';
-      position: absolute;
-      left: 8px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: #e0e0e0;
-    }
-
-    .timeline-item {
-      position: relative;
-      margin-bottom: 20px;
-    }
-
-    .timeline-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .timeline-dot {
-      position: absolute;
-      left: -26px;
-      top: 2px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: white;
-      border: 3px solid #1a1a1a;
-    }
-
-    .timeline-content {
-      background: #f8f9fa;
-      padding: 15px;
-      border-radius: 10px;
-    }
-
-    .timeline-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1a1a1a;
-      margin-bottom: 5px;
-    }
-
-    .timeline-time {
-      font-size: 12px;
-      color: #999;
-    }
-
-    .modal-footer {
-      padding: 20px 30px;
-      border-top: 1px solid #f0f0f0;
-      gap: 10px;
-    }
-
-    .modal-btn {
-      padding: 12px 28px;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 14px;
-      border: none;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .modal-btn.secondary {
-      background: #f5f5f5;
-      color: #666;
-    }
-
-    .modal-btn.secondary:hover {
-      background: #e8e8e8;
-    }
-
-    .modal-btn.approve {
-      background: #28a745;
-      color: white;
-    }
-
-    .modal-btn.approve:hover {
-      background: #218838;
-    }
-
-    .modal-btn.reject {
-      background: #dc3545;
-      color: white;
-    }
-
-    .modal-btn.reject:hover {
-      background: #c82333;
-    }
-
-    /* Pagination */
-    .pagination-section {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 25px;
-      padding-top: 25px;
-      border-top: 1px solid #f0f0f0;
-    }
-
-    .pagination-info {
-      font-size: 14px;
-      color: #666;
-    }
-
-    .pagination-controls {
-      display: flex;
-      gap: 8px;
-    }
-
-    .page-btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
-      background: white;
-      color: #666;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .page-btn:hover {
-      background: #f5f5f5;
-      border-color: #1a1a1a;
-    }
-
-    .page-btn.active {
-      background: #1a1a1a;
-      color: white;
-      border-color: #1a1a1a;
-    }
-
-    @media (max-width: 1400px) {
-      .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    @media (max-width: 992px) {
-      .sidebar {
-        transform: translateX(-100%);
-      }
-
-      .main-content {
-        margin-left: 0;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .filter-row {
-        flex-direction: column;
-      }
-
-      .search-box {
-        width: 100%;
-      }
-    }
-  </style>
+  <link href="include/admin-styles.css" rel="stylesheet">
 </head>
 <body>
 
 <div class="dashboard-wrapper">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="logo-section">
-      <div class="logo-icon">C</div>
-      <div class="logo-text">CARGO</div>
-    </div>
+  <?php include('include/sidebar.php'); ?>
 
-    <div class="menu-section">
-      <div class="menu-label">About Car</div>
-      <a href="dashboard.php" class="menu-item">
-        <i class="bi bi-grid"></i>
-        <span>Dashboard</span>
-      </a>
-      <a href="get_cars_admin.php" class="menu-item">
-        <i class="bi bi-car-front"></i>
-        <span>Car Listing</span>
-      </a>
-      <a href="users.php" class="menu-item">
-        <i class="bi bi-person"></i>
-        <span>Users Verification</span>
-      </a>
-      <a href="bookings.php" class="menu-item active">
-        <i class="bi bi-book"></i>
-        <span>Bookings</span>
-      </a>
-    </div>
-
-    <div class="menu-section">
-      <div class="menu-label">Report</div>
-      <a href="sales-statistics.php" class="menu-item">
-        <i class="bi bi-bar-chart"></i>
-        <span>Sales Statistics</span>
-      </a>
-      <a href="car-reports.php" class="menu-item">
-        <i class="bi bi-file-text"></i>
-        <span>Car Reports</span>
-      </a>
-    </div>
-
-    <div class="menu-section">
-      <a href="settings.php" class="menu-item">
-        <i class="bi bi-gear"></i>
-        <span>Settings</span>
-      </a>
-      <a href="logout.php" class="menu-item" style="color: #dc3545; margin-top: 20px;">
-        <i class="bi bi-box-arrow-right"></i>
-        <span>Logout</span>
-      </a>
-    </div>
-  </aside>
-
-  <!-- Main Content -->
   <main class="main-content">
-    <!-- Top Bar -->
     <div class="top-bar">
-      <h1 class="page-title">Bookings Management</h1>
+      <h1 class="page-title">
+        <i class="bi bi-book"></i>
+        Bookings Management
+      </h1>
       <div class="user-profile">
         <button class="notification-btn">
           <i class="bi bi-bell"></i>
@@ -868,11 +31,10 @@
       </div>
     </div>
 
-    <!-- Stats Grid -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
             <i class="bi bi-clock-history"></i>
           </div>
           <div class="stat-trend">
@@ -882,11 +44,12 @@
         </div>
         <div class="stat-value">23</div>
         <div class="stat-label">Pending Bookings</div>
+        <div class="stat-detail">Requires immediate attention</div>
       </div>
 
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
             <i class="bi bi-check-circle"></i>
           </div>
           <div class="stat-trend">
@@ -896,11 +59,12 @@
         </div>
         <div class="stat-value">156</div>
         <div class="stat-label">Confirmed Bookings</div>
+        <div class="stat-detail">Ready for pickup</div>
       </div>
 
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
             <i class="bi bi-car-front-fill"></i>
           </div>
           <div class="stat-trend">
@@ -910,70 +74,103 @@
         </div>
         <div class="stat-value">42</div>
         <div class="stat-label">Ongoing Rentals</div>
+        <div class="stat-detail">Currently active</div>
       </div>
 
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
-            <i class="bi bi-x-circle"></i>
+          <div class="stat-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
+            <i class="bi bi-currency-dollar"></i>
           </div>
-          <div class="stat-trend down">
-            <i class="bi bi-arrow-down"></i>
-            -5%
+          <div class="stat-trend">
+            <i class="bi bi-arrow-up"></i>
+            +25%
           </div>
         </div>
-        <div class="stat-value">8</div>
-        <div class="stat-label">Cancelled Bookings</div>
+        <div class="stat-value">₱524K</div>
+        <div class="stat-label">Total Revenue</div>
+        <div class="stat-detail">This month</div>
       </div>
     </div>
 
-    <!-- Filter Section -->
+    <div class="quick-stats">
+      <div class="quick-stat-card">
+        <div class="quick-stat-icon" style="background: #fff8e1; color: #f57c00;">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <div class="quick-stat-value">5</div>
+        <div class="quick-stat-label">Overdue Bookings</div>
+      </div>
+      <div class="quick-stat-card">
+        <div class="quick-stat-icon" style="background: #e8f5e9; color: #2e7d32;">
+          <i class="bi bi-star"></i>
+        </div>
+        <div class="quick-stat-value">4.8</div>
+        <div class="quick-stat-label">Average Rating</div>
+      </div>
+      <div class="quick-stat-card">
+        <div class="quick-stat-icon" style="background: #f3e5f5; color: #7b1fa2;">
+          <i class="bi bi-arrow-repeat"></i>
+        </div>
+        <div class="quick-stat-value">12</div>
+        <div class="quick-stat-label">Repeat Customers</div>
+      </div>
+      <div class="quick-stat-card">
+        <div class="quick-stat-icon" style="background: #ffebee; color: #d32f2f;">
+          <i class="bi bi-x-circle"></i>
+        </div>
+        <div class="quick-stat-value">8</div>
+        <div class="quick-stat-label">Cancelled Today</div>
+      </div>
+    </div>
+
     <div class="filter-section">
       <div class="filter-row">
         <div class="search-box">
-          <input type="text" placeholder="Search by renter, owner, or car type...">
+          <input type="text" id="searchInput" placeholder="Search by renter, owner, or car type...">
           <i class="bi bi-search"></i>
         </div>
-        <select class="filter-dropdown">
-          <option>All Status</option>
-          <option>Pending</option>
-          <option>Confirmed</option>
-          <option>Ongoing</option>
-          <option>Completed</option>
-          <option>Cancelled</option>
+        <select class="filter-dropdown" id="statusFilter">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="ongoing">Ongoing</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
         </select>
-        <select class="filter-dropdown">
-          <option>Payment Status</option>
-          <option>Paid</option>
-          <option>Unpaid</option>
-          <option>Partial</option>
+        <select class="filter-dropdown" id="paymentFilter">
+          <option value="">Payment Status</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partial">Partial</option>
         </select>
-        <select class="filter-dropdown">
-          <option>This Month</option>
-          <option>Last Month</option>
-          <option>Last 3 Months</option>
-          <option>This Year</option>
+        <select class="filter-dropdown" id="dateFilter">
+          <option value="">Date Range</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
         </select>
-        <button class="export-btn">
+        <button class="export-btn" onclick="exportBookings()">
           <i class="bi bi-download"></i>
-          Export
+          Export Report
         </button>
       </div>
     </div>
 
-    <!-- Table Section -->
     <div class="table-section">
       <div class="section-header">
         <h2 class="section-title">All Bookings</h2>
         <div class="table-controls">
-          <button class="table-btn active">All (229)</button>
-          <button class="table-btn">Pending (23)</button>
-          <button class="table-btn">Active (42)</button>
+          <button class="table-btn active" onclick="filterTable('all')">All (229)</button>
+          <button class="table-btn" onclick="filterTable('pending')">Pending (23)</button>
+          <button class="table-btn" onclick="filterTable('ongoing')">Active (42)</button>
+          <button class="table-btn" onclick="filterTable('completed')">Completed (156)</button>
         </div>
       </div>
 
       <div class="table-responsive">
-        <table>
+        <table id="bookingsTable">
           <thead>
             <tr>
               <th>#</th>
@@ -989,14 +186,17 @@
             </tr>
           </thead>
           <tbody>
-            <tr>
+            <tr data-status="pending" data-payment="unpaid">
               <td><strong>#BK-2451</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Juan+Cruz&background=1a1a1a&color=fff" alt="Juan">
                   </div>
-                  <span>Juan Dela Cruz</span>
+                  <div class="user-info">
+                    <span class="user-name">Juan Dela Cruz</span>
+                    <span class="user-email">juan@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
@@ -1004,13 +204,16 @@
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Pedro+Santos&background=1a1a1a&color=fff" alt="Pedro">
                   </div>
-                  <span>Pedro Santos</span>
+                  <div class="user-info">
+                    <span class="user-name">Pedro Santos</span>
+                    <span class="user-email">pedro@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
                 <div>
                   <strong>Toyota Vios</strong><br>
-                  <small style="color: #999;">Sedan • 2022</small>
+                  <small style="color: #999;">Sedan • 2022 • ABC 1234</small>
                 </div>
               </td>
               <td>
@@ -1025,7 +228,7 @@
                   <small style="color: #999;">to Butuan City</small>
                 </div>
               </td>
-              <td><strong>₱5,000.00</strong></td>
+              <td><strong>₱5,000</strong></td>
               <td><span class="status-badge pending">Pending</span></td>
               <td><span class="payment-badge unpaid">Unpaid</span></td>
               <td>
@@ -1043,14 +246,17 @@
               </td>
             </tr>
 
-            <tr>
+            <tr data-status="confirmed" data-payment="paid">
               <td><strong>#BK-2450</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Maria+Garcia&background=1a1a1a&color=fff" alt="Maria">
                   </div>
-                  <span>Maria Garcia</span>
+                  <div class="user-info">
+                    <span class="user-name">Maria Garcia</span>
+                    <span class="user-email">maria@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
@@ -1058,13 +264,16 @@
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Carlos+Reyes&background=1a1a1a&color=fff" alt="Carlos">
                   </div>
-                  <span>Carlos Reyes</span>
+                  <div class="user-info">
+                    <span class="user-name">Carlos Reyes</span>
+                    <span class="user-email">carlos@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
                 <div>
                   <strong>Honda City</strong><br>
-                  <small style="color: #999;">Sedan • 2023</small>
+                  <small style="color: #999;">Sedan • 2023 • DEF 5678</small>
                 </div>
               </td>
               <td>
@@ -1079,7 +288,7 @@
                   <small style="color: #999;">to Cagayan de Oro</small>
                 </div>
               </td>
-              <td><strong>₱6,500.00</strong></td>
+              <td><strong>₱6,500</strong></td>
               <td><span class="status-badge confirmed">Confirmed</span></td>
               <td><span class="payment-badge paid">Paid</span></td>
               <td>
@@ -1087,18 +296,24 @@
                   <button class="action-btn view" data-bs-toggle="modal" data-bs-target="#bookingModal2" title="View Details">
                     <i class="bi bi-eye"></i>
                   </button>
+                  <button class="action-btn delete" title="Cancel">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
                 </div>
               </td>
             </tr>
 
-            <tr>
+            <tr data-status="ongoing" data-payment="paid">
               <td><strong>#BK-2449</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Robert+Tan&background=1a1a1a&color=fff" alt="Robert">
                   </div>
-                  <span>Robert Tan</span>
+                  <div class="user-info">
+                    <span class="user-name">Robert Tan</span>
+                    <span class="user-email">robert@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
@@ -1106,13 +321,16 @@
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Anna+Lopez&background=1a1a1a&color=fff" alt="Anna">
                   </div>
-                  <span>Anna Lopez</span>
+                  <div class="user-info">
+                    <span class="user-name">Anna Lopez</span>
+                    <span class="user-email">anna@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
                 <div>
                   <strong>Mitsubishi Montero</strong><br>
-                  <small style="color: #999;">SUV • 2021</small>
+                  <small style="color: #999;">SUV • 2021 • GHI 9012</small>
                 </div>
               </td>
               <td>
@@ -1127,7 +345,7 @@
                   <small style="color: #999;">to Baguio City</small>
                 </div>
               </td>
-              <td><strong>₱12,000.00</strong></td>
+              <td><strong>₱12,000</strong></td>
               <td><span class="status-badge ongoing">Ongoing</span></td>
               <td><span class="payment-badge paid">Paid</span></td>
               <td>
@@ -1135,18 +353,24 @@
                   <button class="action-btn view" title="View Details">
                     <i class="bi bi-eye"></i>
                   </button>
+                  <button class="action-btn" style="background: #e3f2fd; color: #1976d2;" title="Track">
+                    <i class="bi bi-geo-alt"></i>
+                  </button>
                 </div>
               </td>
             </tr>
 
-            <tr>
+            <tr data-status="completed" data-payment="paid">
               <td><strong>#BK-2448</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Lisa+Ramos&background=1a1a1a&color=fff" alt="Lisa">
                   </div>
-                  <span>Lisa Ramos</span>
+                  <div class="user-info">
+                    <span class="user-name">Lisa Ramos</span>
+                    <span class="user-email">lisa@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
@@ -1154,13 +378,16 @@
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Mark+Santos&background=1a1a1a&color=fff" alt="Mark">
                   </div>
-                  <span>Mark Santos</span>
+                  <div class="user-info">
+                    <span class="user-name">Mark Santos</span>
+                    <span class="user-email">mark@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
                 <div>
                   <strong>Toyota Fortuner</strong><br>
-                  <small style="color: #999;">SUV • 2022</small>
+                  <small style="color: #999;">SUV • 2022 • JKL 3456</small>
                 </div>
               </td>
               <td>
@@ -1175,7 +402,7 @@
                   <small style="color: #999;">to Bohol</small>
                 </div>
               </td>
-              <td><strong>₱9,000.00</strong></td>
+              <td><strong>₱9,000</strong></td>
               <td><span class="status-badge completed">Completed</span></td>
               <td><span class="payment-badge paid">Paid</span></td>
               <td>
@@ -1183,18 +410,24 @@
                   <button class="action-btn view" title="View Details">
                     <i class="bi bi-eye"></i>
                   </button>
+                  <button class="action-btn" style="background: #fff3e0; color: #ef6c00;" title="Generate Invoice">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                  </button>
                 </div>
               </td>
             </tr>
 
-            <tr>
+            <tr data-status="cancelled" data-payment="unpaid">
               <td><strong>#BK-2447</strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=David+Cruz&background=1a1a1a&color=fff" alt="David">
                   </div>
-                  <span>David Cruz</span>
+                  <div class="user-info">
+                    <span class="user-name">David Cruz</span>
+                    <span class="user-email">david@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
@@ -1202,13 +435,16 @@
                   <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=Sofia+Martin&background=1a1a1a&color=fff" alt="Sofia">
                   </div>
-                  <span>Sofia Martin</span>
+                  <div class="user-info">
+                    <span class="user-name">Sofia Martin</span>
+                    <span class="user-email">sofia@email.com</span>
+                  </div>
                 </div>
               </td>
               <td>
                 <div>
                   <strong>Nissan Navara</strong><br>
-                  <small style="color: #999;">Pickup • 2023</small>
+                  <small style="color: #999;">Pickup • 2023 • MNO 7890</small>
                 </div>
               </td>
               <td>
@@ -1223,7 +459,7 @@
                   <small style="color: #999;">to Bacolod City</small>
                 </div>
               </td>
-              <td><strong>₱3,500.00</strong></td>
+              <td><strong>₱3,500</strong></td>
               <td><span class="status-badge cancelled">Cancelled</span></td>
               <td><span class="payment-badge unpaid">Refunded</span></td>
               <td>
@@ -1238,10 +474,9 @@
         </table>
       </div>
 
-      <!-- Pagination -->
       <div class="pagination-section">
         <div class="pagination-info">
-          Showing <strong>1-6</strong> of <strong>229</strong> bookings
+          Showing <strong>1-5</strong> of <strong>229</strong> bookings
         </div>
         <div class="pagination-controls">
           <button class="page-btn"><i class="bi bi-chevron-left"></i></button>
@@ -1266,7 +501,6 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <!-- Booking Information -->
         <div class="detail-section">
           <div class="detail-section-title">Booking Information</div>
           <div class="detail-row">
@@ -1289,7 +523,6 @@
           </div>
         </div>
 
-        <!-- Renter Information -->
         <div class="detail-section">
           <div class="detail-section-title">Renter Information</div>
           <div class="detail-row">
@@ -1309,41 +542,9 @@
               <span class="detail-label">Driver's License</span>
               <span class="detail-value">N01-12-345678</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Verification Status</span>
-              <span class="status-badge confirmed">Verified</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Member Since</span>
-              <span class="detail-value">January 2024</span>
-            </div>
           </div>
         </div>
 
-        <!-- Owner Information -->
-        <div class="detail-section">
-          <div class="detail-section-title">Car Owner Information</div>
-          <div class="detail-row">
-            <div class="detail-item">
-              <span class="detail-label">Full Name</span>
-              <span class="detail-value">Pedro Santos</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Email</span>
-              <span class="detail-value">pedro.santos@email.com</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Phone Number</span>
-              <span class="detail-value">+63 917 234 5678</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Total Cars Listed</span>
-              <span class="detail-value">3 vehicles</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Vehicle Information -->
         <div class="detail-section">
           <div class="detail-section-title">Vehicle Information</div>
           <div class="detail-row">
@@ -1363,26 +564,9 @@
               <span class="detail-label">Vehicle Type</span>
               <span class="detail-value">Sedan</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Transmission</span>
-              <span class="detail-value">Automatic</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Fuel Type</span>
-              <span class="detail-value">Gasoline</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Seating Capacity</span>
-              <span class="detail-value">5 persons</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Insurance Status</span>
-              <span class="status-badge confirmed">Active</span>
-            </div>
           </div>
         </div>
 
-        <!-- Rental Details -->
         <div class="detail-section">
           <div class="detail-section-title">Rental Details</div>
           <div class="detail-row">
@@ -1402,18 +586,9 @@
               <span class="detail-label">Daily Rate</span>
               <span class="detail-value">₱1,000.00</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Pickup Location</span>
-              <span class="detail-value">San Francisco, Agusan del Sur</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Drop-off Location</span>
-              <span class="detail-value">Butuan City, Agusan del Norte</span>
-            </div>
           </div>
         </div>
 
-        <!-- Payment Breakdown -->
         <div class="detail-section">
           <div class="detail-section-title">Payment Breakdown</div>
           <div class="detail-row">
@@ -1426,33 +601,12 @@
               <span class="detail-value">₱500.00</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Insurance Coverage</span>
-              <span class="detail-value">₱300.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Delivery Fee</span>
-              <span class="detail-value">₱200.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Discount Applied</span>
-              <span class="detail-value" style="color: #28a745;">-₱500.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Security Deposit</span>
-              <span class="detail-value">₱2,000.00 (Refundable)</span>
-            </div>
-            <div class="detail-item">
               <span class="detail-label" style="font-size: 14px; color: #1a1a1a;">Total Amount</span>
-              <span class="detail-value" style="font-size: 24px; color: #1a1a1a;">₱7,500.00</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Payment Method</span>
-              <span class="detail-value">GCash</span>
+              <span class="detail-value" style="font-size: 24px; color: #1a1a1a;">₱5,500.00</span>
             </div>
           </div>
         </div>
 
-        <!-- Activity Timeline -->
         <div class="detail-section">
           <div class="detail-section-title">Activity Timeline</div>
           <div class="timeline">
@@ -1464,29 +618,12 @@
               </div>
             </div>
             <div class="timeline-item">
-              <div class="timeline-dot"></div>
-              <div class="timeline-content">
-                <div class="timeline-title">Awaiting Owner Approval</div>
-                <div class="timeline-time">November 15, 2025 - 10:31 AM</div>
-              </div>
-            </div>
-            <div class="timeline-item">
               <div class="timeline-dot" style="border-color: #dc3545; background: #dc3545;"></div>
               <div class="timeline-content">
                 <div class="timeline-title">Pending Admin Review</div>
                 <div class="timeline-time">Current Status</div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- Additional Notes -->
-        <div class="detail-section">
-          <div class="detail-section-title">Special Requests / Notes</div>
-          <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
-            <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-              "Please ensure the car is fully fueled and clean. I will be using it for a family trip. Contact me at the provided number for pickup coordination."
-            </p>
           </div>
         </div>
       </div>
@@ -1500,5 +637,76 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Filter table by status
+function filterTable(status) {
+  const rows = document.querySelectorAll('#bookingsTable tbody tr');
+  const buttons = document.querySelectorAll('.table-btn');
+  
+  buttons.forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  rows.forEach(row => {
+    if (status === 'all') {
+      row.style.display = '';
+    } else {
+      const rowStatus = row.getAttribute('data-status');
+      row.style.display = rowStatus === status ? '' : 'none';
+    }
+  });
+}
+
+// Search functionality
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  const searchTerm = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('#bookingsTable tbody tr');
+  
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(searchTerm) ? '' : 'none';
+  });
+});
+
+// Status filter
+document.getElementById('statusFilter').addEventListener('change', function(e) {
+  const status = e.target.value;
+  const rows = document.querySelectorAll('#bookingsTable tbody tr');
+  
+  rows.forEach(row => {
+    if (!status) {
+      row.style.display = '';
+    } else {
+      const rowStatus = row.getAttribute('data-status');
+      row.style.display = rowStatus === status ? '' : 'none';
+    }
+  });
+});
+
+// Payment filter
+document.getElementById('paymentFilter').addEventListener('change', function(e) {
+  const payment = e.target.value;
+  const rows = document.querySelectorAll('#bookingsTable tbody tr');
+  
+  rows.forEach(row => {
+    if (!payment) {
+      row.style.display = '';
+    } else {
+      const rowPayment = row.getAttribute('data-payment');
+      row.style.display = rowPayment === payment ? '' : 'none';
+    }
+  });
+});
+
+// Export bookings
+function exportBookings() {
+  alert('Exporting bookings report...\n\nThis will generate a CSV file with all booking data.');
+  // Add actual export functionality here
+}
+
+// Notification on page load
+window.addEventListener('load', function() {
+  console.log('Bookings Management System loaded successfully');
+});
+</script>
 </body>
 </html>
