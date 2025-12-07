@@ -181,7 +181,7 @@ function getDashboardStats($conn) {
     $recentCarsResult = $conn->query("
         SELECT COUNT(*) as count 
         FROM cars 
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAYS)
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     ");
     
     $stats['recent_cars_count'] = ($recentCarsResult && $recentCarsResult->num_rows > 0) 
@@ -191,7 +191,7 @@ function getDashboardStats($conn) {
     $recentUsersResult = $conn->query("
         SELECT COUNT(*) as count 
         FROM users 
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAYS)
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     ");
     
     $stats['recent_users_count'] = ($recentUsersResult && $recentUsersResult->num_rows > 0) 
@@ -266,7 +266,7 @@ function getBookingsStats($conn) {
             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
             SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-            COALESCE(SUM(CASE WHEN status = 'completed' THEN total_price ELSE 0 END), 0) as total_revenue
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) as total_revenue
         FROM bookings
     ";
     
@@ -309,7 +309,7 @@ function getTopPerformingCars($conn, $limit = 5) {
             c.image,
             u.fullname as owner_name,
             COUNT(b.id) as total_bookings,
-            COALESCE(SUM(b.total_price), 0) as total_revenue,
+            COALESCE(SUM(b.total_amount), 0) as total_revenue,
             AVG(CASE WHEN b.rating IS NOT NULL THEN b.rating ELSE 0 END) as avg_rating
         FROM cars c
         LEFT JOIN bookings b ON b.car_id = c.id AND b.status = 'completed'
@@ -357,11 +357,11 @@ function getRevenueByPeriod($conn) {
     
     $query = "
         SELECT 
-            COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN total_price ELSE 0 END), 0) as today,
-            COALESCE(SUM(CASE WHEN YEARWEEK(created_at) = YEARWEEK(NOW()) THEN total_price ELSE 0 END), 0) as this_week,
-            COALESCE(SUM(CASE WHEN YEAR(created_at) = YEAR(NOW()) AND MONTH(created_at) = MONTH(NOW()) THEN total_price ELSE 0 END), 0) as this_month,
-            COALESCE(SUM(CASE WHEN YEAR(created_at) = YEAR(NOW()) THEN total_price ELSE 0 END), 0) as this_year,
-            COALESCE(SUM(total_price), 0) as all_time
+            COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN total_amount ELSE 0 END), 0) as today,
+            COALESCE(SUM(CASE WHEN YEARWEEK(created_at) = YEARWEEK(NOW()) THEN total_amount ELSE 0 END), 0) as this_week,
+            COALESCE(SUM(CASE WHEN YEAR(created_at) = YEAR(NOW()) AND MONTH(created_at) = MONTH(NOW()) THEN total_amount ELSE 0 END), 0) as this_month,
+            COALESCE(SUM(CASE WHEN YEAR(created_at) = YEAR(NOW()) THEN total_amount ELSE 0 END), 0) as this_year,
+            COALESCE(SUM(total_amount), 0) as all_time
         FROM bookings
         WHERE status = 'completed'
     ";
@@ -404,7 +404,7 @@ function getRecentBookings($conn, $limit = 5) {
             o.fullname as owner_name
         FROM bookings b
         LEFT JOIN cars c ON c.id = b.car_id
-        LEFT JOIN users u ON u.id = b.renter_id
+        LEFT JOIN users u ON u.id = b.user_id
         LEFT JOIN users o ON o.id = c.owner_id
         ORDER BY b.created_at DESC
         LIMIT ?
@@ -440,7 +440,7 @@ function getAverageBookingValue($conn) {
     }
     
     $query = "
-        SELECT AVG(total_price) as avg_value
+        SELECT AVG(total_amount) as avg_value
         FROM bookings
         WHERE status IN ('completed', 'active')
     ";

@@ -51,14 +51,10 @@ if ($password === $row["password"]) {
         "phone" => $row["phone"] ?? "",
         "address" => $row["address"] ?? "",
         "role" => $row["role"],
-<<<<<<< HEAD
         "profile_image" => !empty($row["profile_image"])
     ? "http://10.72.15.180/carGOAdmin/uploads/profile_images/" . $row["profile_image"]
     : ""
 
-=======
-        "profile_image" => $row["profile_image"] ?? ""
->>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
     ]);
 } else {
     echo json_encode([
