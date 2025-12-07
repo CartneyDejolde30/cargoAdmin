@@ -133,11 +133,21 @@
 
   <div class="menu-section">
     <div class="menu-label">Report</div>
+<<<<<<< HEAD
     <a href="statistics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'statistics.php' ? 'active' : ''; ?>">
       <i class="bi bi-bar-chart"></i>
       <span>Sales Statistics</span>
     </a>
     <a href="car-reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'car-reports.php' ? 'active' : ''; ?>">
+=======
+<a href="statistics.php" 
+   class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'statistics.php' ? 'active' : ''; ?>">
+  <i class="bi bi-bar-chart"></i>
+  <span>Sales Statistics</span>
+</a>
+
+    <a href="reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
       <i class="bi bi-file-text"></i>
       <span>Car Reports</span>
     </a>

@@ -17,7 +17,11 @@ $query = $conn->query("
         cars.seat,
         cars.has_unlimited_mileage,
         users.fullname AS owner_name,
+<<<<<<< HEAD
         users.location AS location,
+=======
+        users.municipality AS location,
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
         COALESCE(cars.rating, 5) AS rating,
         COALESCE(cars.seat, 4) AS seats
     FROM cars

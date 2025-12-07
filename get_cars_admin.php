@@ -59,6 +59,7 @@ $query = $conn->query($sql);
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<<<<<<< HEAD
   <style>
     * {
       margin: 0;
@@ -583,6 +584,10 @@ $query = $conn->query($sql);
       }
     }
   </style>
+=======
+  <link href="include/admin-styles.css" rel="stylesheet">
+
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 </head>
 <body>
 
@@ -723,17 +728,33 @@ $query = $conn->query($sql);
             </td>
             <td>
               <?php if(!empty($row['image'])) { ?>
+<<<<<<< HEAD
                 <img src="<?= htmlspecialchars($row['image']) ?>" class="car-thumb" 
                      onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>')" alt="Car">
+=======
+                <img src="<?= htmlspecialchars($row['image']) ?>" 
+                     class="car-thumb" 
+                     onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>', '<?= htmlspecialchars($row['brand'] . ' ' . $row['model']) ?>')" 
+                     alt="Car">
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
               <?php } else { ?>
                 <span class="text-muted">No Image</span>
               <?php } ?>
             </td>
             <td>
+<<<<<<< HEAD
               <a href="<?= htmlspecialchars($row['official_receipt']) ?>" 
                  class="doc-btn or" target="_blank" title="Official Receipt">OR</a>
               <a href="<?= htmlspecialchars($row['certificate_of_registration']) ?>" 
                  class="doc-btn cr" target="_blank" title="Certificate of Registration">CR</a>
+=======
+              <a href="javascript:void(0)" 
+                 onclick="viewDocument('<?= htmlspecialchars($row['official_receipt']) ?>', 'Official Receipt')"
+                 class="doc-btn or" title="Official Receipt">OR</a>
+              <a href="javascript:void(0)" 
+                 onclick="viewDocument('<?= htmlspecialchars($row['certificate_of_registration']) ?>', 'Certificate of Registration')"
+                 class="doc-btn cr" title="Certificate of Registration">CR</a>
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
             </td>
             <td>
               <div class="action-buttons">
@@ -828,8 +849,51 @@ $query = $conn->query($sql);
   </div>
 </div>
 
+<<<<<<< HEAD
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+=======
+<!-- Image Modal -->
+<div class="image-modal" id="imageModal">
+  <div class="image-modal-content">
+    <div class="image-modal-header">
+      <button class="modal-action-btn download" onclick="downloadImage()" title="Download Image">
+        <i class="bi bi-download"></i>
+      </button>
+      <button class="modal-action-btn close" onclick="closeImageModal()" title="Close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <img id="modalImage" src="" alt="Car Image">
+    <div class="image-modal-footer" id="modalCaption"></div>
+  </div>
+</div>
+
+<!-- Document Modal -->
+<div class="doc-modal" id="docModal">
+  <div class="doc-modal-content">
+    <div class="doc-modal-header">
+      <h3 class="doc-modal-title" id="docModalTitle">Document Viewer</h3>
+      <div class="doc-modal-actions">
+        <a id="docDownloadBtn" href="#" download class="doc-modal-btn download" title="Download Document">
+          <i class="bi bi-download"></i>
+        </a>
+        <button class="doc-modal-btn close" onclick="closeDocModal()" title="Close">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="doc-modal-body" id="docModalBody">
+      <!-- Document content will be loaded here -->
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let currentImageUrl = '';
+
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 // Reject Modal Handler
 const rejectButtons = document.querySelectorAll(".rejectBtn");
 const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
@@ -841,10 +905,118 @@ rejectButtons.forEach(btn => {
   };
 });
 
+<<<<<<< HEAD
 // Image Viewer (You can enhance this later)
 function viewCarImage(src) {
   window.open(src, '_blank');
 }
+=======
+// Car Image Viewer
+function viewCarImage(imageUrl, carName) {
+  const modal = document.getElementById('imageModal');
+  const modalImg = document.getElementById('modalImage');
+  const caption = document.getElementById('modalCaption');
+  
+  currentImageUrl = imageUrl;
+  modal.classList.add('active');
+  modalImg.src = imageUrl;
+  caption.textContent = carName || 'Car Image';
+  
+  // Prevent body scroll when modal is open
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+  const modal = document.getElementById('imageModal');
+  modal.classList.remove('active');
+  document.body.style.overflow = 'auto';
+}
+
+function downloadImage() {
+  if (!currentImageUrl) return;
+  
+  // Create a temporary link element
+  const link = document.createElement('a');
+  link.href = currentImageUrl;
+  
+  // Extract filename from URL or use default
+  const filename = currentImageUrl.split('/').pop() || 'car-image.jpg';
+  link.download = filename;
+  
+  // Trigger download
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Document Viewer
+function viewDocument(docUrl, docType) {
+  const modal = document.getElementById('docModal');
+  const modalBody = document.getElementById('docModalBody');
+  const modalTitle = document.getElementById('docModalTitle');
+  const downloadBtn = document.getElementById('docDownloadBtn');
+  
+  // Set title and download link
+  modalTitle.textContent = docType;
+  downloadBtn.href = docUrl;
+  downloadBtn.download = docType.replace(/\s+/g, '_') + '_' + docUrl.split('/').pop();
+  
+  // Clear previous content
+  modalBody.innerHTML = '';
+  
+  // Check file extension
+  const extension = docUrl.split('.').pop().toLowerCase();
+  
+  if (extension === 'pdf') {
+    // For PDF files, use iframe
+    const iframe = document.createElement('iframe');
+    iframe.src = docUrl;
+    modalBody.appendChild(iframe);
+  } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+    // For image files, use img tag
+    const img = document.createElement('img');
+    img.src = docUrl;
+    img.alt = docType;
+    modalBody.appendChild(img);
+  } else {
+    // For other file types, use iframe with fallback
+    const iframe = document.createElement('iframe');
+    iframe.src = docUrl;
+    modalBody.appendChild(iframe);
+  }
+  
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDocModal() {
+  const modal = document.getElementById('docModal');
+  modal.classList.remove('active');
+  document.body.style.overflow = 'auto';
+}
+
+// Close image modal when clicking outside
+document.getElementById('imageModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeImageModal();
+  }
+});
+
+// Close document modal when clicking outside
+document.getElementById('docModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeDocModal();
+  }
+});
+
+// Close modals with Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeImageModal();
+    closeDocModal();
+  }
+});
+>>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 </script>
 
 </body>
