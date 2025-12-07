@@ -11,13 +11,14 @@ if ($booking_id <= 0 || empty($reason)) {
     exit;
 }
 
-// Update booking
+// Update booking status only
 $update = $conn->prepare("
     UPDATE bookings 
-    SET status = 'rejected', reject_reason=? 
-    WHERE id = ? AND status='pending' LIMIT 1
+    SET status='rejected'
+    WHERE id=? AND status='pending'
+    LIMIT 1
 ");
-$update->bind_param("si", $reason, $booking_id);
+$update->bind_param("i", $booking_id);
 $update->execute();
 
 if ($update->affected_rows <= 0) {
@@ -26,12 +27,12 @@ if ($update->affected_rows <= 0) {
 }
 $update->close();
 
-// Fetch booking info
+// Fetch booking data for notifications
 $q = $conn->prepare("
-    SELECT b.*, c.owner_id, c.brand AS car_name
+    SELECT b.*, c.brand AS car_name
     FROM bookings b
     JOIN cars c ON c.id = b.car_id
-    WHERE b.id = ? LIMIT 1
+    WHERE b.id=? LIMIT 1
 ");
 $q->bind_param("i", $booking_id);
 $q->execute();
@@ -44,9 +45,9 @@ if (!$booking) {
     exit;
 }
 
-$renter_id = $booking['user_id'];
-$owner_id = $booking['owner_id'];
-$car_name = $booking['car_name'];
+$renter_id = $booking['user_id'];   // renter
+$owner_id  = $booking['owner_id'];  // owner
+$car_name  = $booking['car_name'];
 
 // Notification for renter
 $title_r = "Booking Rejected";
@@ -60,8 +61,8 @@ $notifR->bind_param("iss", $renter_id, $title_r, $msg_r);
 $notifR->execute();
 $notifR->close();
 
-// Notification for owner (log)
-$title_o = "Booking Rejected Successfully";
+// Owner log notification
+$title_o = "Booking Rejected";
 $msg_o   = "You rejected booking #{$booking_id} for {$car_name}.";
 
 $notifO = $conn->prepare("
@@ -74,7 +75,7 @@ $notifO->close();
 
 echo json_encode([
     "success" => true,
-    "message" => "Booking rejected and notification saved.",
+    "message" => "Booking rejected successfully.",
     "booking_id" => $booking_id
 ]);
 
