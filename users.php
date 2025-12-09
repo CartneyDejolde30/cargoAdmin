@@ -214,12 +214,14 @@ if ($viewMode === 'overview') {
             WHERE {$whereClause} ORDER BY users.created_at DESC";
 } else {
     $sql = "SELECT users.*, user_verifications.id as verification_id, user_verifications.status as verification_status,
-            user_verifications.id_type, user_verifications.first_name as ver_first_name, user_verifications.last_name as ver_last_name,
-            user_verifications.mobile_number, user_verifications.gender, user_verifications.date_of_birth,
-            user_verifications.id_front_photo, user_verifications.id_back_photo, user_verifications.selfie_photo,
-            user_verifications.review_notes, user_verifications.created_at as verification_date
-            FROM users LEFT JOIN user_verifications ON users.id = user_verifications.user_id
-            WHERE {$whereClause} ORDER BY users.created_at DESC LIMIT ? OFFSET ?";
+        user_verifications.id_type, user_verifications.first_name as ver_first_name, user_verifications.last_name as ver_last_name,
+        user_verifications.mobile_number, user_verifications.gender, user_verifications.date_of_birth,
+        user_verifications.region, user_verifications.province, user_verifications.municipality, user_verifications.barangay,
+        user_verifications.id_front_photo, user_verifications.id_back_photo, user_verifications.selfie_photo,
+        user_verifications.review_notes, user_verifications.created_at as verification_date
+        FROM users LEFT JOIN user_verifications ON users.id = user_verifications.user_id
+        WHERE {$whereClause} ORDER BY users.created_at DESC LIMIT ? OFFSET ?";
+        
     $params[] = $limit;
     $params[] = $offset;
     $types .= "ii";
@@ -788,6 +790,24 @@ function buildFilterUrl($baseParams = []) {
                           <span class="text-muted"><?= htmlspecialchars($row['mobile_number']) ?></span>
                         </div>
                       </div>
+
+                      <!-- Address Information -->
+<div class="row mb-3">
+  <div class="col-md-12">
+    <strong><i class="bi bi-geo-alt-fill me-2 text-primary"></i>Address:</strong><br>
+    <span class="text-muted">
+      <?php 
+      $addressParts = [];
+      if (!empty($row['barangay'])) $addressParts[] = 'Brgy. ' . htmlspecialchars($row['barangay']);
+      if (!empty($row['municipality'])) $addressParts[] = htmlspecialchars($row['municipality']);
+      if (!empty($row['province'])) $addressParts[] = htmlspecialchars($row['province']);
+      if (!empty($row['region'])) $addressParts[] = htmlspecialchars($row['region']);
+      
+      echo !empty($addressParts) ? implode(', ', $addressParts) : 'N/A';
+      ?>
+    </span>
+  </div>
+</div>
 
                       <div class="row mb-3">
                         <div class="col-md-4">

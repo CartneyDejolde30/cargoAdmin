@@ -1,13 +1,8 @@
 <?php
-<<<<<<< HEAD
-error_reporting(0);
-ini_set('display_errors', 0);
-=======
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/error_log.txt');
->>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
@@ -21,98 +16,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-<<<<<<< HEAD
-// Ensure request is multipart/form-data (required for image upload)
-=======
 // Ensure request has form data
->>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 if (!isset($_POST['user_id'])) {
     echo json_encode(["success" => false, "message" => "No form data received"]);
     exit;
 }
 
-<<<<<<< HEAD
-// Extract normal form fields
-$user_id        = $_POST['user_id'];
-$first_name     = $_POST['first_name'] ?? null;
-$last_name      = $_POST['last_name'] ?? null;
-$email          = $_POST['email'] ?? null;
-$mobile         = $_POST['mobile'] ?? null;
-$gender         = $_POST['gender'] ?? null;
-$dob            = $_POST['dob'] ?? null;
-$region         = $_POST['region'] ?? null;
-$province       = $_POST['province'] ?? null;
-$municipality   = $_POST['municipality'] ?? null;
-$barangay       = $_POST['barangay'] ?? null;
-$id_type        = $_POST['id_type'] ?? null;
-
-// Prevent duplicate submission
-$check = $conn->prepare("SELECT id FROM user_verification WHERE user_id = ?");
-$check->bind_param("i", $user_id);
-$check->execute();
-$check->store_result();
-
-if ($check->num_rows > 0) {
-    echo json_encode(["success" => false, "message" => "Verification already submitted."]);
-    exit;
-}
-
-// Folder for images
-$uploadDir = "uploads/";
-if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0777, true);
-}
-
-// Helper function to upload file
-function uploadFile($fileKey, $uploadDir) {
-    if (!isset($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] !== UPLOAD_ERR_OK) {
-        return null;
-    }
-
-    $fileName = time() . "_" . basename($_FILES[$fileKey]["name"]);
-    $filePath = $uploadDir . $fileName;
-
-    if (move_uploaded_file($_FILES[$fileKey]["tmp_name"], $filePath)) {
-        return $filePath;
-    }
-
-    return null;
-}
-
-// Upload 3 images
-$id_front_photo = uploadFile("id_front_photo", $uploadDir);
-$id_back_photo  = uploadFile("id_back_photo", $uploadDir);
-$selfie_photo   = uploadFile("selfie_photo", $uploadDir);
-
-// Ensure all images uploaded
-if (!$id_front_photo || !$id_back_photo || !$selfie_photo) {
-    echo json_encode(["success" => false, "message" => "Image upload failed."]);
-    exit;
-}
-
-// Insert into database
-$stmt = $conn->prepare("
-    INSERT INTO user_verification 
-    (user_id, first_name, last_name, email, mobile, gender, dob, region, province, municipality, barangay, id_type, id_front_photo, id_back_photo, selfie_photo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-");
-
-$stmt->bind_param(
-    "issssssssssssss",
-    $user_id, $first_name, $last_name, $email, $mobile, $gender, $dob, $region, $province,
-    $municipality, $barangay, $id_type, $id_front_photo, $id_back_photo, $selfie_photo
-);
-
-if ($stmt->execute()) {
-    echo json_encode(["success" => true, "message" => "Verification submitted successfully"]);
-} else {
-    echo json_encode(["success" => false, "message" => $stmt->error]);
-}
-
-$stmt->close();
-$conn->close();
-?>
-=======
 // Extract form fields
 $user_id        = intval($_POST['user_id']);
 $first_name     = trim($_POST['first_name'] ?? '');
@@ -122,6 +31,9 @@ $mobile         = trim($_POST['mobile'] ?? '');
 $gender         = trim($_POST['gender'] ?? '');
 $dob            = trim($_POST['dob'] ?? '');
 $region         = trim($_POST['region'] ?? '');
+$province       = trim($_POST['province'] ?? '');
+$municipality   = trim($_POST['municipality'] ?? '');
+$barangay       = trim($_POST['barangay'] ?? '');
 $id_type        = trim($_POST['id_type'] ?? '');
 
 // Validate required fields
@@ -190,12 +102,20 @@ function uploadFile($fileKey, $uploadDir, $userId, &$errorMsg) {
 
     // Check for upload errors
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        $errorMsg = match($file['error']) {
-            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => "File '$fileKey' is too large (max 5MB)",
-            UPLOAD_ERR_PARTIAL => "File '$fileKey' was only partially uploaded",
-            UPLOAD_ERR_NO_FILE => "No file uploaded for '$fileKey'",
-            default => "Upload error for '$fileKey'"
-        };
+        switch($file['error']) {
+            case UPLOAD_ERR_INI_SIZE:
+            case UPLOAD_ERR_FORM_SIZE:
+                $errorMsg = "File '$fileKey' is too large (max 5MB)";
+                break;
+            case UPLOAD_ERR_PARTIAL:
+                $errorMsg = "File '$fileKey' was only partially uploaded";
+                break;
+            case UPLOAD_ERR_NO_FILE:
+                $errorMsg = "No file uploaded for '$fileKey'";
+                break;
+            default:
+                $errorMsg = "Upload error for '$fileKey'";
+        }
         return null;
     }
 
@@ -217,13 +137,23 @@ function uploadFile($fileKey, $uploadDir, $userId, &$errorMsg) {
     }
 
     // Generate unique filename
-    $extension = match($mimeType) {
-        'image/jpeg', 'image/jpg' => 'jpg',
-        'image/png' => 'png',
-        'image/gif' => 'gif',
-        'image/webp' => 'webp',
-        default => 'jpg'
-    };
+    switch($mimeType) {
+        case 'image/jpeg':
+        case 'image/jpg':
+            $extension = 'jpg';
+            break;
+        case 'image/png':
+            $extension = 'png';
+            break;
+        case 'image/gif':
+            $extension = 'gif';
+            break;
+        case 'image/webp':
+            $extension = 'webp';
+            break;
+        default:
+            $extension = 'jpg';
+    }
     
     $fileName = $fileKey . "_" . $userId . "_" . time() . "_" . bin2hex(random_bytes(8)) . "." . $extension;
     $filePath = $uploadDir . $fileName;
@@ -237,7 +167,7 @@ function uploadFile($fileKey, $uploadDir, $userId, &$errorMsg) {
     return null;
 }
 
-// Upload 3 required images (passing $user_id to the function)
+// Upload 3 required images
 $uploadError = "";
 $id_front_photo = uploadFile("id_front_photo", $uploadDir, $user_id, $uploadError);
 if (!$id_front_photo) {
@@ -264,12 +194,13 @@ if (!$selfie_photo) {
 $insertStmt = $conn->prepare("
     INSERT INTO user_verifications 
     (user_id, first_name, last_name, email, mobile_number, gender, date_of_birth, region, 
-     id_type, id_front_photo, id_back_photo, selfie_photo, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+     province, municipality, barangay, id_type, id_front_photo, id_back_photo, selfie_photo, 
+     status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
 ");
 
 $insertStmt->bind_param(
-    "isssssssssss",
+    "isssssssssssss",
     $user_id, 
     $first_name, 
     $last_name, 
@@ -278,6 +209,9 @@ $insertStmt->bind_param(
     $gender, 
     $dob, 
     $region,
+    $province,
+    $municipality,
+    $barangay,
     $id_type, 
     $id_front_photo, 
     $id_back_photo, 
@@ -316,4 +250,3 @@ if ($insertStmt->execute()) {
 $insertStmt->close();
 $conn->close();
 ?>
->>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
