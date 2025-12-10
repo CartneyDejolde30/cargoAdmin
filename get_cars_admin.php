@@ -219,14 +219,14 @@ $query = $conn->query($sql);
                   <input type="hidden" name="id" value="<?= $row['id'] ?>">
                   
                   <?php if($row['status'] !== 'approved') { ?>
-                    <button name="status" value="approved" class="action-btn approve">
+                    <button name="status" value="approved" class="action-btn approve pe-5 ps-5">
                       <i class="bi bi-check-lg"></i> Approve
                     </button>
                   <?php } ?>
 
                   <?php if($row['status'] !== 'rejected') { ?>
                     <button type="button" 
-                            class="action-btn reject rejectBtn" 
+                            class="action-btn reject rejectBtn pe-5 ps-5" 
                             data-id="<?= $row['id'] ?>">
                       <i class="bi bi-x-lg"></i> Reject
                     </button>
@@ -298,7 +298,7 @@ $query = $conn->query($sql);
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="submit" name="status" value="rejected" class="btn btn-danger">
+        <button type="submit" name="status" value="rejected" class="btn btn-danger ">
           <i class="bi bi-x-lg"></i> Confirm Rejection
         </button>
       </div>
@@ -306,10 +306,8 @@ $query = $conn->query($sql);
   </div>
 </div>
 
-<<<<<<< HEAD
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-=======
 <!-- Image Modal -->
 <div class="image-modal" id="imageModal">
   <div class="image-modal-content">
@@ -350,7 +348,6 @@ $query = $conn->query($sql);
 <script>
 let currentImageUrl = '';
 
->>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 // Reject Modal Handler
 const rejectButtons = document.querySelectorAll(".rejectBtn");
 const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
@@ -362,12 +359,6 @@ rejectButtons.forEach(btn => {
   };
 });
 
-<<<<<<< HEAD
-// Image Viewer (You can enhance this later)
-function viewCarImage(src) {
-  window.open(src, '_blank');
-}
-=======
 // Car Image Viewer
 function viewCarImage(imageUrl, carName) {
   const modal = document.getElementById('imageModal');
@@ -473,7 +464,6 @@ document.addEventListener('keydown', function(e) {
     closeDocModal();
   }
 });
->>>>>>> 700ac6438dddb58cc34531b90fc6b00d9b0b53e5
 </script>
 
 </body>

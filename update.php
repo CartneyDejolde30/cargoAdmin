@@ -87,7 +87,7 @@ $user = [
     "phone" => $phone,
     "address" => $address,
     "profile_image" => !empty($profile_image)
-        ? "http://10.72.15.180/carGOAdmin/$uploadDir$profile_image"
+        ? "http://10.96.221.180/carGOAdmin/$uploadDir$profile_image"
         : ""
 ];
 

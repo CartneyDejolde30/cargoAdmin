@@ -1,17 +1,53 @@
 <?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 /**
- * ============================================================================
+ * ============================================================================ 
  * UNIFIED USER MANAGEMENT & VERIFICATION SYSTEM
  * CarGo - Agusan del Sur Car Rental Platform
- * ============================================================================
+ * ============================================================================ 
  */
 
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/error_log.txt');
 
 include 'include/db.php';
+
+
+function fixPath($path) {
+    // Remove Windows absolute path
+    $path = str_replace('\\', '/', $path);
+
+    // Remove C:/xampp/.../carGOAdmin
+    if (strpos($path, 'carGOAdmin') !== false) {
+        $path = substr($path, strpos($path, 'carGOAdmin'));
+    }
+
+    // Remove "api/../"
+    $path = str_replace('api/../', '', $path);
+
+    // Ensure starts with /
+    if ($path[0] !== '/') {
+        $path = '/' . $path;
+    }
+
+    return $path;
+}
+
+// ---------------------------
+// Helper: bind params (works with variable length)
+function bind_params_safe($stmt, $types, $params) {
+    if ($types === '' || empty($params)) return;
+    // mysqli::bind_param requires references
+    $refs = [];
+    $refs[] = & $types;
+    for ($i = 0; $i < count($params); $i++) {
+        $refs[] = & $params[$i];
+    }
+    call_user_func_array([$stmt, 'bind_param'], $refs);
+}
 
 // ============================================================================
 // SECTION 1: HANDLE VERIFICATION ACTIONS (Approve/Reject)
@@ -33,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['approve']) || isset(
     $userStmt->bind_param("i", $user_id);
     $userStmt->execute();
     $userResult = $userStmt->get_result();
-    $user = $userResult->fetch_assoc();
+    $user = $userResult ? $userResult->fetch_assoc() : null;
     $userStmt->close();
 
     if (!$user) {
@@ -49,22 +85,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['approve']) || isset(
                                            updated_at = NOW() 
                                        WHERE id = ?");
         $updateStmt->bind_param("i", $verification_id);
-        
+
         if ($updateStmt->execute()) {
             $notificationTitle = "Verification Approved ✓";
             $notificationMessage = "Congratulations! Your identity verification has been approved. You now have full access to all features.";
-            
+
             $notifStmt = $conn->prepare("INSERT INTO notifications (user_id, title, message, read_status, created_at) 
                                          VALUES (?, ?, ?, 'unread', NOW())");
             $notifStmt->bind_param("iss", $user_id, $notificationTitle, $notificationMessage);
             $notifStmt->execute();
             $notifStmt->close();
-            
+
             header("Location: users.php?success=approved&user=" . urlencode($user['fullname']));
         } else {
             header("Location: users.php?error=approval_failed&details=" . urlencode($updateStmt->error));
         }
-        
+
         $updateStmt->close();
         exit;
     }
@@ -72,34 +108,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['approve']) || isset(
     // Handle Rejection
     if (isset($_POST['reject'])) {
         $reason = trim($_POST['reason'] ?? '');
-        
+
         if (empty($reason)) {
             header("Location: users.php?error=rejection_reason_required");
             exit;
         }
-        
+
         $updateStmt = $conn->prepare("UPDATE user_verifications 
                                        SET status = 'rejected', 
                                            review_notes = ?,
                                            updated_at = NOW() 
                                        WHERE id = ?");
         $updateStmt->bind_param("si", $reason, $verification_id);
-        
+
         if ($updateStmt->execute()) {
             $notificationTitle = "Verification Rejected ✗";
             $notificationMessage = "Your identity verification was rejected.\n\nReason: " . $reason . "\n\nPlease review the requirements and resubmit your verification with the correct documents.";
-            
+
             $notifStmt = $conn->prepare("INSERT INTO notifications (user_id, title, message, read_status, created_at) 
                                          VALUES (?, ?, ?, 'unread', NOW())");
             $notifStmt->bind_param("iss", $user_id, $notificationTitle, $notificationMessage);
             $notifStmt->execute();
             $notifStmt->close();
-            
+
             header("Location: users.php?success=rejected&user=" . urlencode($user['fullname']));
         } else {
             header("Location: users.php?error=rejection_failed&details=" . urlencode($updateStmt->error));
         }
-        
+
         $updateStmt->close();
         exit;
     }
@@ -166,18 +202,44 @@ $statsQuery = "
     WHERE {$whereClause}
 ";
 
+$stats = [
+    'total' => 0,
+    'verified' => 0,
+    'pending' => 0,
+    'rejected' => 0,
+    'unverified' => 0
+];
+
 if (!empty($params)) {
     $statsStmt = $conn->prepare($statsQuery);
-    if (!empty($types)) {
-        $statsStmt->bind_param($types, ...$params);
+    if ($statsStmt) {
+        bind_params_safe($statsStmt, $types, $params);
+        $statsStmt->execute();
+        $statsResult = $statsStmt->get_result();
+        if ($statsResult) {
+            $f = $statsResult->fetch_assoc();
+            if ($f) $stats = array_merge($stats, $f);
+        }
+        $statsStmt->close();
+    } else {
+        // Fallback: run direct query (less safe) if prepare failed
+        $tmpResult = $conn->query($statsQuery);
+        if ($tmpResult) {
+            $f = $tmpResult->fetch_assoc();
+            if ($f) $stats = array_merge($stats, $f);
+        }
     }
-    $statsStmt->execute();
-    $statsResult = $statsStmt->get_result();
-    $stats = $statsResult->fetch_assoc();
-    $statsStmt->close();
 } else {
     $statsResult = $conn->query($statsQuery);
-    $stats = $statsResult->fetch_assoc();
+    if ($statsResult) {
+        $f = $statsResult->fetch_assoc();
+        if ($f) $stats = array_merge($stats, $f);
+    }
+}
+
+// Normalize stats numeric values
+foreach (['total','verified','pending','rejected','unverified'] as $k) {
+    $stats[$k] = intval($stats[$k] ?? 0);
 }
 
 // ============================================================================
@@ -190,56 +252,108 @@ $offset = ($page - 1) * $limit;
 // Count total rows
 $countSql = "SELECT COUNT(DISTINCT users.id) as total FROM users LEFT JOIN user_verifications ON users.id = user_verifications.user_id WHERE {$whereClause}";
 
+$totalRows = 0;
 if (!empty($params)) {
     $countStmt = $conn->prepare($countSql);
-    if (!empty($types)) {
-        $countStmt->bind_param($types, ...$params);
+    if ($countStmt) {
+        bind_params_safe($countStmt, $types, $params);
+        $countStmt->execute();
+        $countResult = $countStmt->get_result();
+        if ($countResult) {
+            $f = $countResult->fetch_assoc();
+            $totalRows = intval($f['total'] ?? 0);
+        }
+        $countStmt->close();
+    } else {
+        $tmp = $conn->query($countSql);
+        $f = $tmp ? $tmp->fetch_assoc() : null;
+        $totalRows = intval($f['total'] ?? 0);
     }
-    $countStmt->execute();
-    $countResult = $countStmt->get_result();
-    $totalRows = $countResult->fetch_assoc()['total'];
-    $countStmt->close();
 } else {
     $countResult = $conn->query($countSql);
-    $totalRows = $countResult->fetch_assoc()['total'];
+    if ($countResult) {
+        $f = $countResult->fetch_assoc();
+        $totalRows = intval($f['total'] ?? 0);
+    }
 }
 
-$totalPages = ceil($totalRows / $limit);
+$totalPages = $limit > 0 ? ceil($totalRows / $limit) : 1;
 
-// Fetch data
+// Build SQL depending on view
 if ($viewMode === 'overview') {
     $sql = "SELECT users.*, user_verifications.id as verification_id, user_verifications.status as verification_status,
             user_verifications.created_at as verification_date, user_verifications.verified_at, user_verifications.review_notes
             FROM users LEFT JOIN user_verifications ON users.id = user_verifications.user_id
             WHERE {$whereClause} ORDER BY users.created_at DESC";
+    // prepare
+    if (!empty($params)) {
+        $stmt = $conn->prepare($sql);
+        if ($stmt) {
+            bind_params_safe($stmt, $types, $params);
+        } else {
+            // fallback to direct query
+            $stmt = null;
+            $directQuery = $sql;
+        }
+    } else {
+        $stmt = $conn->prepare($sql);
+    }
 } else {
     $sql = "SELECT users.*, user_verifications.id as verification_id, user_verifications.status as verification_status,
         user_verifications.id_type, user_verifications.first_name as ver_first_name, user_verifications.last_name as ver_last_name,
         user_verifications.mobile_number, user_verifications.gender, user_verifications.date_of_birth,
         user_verifications.region, user_verifications.province, user_verifications.municipality, user_verifications.barangay,
         user_verifications.id_front_photo, user_verifications.id_back_photo, user_verifications.selfie_photo,
-        user_verifications.review_notes, user_verifications.created_at as verification_date
+        user_verifications.review_notes, user_verifications.created_at as verification_date, user_verifications.verified_at
         FROM users LEFT JOIN user_verifications ON users.id = user_verifications.user_id
         WHERE {$whereClause} ORDER BY users.created_at DESC LIMIT ? OFFSET ?";
-        
-    $params[] = $limit;
-    $params[] = $offset;
-    $types .= "ii";
+
+    // Merge params + limit + offset
+    $queryParams = $params;
+    $queryTypes  = $types;
+    $queryParams[] = $limit;
+    $queryParams[] = $offset;
+    $queryTypes .= "ii";
+
+    $stmt = $conn->prepare($sql);
+    if ($stmt) {
+        bind_params_safe($stmt, $queryTypes, $queryParams);
+    } else {
+        // fallback to direct query building (escape ints)
+        $directQuery = str_replace("WHERE {$whereClause}", "WHERE {$whereClause} LIMIT {$limit} OFFSET {$offset}", $sql);
+    }
 }
 
-$stmt = $conn->prepare($sql);
-if (!empty($types)) {
-    $stmt->bind_param($types, ...$params);
+// Execute statement or direct query
+$query = false;
+if (isset($stmt) && $stmt instanceof mysqli_stmt) {
+    $stmt->execute();
+    $query = $stmt->get_result();
+} else {
+    // direct query fallback (less safe, uses current params substituted)
+    if (isset($directQuery)) {
+        $query = $conn->query($directQuery);
+    } else {
+        // if no stmt and no directQuery, try running prepared path without bind (edge case)
+        $fallback = $conn->query($sql);
+        if ($fallback) $query = $fallback;
+    }
 }
-$stmt->execute();
-$query = $stmt->get_result();
+
+// If $query is false/null convert to empty result like object
+if (!$query) {
+    // create an empty array to avoid fatal errors in view
+    $fake = new stdClass();
+    $fake->num_rows = 0;
+    $query = $fake;
+}
 
 // Helper function to build URL with filters
 function buildFilterUrl($baseParams = []) {
     global $search, $role, $verificationFilter;
-    
+
     $params = $baseParams;
-    
+
     if (!empty($search)) {
         $params['search'] = $search;
     }
@@ -249,7 +363,7 @@ function buildFilterUrl($baseParams = []) {
     if ($verificationFilter !== 'all') {
         $params['verification'] = $verificationFilter;
     }
-    
+
     return '?' . http_build_query($params);
 }
 ?>
@@ -300,6 +414,14 @@ function buildFilterUrl($baseParams = []) {
       color: white !important;
       border-color: #667eea !important;
     }
+
+    /* doc modal basic styles (if your CSS expects these) */
+    .doc-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 9999; }
+    .doc-modal.active { display: flex; }
+    .doc-modal-content { width: 90%; max-width: 900px; background: #fff; border-radius: 8px; overflow: hidden; }
+    .doc-modal-header { padding: 12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #eee; }
+    .doc-modal-body { padding: 20px; min-height: 300px; max-height: 70vh; overflow: auto; display:flex; align-items:center; justify-content:center; }
+    .doc-modal-btn { background: transparent; border: none; font-size: 1.1rem; margin-left: 8px; color: #333; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -536,7 +658,7 @@ function buildFilterUrl($baseParams = []) {
               $statusClass = '';
               $statusIcon = '';
               
-              if (!$user['verification_id']) {
+              if (empty($user['verification_id'])) {
                 $statusBadge = '<span class="badge bg-secondary"><i class="bi bi-dash-circle me-1"></i>Not Submitted</span>';
                 $statusClass = 'text-secondary';
                 $statusIcon = '<i class="bi bi-person-x"></i>';
@@ -544,14 +666,14 @@ function buildFilterUrl($baseParams = []) {
                 $statusBadge = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Verified</span>';
                 $statusClass = 'text-success';
                 $statusIcon = '<i class="bi bi-shield-check"></i>';
-                $verifiedDate = date('M d, Y', strtotime($user['verified_at']));
-                $statusBadge .= '<br><small class="text-muted mt-1 d-block"><i class="bi bi-calendar-check me-1"></i>Verified on ' . $verifiedDate . '</small>';
+                $verifiedDate = !empty($user['verified_at']) ? date('M d, Y', strtotime($user['verified_at'])) : '';
+                if ($verifiedDate) $statusBadge .= '<br><small class="text-muted mt-1 d-block"><i class="bi bi-calendar-check me-1"></i>Verified on ' . $verifiedDate . '</small>';
               } elseif ($user['verification_status'] === 'pending') {
                 $statusBadge = '<span class="badge bg-warning"><i class="bi bi-hourglass-split me-1"></i>Pending Review</span>';
                 $statusClass = 'text-warning';
                 $statusIcon = '<i class="bi bi-clock-history"></i>';
-                $submitDate = date('M d, Y', strtotime($user['verification_date']));
-                $statusBadge .= '<br><small class="text-muted mt-1 d-block"><i class="bi bi-upload me-1"></i>Submitted ' . $submitDate . '</small>';
+                $submitDate = !empty($user['verification_date']) ? date('M d, Y', strtotime($user['verification_date'])) : '';
+                if ($submitDate) $statusBadge .= '<br><small class="text-muted mt-1 d-block"><i class="bi bi-upload me-1"></i>Submitted ' . $submitDate . '</small>';
               } elseif ($user['verification_status'] === 'rejected') {
                 $statusBadge = '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Rejected</span>';
                 $statusClass = 'text-danger';
@@ -595,7 +717,7 @@ function buildFilterUrl($baseParams = []) {
                         <i class="bi bi-<?= $user['role'] === 'Owner' ? 'car-front' : 'person' ?> me-1"></i>
                         <?= htmlspecialchars($user['role']) ?>
                       </span>
-                      <?php if ($user['municipality']): ?>
+                      <?php if (!empty($user['municipality'])): ?>
                         <div class="text-muted small mt-1">
                           <i class="bi bi-geo-alt-fill me-1"></i><?= htmlspecialchars($user['municipality']) ?>
                         </div>
@@ -607,7 +729,7 @@ function buildFilterUrl($baseParams = []) {
                       </div>
                     </div>
                     <div class="col-md-2 text-end">
-                      <?php if ($user['verification_status'] === 'pending'): ?>
+                      <?php if (!empty($user['verification_status']) && $user['verification_status'] === 'pending'): ?>
                         <a href="<?= buildFilterUrl(['view' => 'management', 'highlight' => $user['verification_id']]) ?>" 
                            class="btn btn-sm btn-warning">
                           <i class="bi bi-eye me-1"></i>Review Now
@@ -802,7 +924,7 @@ function buildFilterUrl($baseParams = []) {
       if (!empty($row['municipality'])) $addressParts[] = htmlspecialchars($row['municipality']);
       if (!empty($row['province'])) $addressParts[] = htmlspecialchars($row['province']);
       if (!empty($row['region'])) $addressParts[] = htmlspecialchars($row['region']);
-      
+
       echo !empty($addressParts) ? implode(', ', $addressParts) : 'N/A';
       ?>
     </span>
@@ -834,7 +956,7 @@ function buildFilterUrl($baseParams = []) {
                         </div>
                         <div class="col-md-6">
                           <strong><i class="bi bi-clock-history me-2 text-primary"></i>Submitted:</strong><br>
-                          <span class="text-muted"><?= date('M d, Y h:i A', strtotime($row['verification_date'])) ?></span>
+                          <span class="text-muted"><?= !empty($row['verification_date']) ? date('M d, Y h:i A', strtotime($row['verification_date'])) : 'N/A' ?></span>
                         </div>
                       </div>
 
@@ -855,7 +977,8 @@ function buildFilterUrl($baseParams = []) {
                           <p class="fw-semibold text-primary">
                             <i class="bi bi-front me-2"></i>ID (Front)
                           </p>
-                          <?php $idFrontPath = str_replace('../', '', $row['id_front_photo']); ?>
+                          <?php $idFrontPath = fixPath($row['id_front_photo']);
+ ?>
                           <img src="<?= htmlspecialchars($idFrontPath) ?>" 
                                class="img-fluid rounded border" 
                                style="cursor: pointer; max-height: 200px; object-fit: cover; width: 100%;"
@@ -867,7 +990,7 @@ function buildFilterUrl($baseParams = []) {
                           <p class="fw-semibold text-primary">
                             <i class="bi bi-back me-2"></i>ID (Back)
                           </p>
-                          <?php $idBackPath = str_replace('../', '', $row['id_back_photo']); ?>
+                          <?php $idBackPath = fixPath($row['id_back_photo']); ?>
                           <img src="<?= htmlspecialchars($idBackPath) ?>" 
                                class="img-fluid rounded border"
                                style="cursor: pointer; max-height: 200px; object-fit: cover; width: 100%;"
@@ -879,7 +1002,8 @@ function buildFilterUrl($baseParams = []) {
                           <p class="fw-semibold text-primary">
                             <i class="bi bi-camera-fill me-2"></i>Selfie Verification
                           </p>
-                          <?php $selfiePath = str_replace('../', '', $row['selfie_photo']); ?>
+                          <?php $selfiePath = fixPath($row['selfie_photo']);
+ ?>
                           <img src="<?= htmlspecialchars($selfiePath) ?>" 
                                class="img-fluid rounded border"
                                style="cursor: pointer; max-height: 200px; object-fit: cover; width: 100%;"
@@ -967,7 +1091,7 @@ function buildFilterUrl($baseParams = []) {
         <div class="pagination-wrapper">
           <ul class="pagination">
             <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-              <a class="page-link" href="<?= buildFilterUrl(['view' => 'management', 'page' => $page - 1]) ?>">
+              <a class="page-link" href="<?= buildFilterUrl(['view' => 'management', 'page' => max(1, $page - 1)]) ?>">
                 <i class="bi bi-chevron-left"></i>
               </a>
             </li>
@@ -1000,7 +1124,7 @@ function buildFilterUrl($baseParams = []) {
             ?>
 
             <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-              <a class="page-link" href="<?= buildFilterUrl(['view' => 'management', 'page' => $page + 1]) ?>">
+              <a class="page-link" href="<?= buildFilterUrl(['view' => 'management', 'page' => min($totalPages, $page + 1)]) ?>">
                 <i class="bi bi-chevron-right"></i>
               </a>
             </li>
@@ -1101,6 +1225,8 @@ function viewDocument(docUrl, docType) {
   if (extension === 'pdf') {
     const iframe = document.createElement('iframe');
     iframe.src = docUrl;
+    iframe.style.width = '100%';
+    iframe.style.height = '70vh';
     iframe.onload = function() {
       modalBody.innerHTML = '';
       modalBody.appendChild(iframe);
@@ -1117,6 +1243,7 @@ function viewDocument(docUrl, docType) {
     const img = document.createElement('img');
     img.src = docUrl;
     img.alt = docType;
+    img.style.maxWidth = '100%';
     img.onload = function() {
       modalBody.innerHTML = '';
       modalBody.appendChild(img);
@@ -1132,6 +1259,8 @@ function viewDocument(docUrl, docType) {
   } else {
     const iframe = document.createElement('iframe');
     iframe.src = docUrl;
+    iframe.style.width = '100%';
+    iframe.style.height = '70vh';
     modalBody.innerHTML = '';
     modalBody.appendChild(iframe);
   }
@@ -1175,6 +1304,7 @@ window.addEventListener('load', function() {
 </html>
 
 <?php
-$stmt->close();
+// Close statement and connection if applicable
+if (isset($stmt) && $stmt instanceof mysqli_stmt) $stmt->close();
 $conn->close();
 ?>

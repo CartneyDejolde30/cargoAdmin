@@ -1,0 +1,100 @@
+[09-Dec-2025 05:31:46 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:230
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(230): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 230
+[09-Dec-2025 05:31:50 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:230
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(230): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 230
+[09-Dec-2025 05:32:06 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:230
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(230): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 230
+[10-Dec-2025 00:12:55 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:230
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(230): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 230
+[10-Dec-2025 00:16:20 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:233
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(233): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 233
+[10-Dec-2025 00:16:22 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:233
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(233): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 233
+[10-Dec-2025 00:16:22 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:233
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(233): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 233
+[10-Dec-2025 00:16:25 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:233
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(233): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 233
+[10-Dec-2025 00:17:56 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:17:57 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:17:57 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:17:57 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:20:17 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.region' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:21:24 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:21:26 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:21:27 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:21:27 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 00:21:27 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'user_verifications.province' in 'field list' in C:\xampp\htdocs\carGOAdmin\users.php:235
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\users.php(235): mysqli->prepare('SELECT users.*,...')
+#1 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 235
+[10-Dec-2025 01:07:44 Europe/Berlin] PHP Warning:  Undefined variable $stmt in C:\xampp\htdocs\carGOAdmin\users.php on line 241
+[10-Dec-2025 01:07:44 Europe/Berlin] PHP Fatal error:  Uncaught Error: Call to a member function execute() on null in C:\xampp\htdocs\carGOAdmin\users.php:241
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 241
+[10-Dec-2025 14:34:24 Europe/Berlin] PHP Warning:  Undefined variable $stmt in C:\xampp\htdocs\carGOAdmin\users.php on line 241
+[10-Dec-2025 14:34:24 Europe/Berlin] PHP Fatal error:  Uncaught Error: Call to a member function execute() on null in C:\xampp\htdocs\carGOAdmin\users.php:241
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\users.php on line 241

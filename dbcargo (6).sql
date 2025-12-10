@@ -57,7 +57,6 @@ CREATE TABLE `bookings` (
   `location` varchar(255) DEFAULT NULL,
   `full_name` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
-  `contact_number` varchar(50) NOT NULL,
   `contact` varchar(50) DEFAULT NULL,
   `gender` varchar(20) NOT NULL DEFAULT 'Male',
   `book_with_driver` tinyint(1) NOT NULL DEFAULT 0,
