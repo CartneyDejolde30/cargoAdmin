@@ -187,6 +187,5 @@ $bookingId = "#BK-" . str_pad($data['id'], 4, "0", STR_PAD_LEFT);
 
 <div class="modal-footer">
     <button class="modal-btn secondary" data-bs-dismiss="modal">Close</button>
-    <button class="modal-btn reject">Reject Booking</button>
-    <button class="modal-btn approve">Approve Booking</button>
+    
 </div>

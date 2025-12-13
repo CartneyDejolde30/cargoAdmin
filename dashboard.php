@@ -294,16 +294,16 @@ $cancellationRate = getCancellationRate($conn);
                   <input type="hidden" name="id" value="<?= $row['id'] ?>">
                   
                   <?php if($row['status'] !== 'approved') { ?>
-                    <button name="status" value="approved" class="action-btn approve">
+                    <button name="status" value="approved" class="action-btn approve ps-5 pe-5">
                       <i class="bi bi-check-lg"></i> Approve
                     </button>
                   <?php } ?>
 
                   <?php if($row['status'] !== 'rejected') { ?>
                     <button type="button" 
-                            class="action-btn reject rejectBtn" 
+                            class="action-btn reject rejectBtn ps-5 pe-5" 
                             data-id="<?= $row['id'] ?>">
-                      <i class="bi bi-x-lg"></i> Reject
+                      <i class="bi bi-x-lg "></i> Reject
                     </button>
                   <?php } ?>
                 </form>
