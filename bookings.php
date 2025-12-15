@@ -115,8 +115,6 @@ $totalRows = mysqli_fetch_assoc($countRes)['total'];
 $totalPages = max(1, ceil($totalRows / $limit));
 ?>
 
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,55 +130,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
 
 <div class="dashboard-wrapper">
   <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="logo-section">
-      <div class="logo-icon">C</div>
-      <div class="logo-text">CARGO</div>
-    </div>
-
-    <div class="menu-section">
-      <div class="menu-label">About Car</div>
-      <a href="dashboard.php" class="menu-item">
-        <i class="bi bi-grid"></i>
-        <span>Dashboard</span>
-      </a>
-      <a href="get_cars_admin.php" class="menu-item">
-        <i class="bi bi-car-front"></i>
-        <span>Car Listing</span>
-      </a>
-      <a href="users.php" class="menu-item">
-        <i class="bi bi-person"></i>
-        <span>Users Verification</span>
-      </a>
-      <a href="bookings.php" class="menu-item active">
-        <i class="bi bi-book"></i>
-        <span>Bookings</span>
-      </a>
-    </div>
-
-    <div class="menu-section">
-      <div class="menu-label">Report</div>
-      <a href="sales-statistics.php" class="menu-item">
-        <i class="bi bi-bar-chart"></i>
-        <span>Sales Statistics</span>
-      </a>
-      <a href="car-reports.php" class="menu-item">
-        <i class="bi bi-file-text"></i>
-        <span>Car Reports</span>
-      </a>
-    </div>
-
-    <div class="menu-section">
-      <a href="settings.php" class="menu-item">
-        <i class="bi bi-gear"></i>
-        <span>Settings</span>
-      </a>
-      <a href="logout.php" class="menu-item" style="color: #dc3545; margin-top: 20px;">
-        <i class="bi bi-box-arrow-right"></i>
-        <span>Logout</span>
-      </a>
-    </div>
-  </aside>
+  <?php include 'include/sidebar.php'; ?>
 
   <!-- Main Content -->
   <main class="main-content">
@@ -200,131 +150,125 @@ $totalPages = max(1, ceil($totalRows / $limit));
 
     <!-- Stats Grid -->
     <div class="stats-grid">
-
-  <!-- Pending -->
-  <div class="stat-card">
-    <div class="stat-header">
-      <div class="stat-icon">
-        <i class="bi bi-clock-history"></i>
+      <!-- Pending -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <div class="stat-icon">
+            <i class="bi bi-clock-history"></i>
+          </div>
+          <div class="stat-trend">
+            <i class="bi bi-arrow-up"></i>
+            +12%
+          </div>
+        </div>
+        <div class="stat-value"><?= $pending ?></div>
+        <div class="stat-label">Pending Bookings</div>
       </div>
-      <div class="stat-trend">
-        <i class="bi bi-arrow-up"></i>
-        +12%
+
+      <!-- Confirmed -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <div class="stat-icon">
+            <i class="bi bi-check-circle"></i>
+          </div>
+          <div class="stat-trend">
+            <i class="bi bi-arrow-up"></i>
+            +18%
+          </div>
+        </div>
+        <div class="stat-value"><?= $confirmed ?></div>
+        <div class="stat-label">Confirmed Bookings</div>
+      </div>
+
+      <!-- Ongoing -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <div class="stat-icon">
+            <i class="bi bi-car-front-fill"></i>
+          </div>
+          <div class="stat-trend">
+            <i class="bi bi-arrow-up"></i>
+            +8%
+          </div>
+        </div>
+        <div class="stat-value"><?= $ongoing ?></div>
+        <div class="stat-label">Ongoing Rentals</div>
+      </div>
+
+      <!-- Cancelled -->
+      <div class="stat-card">
+        <div class="stat-header">
+          <div class="stat-icon">
+            <i class="bi bi-x-circle"></i>
+          </div>
+          <div class="stat-trend down">
+            <i class="bi bi-arrow-down"></i>
+            -5%
+          </div>
+        </div>
+        <div class="stat-value"><?= $cancelled ?></div>
+        <div class="stat-label">Cancelled Bookings</div>
       </div>
     </div>
-    <div class="stat-value"><?= $pending ?></div>
-    <div class="stat-label">Pending Bookings</div>
-  </div>
 
-  <!-- Confirmed -->
-  <div class="stat-card">
-    <div class="stat-header">
-      <div class="stat-icon">
-        <i class="bi bi-check-circle"></i>
-      </div>
-      <div class="stat-trend">
-        <i class="bi bi-arrow-up"></i>
-        +18%
-      </div>
-    </div>
-    <div class="stat-value"><?= $confirmed ?></div>
-    <div class="stat-label">Confirmed Bookings</div>
-  </div>
-
-  <!-- Ongoing -->
-  <div class="stat-card">
-    <div class="stat-header">
-      <div class="stat-icon">
-        <i class="bi bi-car-front-fill"></i>
-      </div>
-      <div class="stat-trend">
-        <i class="bi bi-arrow-up"></i>
-        +8%
-      </div>
-    </div>
-    <div class="stat-value"><?= $ongoing ?></div>
-    <div class="stat-label">Ongoing Rentals</div>
-  </div>
-
-  <!-- Cancelled -->
-  <div class="stat-card">
-    <div class="stat-header">
-      <div class="stat-icon">
-        <i class="bi bi-x-circle"></i>
-      </div>
-      <div class="stat-trend down">
-        <i class="bi bi-arrow-down"></i>
-        -5%
-      </div>
-    </div>
-    <div class="stat-value"><?= $cancelled ?></div>
-    <div class="stat-label">Cancelled Bookings</div>
-  </div>
-
-</div>
-
+    <!-- Filter Section -->
     <div class="filter-section">
-  <div class="filter-row">
+      <div class="filter-row">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Search by renter, owner, or car type...">
+          <i class="bi bi-search"></i>
+        </div>
 
-    <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Search by renter, owner, or car type...">
-      <i class="bi bi-search"></i>
+        <select class="filter-dropdown" id="statusFilter">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Confirmed</option>
+          <option value="ongoing">Ongoing</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+
+        <select class="filter-dropdown" id="paymentFilter">
+          <option value="">Payment Status</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partial">Partial</option>
+        </select>
+
+        <select class="filter-dropdown" id="dateFilter">
+          <option value="">This Month</option>
+          <option value="last_month">Last Month</option>
+          <option value="3_months">Last 3 Months</option>
+          <option value="year">This Year</option>
+        </select>
+
+        <button class="export-btn" onclick="exportBookings()">
+          <i class="bi bi-download"></i>
+          Export
+        </button>
+      </div>
     </div>
-
-    <select class="filter-dropdown" id="statusFilter">
-      <option value="">All Status</option>
-      <option value="pending">Pending</option>
-      <option value="approved">Confirmed</option>
-      <option value="ongoing">Ongoing</option>
-      <option value="completed">Completed</option>
-      <option value="cancelled">Cancelled</option>
-    </select>
-
-    <select class="filter-dropdown" id="paymentFilter">
-      <option value="">Payment Status</option>
-      <option value="paid">Paid</option>
-      <option value="unpaid">Unpaid</option>
-      <option value="partial">Partial</option>
-    </select>
-
-    <select class="filter-dropdown" id="dateFilter">
-      <option value="">This Month</option>
-      <option value="last_month">Last Month</option>
-      <option value="3_months">Last 3 Months</option>
-      <option value="year">This Year</option>
-    </select>
-
-    <button class="export-btn" onclick="exportBookings()">
-      <i class="bi bi-download"></i>
-      Export
-    </button>
-
-  </div>
-</div>
 
     <!-- Table Section -->
     <div class="table-section">
       <div class="section-header">
         <h2 class="section-title">All Bookings</h2>
         <div class="table-controls">
+          <!-- ALL -->
+          <a href="bookings.php" class="table-btn <?= ($statusFilter == "" || $statusFilter == "all") ? 'active' : '' ?>">
+              All (<?= $totalRows ?>)
+          </a>
 
-    <!-- ALL -->
-    <a href="bookings.php" class="table-btn <?= ($statusFilter == "" || $statusFilter == "all") ? 'active' : '' ?>">
-        All (<?= $totalRows ?>)
-    </a>
+          <!-- PENDING -->
+          <a href="bookings.php?status=pending" class="table-btn <?= ($statusFilter == "pending") ? 'active' : '' ?>">
+              Pending (<?= $countPending ?>)
+          </a>
 
-    <!-- PENDING -->
-    <a href="bookings.php?status=pending" class="table-btn <?= ($statusFilter == "pending") ? 'active' : '' ?>">
-        Pending (<?= $countPending ?>)
-    </a>
-
-    <!-- ACTIVE = APPROVED / ONGOING -->
-    <a href="bookings.php?status=approved" class="table-btn <?= ($statusFilter == "approved") ? 'active' : '' ?>">
-        Active (<?= $countActive ?>)
-    </a>
-
-</div>
-
+          <!-- ACTIVE = APPROVED / ONGOING -->
+          <a href="bookings.php?status=approved" class="table-btn <?= ($statusFilter == "approved") ? 'active' : '' ?>">
+              Active (<?= $countActive ?>)
+          </a>
+        </div>
       </div>
 
       <div class="table-responsive">
@@ -430,7 +374,6 @@ while ($row = mysqli_fetch_assoc($result)):
         <!-- Actions -->
         <td>
             <div class="action-buttons">
-
                 <!-- View (Modal) -->
                 <button 
                     class="action-btn view" 
@@ -448,69 +391,57 @@ while ($row = mysqli_fetch_assoc($result)):
                     <i class="bi bi-x-lg"></i>
                 </button>
                 <?php endif; ?>
-
             </div>
         </td>
     </tr>
 <?php endwhile; ?>
-</tbody>
-
+          </tbody>
         </table>
       </div>
 
       <!-- Pagination -->
-    <div class="pagination-section">
-    <div class="pagination-info">
-        Showing 
-        <strong><?= $offset + 1 ?></strong> -
-        <strong><?= min($offset + $limit, $totalRows) ?></strong>
-        of 
-        <strong><?= $totalRows ?></strong>
-        bookings
-    </div>
+      <div class="pagination-section">
+        <div class="pagination-info">
+            Showing 
+            <strong><?= $offset + 1 ?></strong> -
+            <strong><?= min($offset + $limit, $totalRows) ?></strong>
+            of 
+            <strong><?= $totalRows ?></strong>
+            bookings
+        </div>
 
-    <div class="pagination-controls">
-
-        <!-- Previous -->
-        <a href="?page=<?= max(1, $page - 1) ?>" class="page-btn">
-            <i class="bi bi-chevron-left"></i>
-        </a>
-
-        <!-- Page buttons (keep the SAME UI) -->
-        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-            <a href="?page=<?= $i ?>" 
-               class="page-btn <?= ($i == $page) ? 'active' : '' ?>">
-                <?= $i ?>
+        <div class="pagination-controls">
+            <!-- Previous -->
+            <a href="?page=<?= max(1, $page - 1) ?>" class="page-btn">
+                <i class="bi bi-chevron-left"></i>
             </a>
-        <?php endfor; ?>
 
-        <!-- Next -->
-        <a href="?page=<?= min($totalPages, $page + 1) ?>" class="page-btn">
-            <i class="bi bi-chevron-right"></i>
-        </a>
+            <!-- Page buttons -->
+            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                <a href="?page=<?= $i ?>" 
+                   class="page-btn <?= ($i == $page) ? 'active' : '' ?>">
+                    <?= $i ?>
+                </a>
+            <?php endfor; ?>
 
+            <!-- Next -->
+            <a href="?page=<?= min($totalPages, $page + 1) ?>" class="page-btn">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+      </div>
     </div>
-</div>
-
-
-    </div>
-</div>
-
   </main>
 </div>
 
-
+<!-- Booking Details Modal -->
 <div class="modal fade" id="bookingModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content" id="modalContent">
-      
-
-
-    </div>
+    <div class="modal-content" id="modalContent"></div>
   </div>
 </div>
 
-<!-- Booking Details Modal -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
 function openBookingModal(id) {
@@ -531,11 +462,8 @@ function openBookingModal(id) {
             alert("Error loading booking details.");
         });
 }
-</script>
 
-<script>
 function loadBookings() {
-
     let search  = document.getElementById("searchInput").value;
     let status  = document.getElementById("statusFilter").value;
     let payment = document.getElementById("paymentFilter").value;
@@ -562,10 +490,8 @@ document.getElementById("searchInput").addEventListener("keyup", loadBookings);
 document.getElementById("statusFilter").addEventListener("change", loadBookings);
 document.getElementById("paymentFilter").addEventListener("change", loadBookings);
 document.getElementById("dateFilter").addEventListener("change", loadBookings);
-</script>
-<script>
-function exportBookings() {
 
+function exportBookings() {
     let search  = document.getElementById("searchInput").value;
     let status  = document.getElementById("statusFilter").value;
     let payment = document.getElementById("paymentFilter").value;
@@ -581,7 +507,5 @@ function exportBookings() {
     window.location.href = "export_bookings.php?" + params.toString();
 }
 </script>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
