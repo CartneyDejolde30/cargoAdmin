@@ -130,7 +130,55 @@ $totalPages = max(1, ceil($totalRows / $limit));
 
 <div class="dashboard-wrapper">
   <!-- Sidebar -->
-  <?php include 'include/sidebar.php'; ?>
+  <aside class="sidebar">
+    <div class="logo-section">
+      <div class="logo-icon">C</div>
+      <div class="logo-text">CARGO</div>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-label">About Car</div>
+      <a href="dashboard.php" class="menu-item">
+        <i class="bi bi-grid"></i>
+        <span>Dashboard</span>
+      </a>
+      <a href="get_cars_admin.php" class="menu-item">
+        <i class="bi bi-car-front"></i>
+        <span>Car Listing</span>
+      </a>
+      <a href="users.php" class="menu-item">
+        <i class="bi bi-person"></i>
+        <span>Users Verification</span>
+      </a>
+      <a href="bookings.php" class="menu-item active">
+        <i class="bi bi-book"></i>
+        <span>Bookings</span>
+      </a>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-label">Report</div>
+      <a href="sales-statistics.php" class="menu-item">
+        <i class="bi bi-bar-chart"></i>
+        <span>Sales Statistics</span>
+      </a>
+      <a href="car-reports.php" class="menu-item">
+        <i class="bi bi-file-text"></i>
+        <span>Car Reports</span>
+      </a>
+    </div>
+
+    <div class="menu-section">
+      <a href="settings.php" class="menu-item">
+        <i class="bi bi-gear"></i>
+        <span>Settings</span>
+      </a>
+      <a href="logout.php" class="menu-item" style="color: #dc3545; margin-top: 20px;">
+        <i class="bi bi-box-arrow-right"></i>
+        <span>Logout</span>
+      </a>
+    </div>
+  </aside>
 
   <!-- Main Content -->
   <main class="main-content">
@@ -391,6 +439,7 @@ while ($row = mysqli_fetch_assoc($result)):
                     <i class="bi bi-x-lg"></i>
                 </button>
                 <?php endif; ?>
+
             </div>
         </td>
     </tr>

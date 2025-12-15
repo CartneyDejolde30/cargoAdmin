@@ -2,11 +2,105 @@
 session_start();
 include "include/db.php";
 
-// Fetch current admin data
 $adminId = $_SESSION['admin_id'] ?? 1;
-$adminQuery = $conn->query("SELECT * FROM admin WHERE id = $adminId");
-$admin = $adminQuery->fetch_assoc();
+
+/* =========================
+   FETCH ADMIN
+========================= */
+$stmt = $conn->prepare("SELECT * FROM admin WHERE id=?");
+$stmt->bind_param("i", $adminId);
+$stmt->execute();
+$admin = $stmt->get_result()->fetch_assoc();
+
+/* =========================
+   UPDATE PROFILE + IMAGE
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+
+    $fullname = trim($_POST['fullname']);
+    $email    = trim($_POST['email']);
+    $phone    = trim($_POST['phone']);
+
+    $imagePath = $admin['profile_image'];
+
+    if (!empty($_FILES['profile_picture']['name'])) {
+
+        $uploadDir = "uploads/admin/";
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        $ext = strtolower(pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION));
+        $allowed = ['jpg','jpeg','png'];
+
+        if (!in_array($ext, $allowed)) {
+            $_SESSION['error_message'] = "Only JPG and PNG images are allowed.";
+            header("Location: settings.php");
+            exit;
+        }
+
+        $fileName = "admin_" . $adminId . "_" . time() . "." . $ext;
+        $targetPath = $uploadDir . $fileName;
+
+        if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $targetPath)) {
+            $imagePath = $targetPath;
+        }
+    }
+
+    $stmt = $conn->prepare("
+        UPDATE admin 
+        SET fullname=?, email=?, phone=?, profile_image=?
+        WHERE id=?
+    ");
+    $stmt->bind_param("ssssi", $fullname, $email, $phone, $imagePath, $adminId);
+
+    $_SESSION['success_message'] = $stmt->execute()
+        ? "Profile updated successfully."
+        : "Profile update failed.";
+
+    header("Location: settings.php");
+    exit;
+}
+
+/* =========================
+   CHANGE PASSWORD
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
+
+    $current = $_POST['current_password'];
+    $new     = $_POST['new_password'];
+    $confirm = $_POST['confirm_password'];
+
+    if ($current !== $admin['password']) {
+    $_SESSION['error_message'] = "Current password is incorrect.";
+    header("Location: settings.php");
+    exit;
+}
+
+    if ($new !== $confirm) {
+        $_SESSION['error_message'] = "Passwords do not match.";
+        header("Location: settings.php"); exit;
+    }
+
+    if (strlen($new) < 8) {
+        $_SESSION['error_message'] = "Password must be at least 8 characters.";
+        header("Location: settings.php"); exit;
+    }
+
+    $new_pass =$new;
+
+    $stmt = $conn->prepare("UPDATE admin SET password=? WHERE id=?");
+    $stmt->bind_param("si", $new_pass, $adminId);
+    $stmt->execute();
+
+    $_SESSION['success_message'] = "Password changed successfully.";
+    header("Location: settings.php");
+    exit;
+}
 ?>
+
+
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -498,13 +592,19 @@ $admin = $adminQuery->fetch_assoc();
           <h5 class="card-title">Profile Information</h5>
         </div>
 
-        <form method="POST" action="update_profile.php" enctype="multipart/form-data">
+        <form method="POST" enctype="multipart/form-data">
           <!-- Profile Picture Upload -->
+           <input type="hidden" name="update_profile">
           <div class="profile-upload">
             <div class="profile-preview">
-              <img src="<?= !empty($admin['profile_picture']) ? htmlspecialchars($admin['profile_picture']) : 'https://ui-avatars.com/api/?name=' . urlencode($admin['fullname'] ?? 'Admin') . '&background=1a1a1a&color=fff' ?>" 
-                   alt="Profile" id="profilePreview">
-            </div>
+  <img 
+    src="<?= !empty($admin['profile_image']) 
+        ? htmlspecialchars($admin['profile_image']) 
+        : 'https://ui-avatars.com/api/?name=' . urlencode($admin['fullname']) ?>" 
+    id="profilePreview" 
+    alt="Profile">
+</div>
+
             <div class="upload-info">
               <div class="upload-title">Profile Picture</div>
               <div class="upload-subtitle">JPG or PNG. Max size 2MB</div>
@@ -550,45 +650,29 @@ $admin = $adminQuery->fetch_assoc();
           <h5 class="card-title">Change Password</h5>
         </div>
 
-        <form method="POST" action="update_password.php">
-          <div class="mb-3">
-            <label for="currentPassword" class="form-label">Current Password</label>
-            <div class="password-wrapper">
-              <input type="password" class="form-control" id="currentPassword" 
-                     name="current_password" placeholder="Enter current password" required>
-              <button type="button" class="password-toggle" onclick="togglePassword('currentPassword')">
-                <i class="bi bi-eye"></i>
-              </button>
-            </div>
-          </div>
+        <form method="POST">
+  <input type="hidden" name="change_password">
 
-          <div class="mb-3">
-            <label for="newPassword" class="form-label">New Password</label>
-            <div class="password-wrapper">
-              <input type="password" class="form-control" id="newPassword" 
-                     name="new_password" placeholder="Enter new password" required>
-              <button type="button" class="password-toggle" onclick="togglePassword('newPassword')">
-                <i class="bi bi-eye"></i>
-              </button>
-            </div>
-            <small class="text-muted">Must be at least 8 characters</small>
-          </div>
+  <div class="mb-3">
+    <label for="currentPassword" class="form-label">Current Password</label>
+    <input type="password" class="form-control" name="current_password" required>
+  </div>
 
-          <div class="mb-3">
-            <label for="confirmPassword" class="form-label">Confirm New Password</label>
-            <div class="password-wrapper">
-              <input type="password" class="form-control" id="confirmPassword" 
-                     name="confirm_password" placeholder="Confirm new password" required>
-              <button type="button" class="password-toggle" onclick="togglePassword('confirmPassword')">
-                <i class="bi bi-eye"></i>
-              </button>
-            </div>
-          </div>
+  <div class="mb-3">
+    <label for="newPassword" class="form-label">New Password</label>
+    <input type="password" class="form-control" name="new_password" required>
+  </div>
 
-          <button type="submit" class="btn-custom btn-warning-custom">
-            <i class="bi bi-shield-lock"></i> Change Password
-          </button>
-        </form>
+  <div class="mb-3">
+    <label for="confirmPassword" class="form-label">Confirm New Password</label>
+    <input type="password" class="form-control" name="confirm_password" required>
+  </div>
+
+  <button type="submit" class="btn-custom btn-warning-custom">
+    Change Password
+  </button>
+</form>
+
       </div>
 
     </div>
@@ -637,50 +721,10 @@ $admin = $adminQuery->fetch_assoc();
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // Password Toggle
-function togglePassword(fieldId) {
-  const field = document.getElementById(fieldId);
-  const icon = field.nextElementSibling.querySelector('i');
-  
-  if (field.type === 'password') {
-    field.type = 'text';
-    icon.classList.remove('bi-eye');
-    icon.classList.add('bi-eye-slash');
-  } else {
-    field.type = 'password';
-    icon.classList.remove('bi-eye-slash');
-    icon.classList.add('bi-eye');
-  }
-}
 
-// Image Preview
-function previewImage(input) {
-  if (input.files && input.files[0]) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      document.getElementById('profilePreview').src = e.target.result;
-    };
-    reader.readAsDataURL(input.files[0]);
-  }
-}
 
-// Form Validation
-document.querySelector('form[action="update_password.php"]').addEventListener('submit', function(e) {
-  const newPass = document.getElementById('newPassword').value;
-  const confirmPass = document.getElementById('confirmPassword').value;
-  
-  if (newPass !== confirmPass) {
-    e.preventDefault();
-    alert('New passwords do not match!');
-    return false;
-  }
-  
-  if (newPass.length < 8) {
-    e.preventDefault();
-    alert('Password must be at least 8 characters long!');
-    return false;
-  }
-});
-</script>
+
+
 
 </body>
 </html>

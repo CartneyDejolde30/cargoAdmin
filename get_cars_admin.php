@@ -201,18 +201,29 @@ $query = $conn->query($sql);
             </td>
             <td>
               <?php if(!empty($row['image'])) { ?>
-                <img src="<?= htmlspecialchars($row['image']) ?>" class="car-thumb" 
-                     onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>')" alt="Car">
+                <img src="<?= htmlspecialchars($row['image']) ?>" 
+     class="car-thumb"
+     onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>', '<?= htmlspecialchars($row['brand'].' '.$row['model']) ?>')"
+     alt="Car">
+
               <?php } else { ?>
                 <span class="text-muted">No Image</span>
               <?php } ?>
             </td>
             <td>
-              <a href="<?= htmlspecialchars($row['official_receipt']) ?>" 
-                 class="doc-btn or" target="_blank" title="Official Receipt">OR</a>
-              <a href="<?= htmlspecialchars($row['certificate_of_registration']) ?>" 
-                 class="doc-btn cr" target="_blank" title="Certificate of Registration">CR</a>
-            </td>
+  <a href="javascript:void(0)"
+   class="doc-btn or"
+   onclick="viewDocument('<?= htmlspecialchars($row['official_receipt']) ?>','Official Receipt')">
+   OR
+</a>
+
+<a href="javascript:void(0)"
+   class="doc-btn cr"
+   onclick="viewDocument('<?= htmlspecialchars($row['certificate_of_registration']) ?>','Certificate of Registration')">
+   CR
+</a>
+</td>
+
             <td>
               <div class="action-buttons">
                 <form method="POST" action="update_car_status.php" style="display: contents;">
@@ -306,8 +317,6 @@ $query = $conn->query($sql);
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
 <!-- Image Modal -->
 <div class="image-modal" id="imageModal">
   <div class="image-modal-content">
@@ -324,147 +333,164 @@ $query = $conn->query($sql);
   </div>
 </div>
 
+
+
+
+
 <!-- Document Modal -->
 <div class="doc-modal" id="docModal">
   <div class="doc-modal-content">
     <div class="doc-modal-header">
       <h3 class="doc-modal-title" id="docModalTitle">Document Viewer</h3>
       <div class="doc-modal-actions">
-        <a id="docDownloadBtn" href="#" download class="doc-modal-btn download" title="Download Document">
+        <a id="docDownloadBtn" class="doc-modal-btn download" download>
           <i class="bi bi-download"></i>
         </a>
-        <button class="doc-modal-btn close" onclick="closeDocModal()" title="Close">
+        <button class="doc-modal-btn close" onclick="closeDocModal()">
           <i class="bi bi-x-lg"></i>
         </button>
       </div>
     </div>
-    <div class="doc-modal-body" id="docModalBody">
-      <!-- Document content will be loaded here -->
-    </div>
+    <div class="doc-modal-body" id="docModalBody"></div>
   </div>
 </div>
 
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-let currentImageUrl = '';
+document.addEventListener("DOMContentLoaded", function () {
 
-// Reject Modal Handler
-const rejectButtons = document.querySelectorAll(".rejectBtn");
-const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
+  let currentImageUrl = '';
+  let currentDocUrl = '';
 
-rejectButtons.forEach(btn => {
-  btn.onclick = () => {
-    document.getElementById("rejectCarId").value = btn.dataset.id;
-    modal.show();
+  /* ===============================
+     REJECT MODAL
+  =============================== */
+  document.querySelectorAll(".rejectBtn").forEach(btn => {
+    btn.addEventListener("click", function () {
+      const input = document.getElementById("rejectCarId");
+      const modalEl = document.getElementById("rejectModal");
+
+      if (!input || !modalEl) return;
+
+      input.value = btn.dataset.id;
+      new bootstrap.Modal(modalEl).show();
+    });
+  });
+
+  /* ===============================
+     IMAGE MODAL
+  =============================== */
+  window.viewCarImage = function (imageUrl, carName) {
+    const modal = document.getElementById("imageModal");
+    const img = document.getElementById("modalImage");
+    const caption = document.getElementById("modalCaption");
+
+    if (!modal || !img) return;
+
+    currentImageUrl = imageUrl;
+    img.src = imageUrl;
+    caption.textContent = carName || "Car Image";
+
+    modal.classList.add("active");
+    document.body.style.overflow = "hidden";
   };
-});
 
-// Car Image Viewer
-function viewCarImage(imageUrl, carName) {
-  const modal = document.getElementById('imageModal');
-  const modalImg = document.getElementById('modalImage');
-  const caption = document.getElementById('modalCaption');
-  
-  currentImageUrl = imageUrl;
-  modal.classList.add('active');
-  modalImg.src = imageUrl;
-  caption.textContent = carName || 'Car Image';
-  
-  // Prevent body scroll when modal is open
-  document.body.style.overflow = 'hidden';
-}
+  window.closeImageModal = function () {
+    const modal = document.getElementById("imageModal");
+    if (!modal) return;
 
-function closeImageModal() {
-  const modal = document.getElementById('imageModal');
-  modal.classList.remove('active');
-  document.body.style.overflow = 'auto';
-}
+    modal.classList.remove("active");
+    document.body.style.overflow = "auto";
+  };
 
-function downloadImage() {
-  if (!currentImageUrl) return;
-  
-  // Create a temporary link element
-  const link = document.createElement('a');
-  link.href = currentImageUrl;
-  
-  // Extract filename from URL or use default
-  const filename = currentImageUrl.split('/').pop() || 'car-image.jpg';
-  link.download = filename;
-  
-  // Trigger download
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
+  window.downloadImage = function () {
+    if (!currentImageUrl) return;
 
-// Document Viewer
-function viewDocument(docUrl, docType) {
-  const modal = document.getElementById('docModal');
-  const modalBody = document.getElementById('docModalBody');
-  const modalTitle = document.getElementById('docModalTitle');
-  const downloadBtn = document.getElementById('docDownloadBtn');
-  
-  // Set title and download link
-  modalTitle.textContent = docType;
-  downloadBtn.href = docUrl;
-  downloadBtn.download = docType.replace(/\s+/g, '_') + '_' + docUrl.split('/').pop();
-  
-  // Clear previous content
-  modalBody.innerHTML = '';
-  
-  // Check file extension
-  const extension = docUrl.split('.').pop().toLowerCase();
-  
-  if (extension === 'pdf') {
-    // For PDF files, use iframe
-    const iframe = document.createElement('iframe');
-    iframe.src = docUrl;
-    modalBody.appendChild(iframe);
-  } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
-    // For image files, use img tag
-    const img = document.createElement('img');
-    img.src = docUrl;
-    img.alt = docType;
-    modalBody.appendChild(img);
-  } else {
-    // For other file types, use iframe with fallback
-    const iframe = document.createElement('iframe');
-    iframe.src = docUrl;
-    modalBody.appendChild(iframe);
+    const a = document.createElement("a");
+    a.href = currentImageUrl;
+    a.download = currentImageUrl.split("/").pop() || "image.jpg";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const imageModal = document.getElementById("imageModal");
+  if (imageModal) {
+    imageModal.addEventListener("click", e => {
+      if (e.target === imageModal) closeImageModal();
+    });
   }
-  
-  modal.classList.add('active');
-  document.body.style.overflow = 'hidden';
-}
 
-function closeDocModal() {
-  const modal = document.getElementById('docModal');
-  modal.classList.remove('active');
-  document.body.style.overflow = 'auto';
-}
+  /* ===============================
+     DOCUMENT MODAL (OR / CR)
+  =============================== */
+  window.viewDocument = function (docUrl, docType) {
+    const modal = document.getElementById("docModal");
+    const body = document.getElementById("docModalBody");
+    const title = document.getElementById("docModalTitle");
+    const downloadBtn = document.getElementById("docDownloadBtn");
 
-// Close image modal when clicking outside
-document.getElementById('imageModal').addEventListener('click', function(e) {
-  if (e.target === this) {
-    closeImageModal();
+    if (!modal || !body || !downloadBtn) return;
+
+    currentDocUrl = docUrl;
+    title.textContent = docType;
+    downloadBtn.href = docUrl;
+    downloadBtn.download = docUrl.split("/").pop();
+
+    body.innerHTML = "";
+
+    const ext = docUrl.split(".").pop().toLowerCase();
+
+    if (ext === "pdf") {
+      const iframe = document.createElement("iframe");
+      iframe.src = docUrl;
+      iframe.style.width = "100%";
+      iframe.style.height = "100%";
+      iframe.style.border = "none";
+      body.appendChild(iframe);
+    } else {
+      const img = document.createElement("img");
+      img.src = docUrl;
+      img.style.maxWidth = "100%";
+      img.style.borderRadius = "8px";
+      body.appendChild(img);
+    }
+
+    modal.classList.add("active");
+    document.body.style.overflow = "hidden";
+  };
+
+  window.closeDocModal = function () {
+    const modal = document.getElementById("docModal");
+    if (!modal) return;
+
+    modal.classList.remove("active");
+    document.body.style.overflow = "auto";
+  };
+
+  const docModal = document.getElementById("docModal");
+  if (docModal) {
+    docModal.addEventListener("click", e => {
+      if (e.target === docModal) closeDocModal();
+    });
   }
-});
 
-// Close document modal when clicking outside
-document.getElementById('docModal').addEventListener('click', function(e) {
-  if (e.target === this) {
-    closeDocModal();
-  }
-});
+  /* ===============================
+     ESC KEY CLOSE
+  =============================== */
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      closeImageModal();
+      closeDocModal();
+    }
+  });
 
-// Close modals with Escape key
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    closeImageModal();
-    closeDocModal();
-  }
 });
 </script>
+
+
+
 
 </body>
 </html>
