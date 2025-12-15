@@ -110,6 +110,7 @@
     <div class="logo-icon">C</div>
     <div class="logo-text">CARGO</div>
   </div>
+  
 
   <div class="menu-section">
     <div class="menu-label">About Car</div>
@@ -129,15 +130,19 @@
       <i class="bi bi-book"></i>
       <span>Bookings</span>
     </a>
+    <a href="payment.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'payment.php' ? 'active' : ''; ?>">
+      <i class="bi bi-credit-card"></i>
+      <span>Payments</span>
+    </a>
   </div>
 
   <div class="menu-section">
     <div class="menu-label">Report</div>
-<a href="statistics.php" 
-   class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'statistics.php' ? 'active' : ''; ?>">
-  <i class="bi bi-bar-chart"></i>
-  <span>Sales Statistics</span>
-</a>
+    <a href="statistics.php" 
+       class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'statistics.php' ? 'active' : ''; ?>">
+      <i class="bi bi-bar-chart"></i>
+      <span>Sales Statistics</span>
+    </a>
 
     <a href="reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
       <i class="bi bi-file-text"></i>
