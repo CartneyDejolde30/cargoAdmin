@@ -394,7 +394,7 @@ while ($row = mysqli_fetch_assoc($result)):
 
         <!-- Rental Period -->
         <td>
-            <strong><?= $dateRange ?></strong><br>
+            <strong><?= $row['pickup_date'] . " - " . $row['return_date'] ?></strong><br>
             <small style="color:#999;"><?= $row['rental_period'] ?></small>
         </td>
 

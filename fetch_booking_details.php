@@ -159,8 +159,14 @@ $bookingId = "#BK-" . str_pad($data['id'], 4, "0", STR_PAD_LEFT);
             <div class="detail-item">
                 <span class="detail-label">Pickup</span>
                 <span class="detail-value">
-                    <?= date("F d, Y", strtotime($data['pickup_date'])) ?> — <?= $data['pickup_time'] ?>
-                </span>
+<?php
+if (!empty($data['pickup_date']) && $data['pickup_date'] !== '0000-00-00') {
+    echo date("F d, Y", strtotime($data['pickup_date'])) . " — " . $data['pickup_time'];
+} else {
+    echo "Not set";
+}
+?>
+</span>
             </div>
 
             <div class="detail-item">

@@ -1,15 +1,17 @@
 <?php
 header("Content-Type: application/json");
-require_once __DIR__ . "/../include/db.php";
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST");
+
+require_once "../include/db.php";
 
 $response = ["success" => false, "message" => ""];
 
-// =============================
-// REQUIRED FIELDS
-// =============================
+/* =========================================================
+   REQUIRED FIELDS
+   ========================================================= */
 $required = [
-  "car_id",
-  "owner_id",
+  "booking_id",
   "user_id",
   "total_amount",
   "payment_method",
@@ -18,56 +20,66 @@ $required = [
 ];
 
 foreach ($required as $field) {
-  if (empty($_POST[$field])) {
-    $response["message"] = "Missing field: $field";
-    echo json_encode($response);
+  if (!isset($_POST[$field]) || $_POST[$field] === "") {
+    echo json_encode([
+      "success" => false,
+      "message" => "Missing field: $field"
+    ]);
     exit;
   }
 }
 
-// =============================
-// SANITIZE INPUT
-// =============================
-$carId   = intval($_POST["car_id"]);
-$ownerId = intval($_POST["owner_id"]);
-$userId  = intval($_POST["user_id"]);
-$amount  = floatval($_POST["total_amount"]);
+/* =========================================================
+   SANITIZE INPUT
+   ========================================================= */
+$bookingId   = intval($_POST["booking_id"]);
+$userId      = intval($_POST["user_id"]);
+$amount      = floatval($_POST["total_amount"]);
 
-$method  = mysqli_real_escape_string($conn, $_POST["payment_method"]);
-$gcashNo = mysqli_real_escape_string($conn, $_POST["gcash_number"]);
-$refNo   = mysqli_real_escape_string($conn, $_POST["payment_reference"]);
+$method      = mysqli_real_escape_string($conn, $_POST["payment_method"]);
+$gcashNo     = mysqli_real_escape_string($conn, $_POST["gcash_number"]);
+$refNo       = mysqli_real_escape_string($conn, $_POST["payment_reference"]);
 
+/* =========================================================
+   VERIFY BOOKING EXISTS & UNPAID
+   ========================================================= */
+$check = $conn->prepare("
+  SELECT id, payment_status 
+  FROM bookings 
+  WHERE id = ? AND user_id = ?
+");
+$check->bind_param("ii", $bookingId, $userId);
+$check->execute();
+$result = $check->get_result();
+
+if ($result->num_rows === 0) {
+  echo json_encode([
+    "success" => false,
+    "message" => "Invalid booking"
+  ]);
+  exit;
+}
+
+$booking = $result->fetch_assoc();
+
+if ($booking["payment_status"] !== "pending") {
+  echo json_encode([
+    "success" => false,
+    "message" => "Payment already submitted"
+  ]);
+  exit;
+}
+
+/* =========================================================
+   START TRANSACTION
+   ========================================================= */
 mysqli_begin_transaction($conn);
 
 try {
 
-  // =============================
-  // CREATE BOOKING (PENDING)
-  // =============================
-  $bookingSql = "
-    INSERT INTO bookings (
-      user_id,
-      owner_id,
-      car_id,
-      total_amount,
-      status,
-      payment_status,
-      escrow_status,
-      created_at
-    ) VALUES (
-      ?, ?, ?, ?, 'pending', 'pending', 'pending', NOW()
-    )
-  ";
-
-  $stmt = $conn->prepare($bookingSql);
-  $stmt->bind_param("iiid", $userId, $ownerId, $carId, $amount);
-  $stmt->execute();
-
-  $bookingId = $stmt->insert_id;
-
-  // =============================
-  // INSERT PAYMENT
-  // =============================
+  /* =========================================================
+     INSERT PAYMENT
+     ========================================================= */
   $paymentSql = "
     INSERT INTO payments (
       booking_id,
@@ -91,34 +103,57 @@ try {
     $method,
     $refNo
   );
-  $stmt->execute();
 
-  // =============================
-  // LINK PAYMENT TO BOOKING
-  // =============================
+  if (!$stmt->execute()) {
+    throw new Exception("Failed to record payment");
+  }
+
   $paymentId = $stmt->insert_id;
 
-  $updateBooking = "
+  /* =========================================================
+     UPDATE BOOKING WITH PAYMENT INFO
+     ========================================================= */
+  $update = "
     UPDATE bookings
-    SET payment_id = ?, payment_method = ?, payment_date = NOW()
+    SET 
+      payment_id     = ?,
+      payment_method = ?,
+      payment_status = 'pending',
+      gcash_number   = ?,
+      gcash_reference= ?,
+      payment_date   = NOW()
     WHERE id = ?
   ";
 
-  $stmt = $conn->prepare($updateBooking);
-  $stmt->bind_param("isi", $paymentId, $method, $bookingId);
-  $stmt->execute();
+  $stmt = $conn->prepare($update);
+  $stmt->bind_param(
+    "isssi",
+    $paymentId,
+    $method,
+    $gcashNo,
+    $refNo,
+    $bookingId
+  );
 
+  if (!$stmt->execute()) {
+    throw new Exception("Failed to update booking");
+  }
+
+  /* =========================================================
+     COMMIT
+     ========================================================= */
   mysqli_commit($conn);
 
   echo json_encode([
-    "success" => true,
-    "message" => "Payment submitted successfully",
-    "booking_id" => $bookingId,
-    "payment_id" => $paymentId
+    "success"     => true,
+    "message"     => "Payment submitted successfully. Awaiting verification.",
+    "payment_id"  => $paymentId
   ]);
 
 } catch (Exception $e) {
+
   mysqli_rollback($conn);
+
   echo json_encode([
     "success" => false,
     "message" => "Server error: " . $e->getMessage()
@@ -126,3 +161,4 @@ try {
 }
 
 $conn->close();
+?>
