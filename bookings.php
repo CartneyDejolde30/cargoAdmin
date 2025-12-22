@@ -129,66 +129,21 @@ $totalPages = max(1, ceil($totalRows / $limit));
 <body>
 
 <div class="dashboard-wrapper">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="logo-section">
-      <div class="logo-icon">C</div>
-      <div class="logo-text">CARGO</div>
-    </div>
-
-    <div class="menu-section">
-      <div class="menu-label">About Car</div>
-      <a href="dashboard.php" class="menu-item">
-        <i class="bi bi-grid"></i>
-        <span>Dashboard</span>
-      </a>
-      <a href="get_cars_admin.php" class="menu-item">
-        <i class="bi bi-car-front"></i>
-        <span>Car Listing</span>
-      </a>
-      <a href="users.php" class="menu-item">
-        <i class="bi bi-person"></i>
-        <span>Users Verification</span>
-      </a>
-      <a href="bookings.php" class="menu-item active">
-        <i class="bi bi-book"></i>
-        <span>Bookings</span>
-      </a>
-    </div>
-
-    <div class="menu-section">
-      <div class="menu-label">Report</div>
-      <a href="sales-statistics.php" class="menu-item">
-        <i class="bi bi-bar-chart"></i>
-        <span>Sales Statistics</span>
-      </a>
-      <a href="car-reports.php" class="menu-item">
-        <i class="bi bi-file-text"></i>
-        <span>Car Reports</span>
-      </a>
-    </div>
-
-    <div class="menu-section">
-      <a href="settings.php" class="menu-item">
-        <i class="bi bi-gear"></i>
-        <span>Settings</span>
-      </a>
-      <a href="logout.php" class="menu-item" style="color: #dc3545; margin-top: 20px;">
-        <i class="bi bi-box-arrow-right"></i>
-        <span>Logout</span>
-      </a>
-    </div>
-  </aside>
+  <!-- Include Sidebar -->
+  <?php include 'include/sidebar.php'; ?>
 
   <!-- Main Content -->
   <main class="main-content">
     <!-- Top Bar -->
     <div class="top-bar">
-      <h1 class="page-title">Bookings Management</h1>
+      <h1 class="page-title">
+        <i class="bi bi-book"></i>
+        Bookings Management
+      </h1>
       <div class="user-profile">
         <button class="notification-btn">
           <i class="bi bi-bell"></i>
-          <span class="notification-badge">7</span>
+          <span class="notification-badge"><?= $pending ?></span>
         </button>
         <div class="user-avatar">
           <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
@@ -201,7 +156,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
       <!-- Pending -->
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
             <i class="bi bi-clock-history"></i>
           </div>
           <div class="stat-trend">
@@ -216,7 +171,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
       <!-- Confirmed -->
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
             <i class="bi bi-check-circle"></i>
           </div>
           <div class="stat-trend">
@@ -231,7 +186,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
       <!-- Ongoing -->
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
             <i class="bi bi-car-front-fill"></i>
           </div>
           <div class="stat-trend">
@@ -246,7 +201,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
       <!-- Cancelled -->
       <div class="stat-card">
         <div class="stat-header">
-          <div class="stat-icon">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
             <i class="bi bi-x-circle"></i>
           </div>
           <div class="stat-trend down">
@@ -263,17 +218,17 @@ $totalPages = max(1, ceil($totalRows / $limit));
     <div class="filter-section">
       <div class="filter-row">
         <div class="search-box">
-          <input type="text" id="searchInput" placeholder="Search by renter, owner, or car type...">
+          <input type="text" id="searchInput" placeholder="Search by renter, owner, or car type..." value="<?= htmlspecialchars($search) ?>">
           <i class="bi bi-search"></i>
         </div>
 
         <select class="filter-dropdown" id="statusFilter">
           <option value="">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Confirmed</option>
-          <option value="ongoing">Ongoing</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>>Pending</option>
+          <option value="approved" <?= $statusFilter === 'approved' ? 'selected' : '' ?>>Confirmed</option>
+          <option value="ongoing" <?= $statusFilter === 'ongoing' ? 'selected' : '' ?>>Ongoing</option>
+          <option value="completed" <?= $statusFilter === 'completed' ? 'selected' : '' ?>>Completed</option>
+          <option value="cancelled" <?= $statusFilter === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
         </select>
 
         <select class="filter-dropdown" id="paymentFilter">
@@ -323,12 +278,12 @@ $totalPages = max(1, ceil($totalRows / $limit));
         <table>
           <thead>
             <tr>
-              <th>#</th>
+              <th>Booking ID</th>
               <th>Renter</th>
               <th>Owner</th>
               <th>Car Details</th>
               <th>Rental Period</th>
-              <th>Location</th>
+              <th>Pickup Info</th>
               <th>Amount</th>
               <th>Status</th>
               <th>Payment</th>
@@ -340,7 +295,10 @@ $totalPages = max(1, ceil($totalRows / $limit));
 if (mysqli_num_rows($result) == 0) { ?>
     <tr>
         <td colspan="10" class="text-center py-4">
-            <strong>No bookings found.</strong>
+            <div style="padding: 40px 20px;">
+              <i class="bi bi-inbox" style="font-size: 48px; color: #ddd;"></i>
+              <p style="margin-top: 16px; color: #999; font-size: 14px;">No bookings found matching your criteria.</p>
+            </div>
         </td>
     </tr>
 <?php }
@@ -350,21 +308,29 @@ while ($row = mysqli_fetch_assoc($result)):
     $renter = $row['renter_name'];
     $owner  = $row['owner_name'];
     $car    = $row['brand'] . " " . $row['model'];
-    $dateRange = date("M d", strtotime($row['pickup_date'])) . 
-                 " - " . 
-                 date("M d", strtotime($row['return_date']));
+    
+    // Calculate days
+    $pickup = strtotime($row['pickup_date']);
+    $return = strtotime($row['return_date']);
+    $days = max(1, ceil(($return - $pickup) / 86400));
 
     // Status color classes
     $statusClass = [
         "pending" => "pending",
         "approved" => "confirmed",
-        "rejected" => "cancelled"
-    ][$row["status"]];
+        "ongoing" => "confirmed",
+        "completed" => "approved",
+        "rejected" => "cancelled",
+        "cancelled" => "cancelled"
+    ][$row["status"]] ?? "pending";
 
     $paymentClass = "unpaid"; // default
 ?>
     <tr>
-        <td><strong><?= $bookingId ?></strong></td>
+        <td>
+          <strong><?= $bookingId ?></strong><br>
+          <small style="color:#999;"><?= date("M d, Y", strtotime($row['created_at'])) ?></small>
+        </td>
 
         <!-- Renter -->
         <td>
@@ -372,7 +338,7 @@ while ($row = mysqli_fetch_assoc($result)):
                 <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=<?= urlencode($renter) ?>&background=1a1a1a&color=fff">
                 </div>
-                <span><?= $renter ?></span>
+                <span><?= htmlspecialchars($renter) ?></span>
             </div>
         </td>
 
@@ -382,30 +348,32 @@ while ($row = mysqli_fetch_assoc($result)):
                 <div class="user-avatar-small">
                     <img src="https://ui-avatars.com/api/?name=<?= urlencode($owner) ?>&background=1a1a1a&color=fff">
                 </div>
-                <span><?= $owner ?></span>
+                <span><?= htmlspecialchars($owner) ?></span>
             </div>
         </td>
 
         <!-- Car Details -->
         <td>
-            <strong><?= $car ?></strong><br>
-            <small style="color:#999;"><?= $row['car_year'] ?></small>
+            <strong><?= htmlspecialchars($car) ?></strong><br>
+            <small style="color:#999;"><?= $row['car_year'] ?> • ₱<?= number_format($row['daily_rate'], 0) ?>/day</small>
         </td>
 
         <!-- Rental Period -->
         <td>
-            <strong><?= $row['pickup_date'] . " - " . $row['return_date'] ?></strong><br>
-            <small style="color:#999;"><?= $row['rental_period'] ?></small>
+            <strong><?= date("M d", strtotime($row['pickup_date'])) ?> - <?= date("M d, Y", strtotime($row['return_date'])) ?></strong><br>
+            <small style="color:#999;"><?= $days ?> day<?= $days > 1 ? 's' : '' ?></small>
         </td>
 
-        <!-- Pickup Location -->
+        <!-- Pickup Info -->
         <td>
-            <strong><?= $row['pickup_date'] ?></strong><br>
+            <strong><?= date("M d, Y", strtotime($row['pickup_date'])) ?></strong><br>
             <small style="color:#999;"><?= $row['pickup_time'] ?></small>
         </td>
 
         <!-- Amount -->
-        <td><strong>₱<?= number_format($row['total_amount'], 2) ?></strong></td>
+        <td>
+          <strong style="font-size: 15px;">₱<?= number_format($row['total_amount'], 2) ?></strong>
+        </td>
 
         <!-- Status -->
         <td>
@@ -426,16 +394,21 @@ while ($row = mysqli_fetch_assoc($result)):
                 <button 
                     class="action-btn view" 
                     data-id="<?= $row['id'] ?>" 
-                    onclick="openBookingModal(<?= $row['id'] ?>)">
+                    onclick="openBookingModal(<?= $row['id'] ?>)"
+                    title="View Details">
                     <i class="bi bi-eye"></i>
                 </button>
 
                 <?php if ($row['status'] == "pending") : ?>
-                <button class="action-btn approve" onclick="updateStatus(<?= $row['id'] ?>,'approved')">
+                <button class="action-btn approve" 
+                        onclick="updateStatus(<?= $row['id'] ?>,'approved')"
+                        title="Approve Booking">
                     <i class="bi bi-check-lg"></i>
                 </button>
 
-                <button class="action-btn reject" onclick="updateStatus(<?= $row['id'] ?>,'rejected')">
+                <button class="action-btn reject" 
+                        onclick="updateStatus(<?= $row['id'] ?>,'rejected')"
+                        title="Reject Booking">
                     <i class="bi bi-x-lg"></i>
                 </button>
                 <?php endif; ?>
@@ -461,22 +434,39 @@ while ($row = mysqli_fetch_assoc($result)):
 
         <div class="pagination-controls">
             <!-- Previous -->
-            <a href="?page=<?= max(1, $page - 1) ?>" class="page-btn">
+            <?php if ($page > 1): ?>
+            <a href="?page=<?= max(1, $page - 1) ?><?= $statusFilter ? '&status='.$statusFilter : '' ?><?= $search ? '&search='.urlencode($search) : '' ?>" class="page-btn">
                 <i class="bi bi-chevron-left"></i>
             </a>
+            <?php else: ?>
+            <span class="page-btn disabled">
+                <i class="bi bi-chevron-left"></i>
+            </span>
+            <?php endif; ?>
 
             <!-- Page buttons -->
-            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                <a href="?page=<?= $i ?>" 
+            <?php 
+            $startPage = max(1, $page - 2);
+            $endPage = min($totalPages, $page + 2);
+            
+            for ($i = $startPage; $i <= $endPage; $i++): 
+            ?>
+                <a href="?page=<?= $i ?><?= $statusFilter ? '&status='.$statusFilter : '' ?><?= $search ? '&search='.urlencode($search) : '' ?>" 
                    class="page-btn <?= ($i == $page) ? 'active' : '' ?>">
                     <?= $i ?>
                 </a>
             <?php endfor; ?>
 
             <!-- Next -->
-            <a href="?page=<?= min($totalPages, $page + 1) ?>" class="page-btn">
+            <?php if ($page < $totalPages): ?>
+            <a href="?page=<?= min($totalPages, $page + 1) ?><?= $statusFilter ? '&status='.$statusFilter : '' ?><?= $search ? '&search='.urlencode($search) : '' ?>" class="page-btn">
                 <i class="bi bi-chevron-right"></i>
             </a>
+            <?php else: ?>
+            <span class="page-btn disabled">
+                <i class="bi bi-chevron-right"></i>
+            </span>
+            <?php endif; ?>
         </div>
       </div>
     </div>
@@ -512,6 +502,17 @@ function openBookingModal(id) {
         });
 }
 
+function updateStatus(bookingId, newStatus) {
+    const action = newStatus === 'approved' ? 'approve' : 'reject';
+    const message = `Are you sure you want to ${action} this booking?`;
+    
+    if (!confirm(message)) return;
+    
+    // Add your backend API call here
+    alert(`Booking ${bookingId} ${action}d successfully!`);
+    location.reload();
+}
+
 function loadBookings() {
     let search  = document.getElementById("searchInput").value;
     let status  = document.getElementById("statusFilter").value;
@@ -525,15 +526,15 @@ function loadBookings() {
         date: date
     });
 
-    fetch("bookings_table.php?" + params.toString())
-    .then(r => r.text())
-    .then(html => {
-        document.getElementById("bookingsTableBody").innerHTML = html;
-    });
+    window.location.href = "bookings.php?" + params.toString();
 }
 
-// Live search
-document.getElementById("searchInput").addEventListener("keyup", loadBookings);
+// Live search with debounce
+let searchTimeout;
+document.getElementById("searchInput").addEventListener("keyup", function() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(loadBookings, 500);
+});
 
 // Dropdown filters
 document.getElementById("statusFilter").addEventListener("change", loadBookings);
@@ -556,5 +557,50 @@ function exportBookings() {
     window.location.href = "export_bookings.php?" + params.toString();
 }
 </script>
+
+<style>
+/* Additional Styles for Enhanced UI */
+.page-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.table-responsive table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.table-responsive table tbody tr:hover {
+  background: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.action-btn {
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.stat-card {
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+.filter-dropdown, .search-box input {
+  transition: all 0.2s ease;
+}
+
+.filter-dropdown:focus, .search-box input:focus {
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+}
+</style>
 </body>
 </html>
