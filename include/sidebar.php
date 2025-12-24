@@ -111,25 +111,35 @@
     <div class="logo-text">CARGO</div>
   </div>
   
-
+  <!-- MAIN NAVIGATION -->
   <div class="menu-section">
-    <div class="menu-label">About Car</div>
+    <div class="menu-label">Main Menu</div>
     <a href="dashboard.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
       <i class="bi bi-grid"></i>
       <span>Dashboard</span>
     </a>
-    <a href="get_cars_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'get_cars_admin.php' ? 'active' : ''; ?>">
-      <i class="bi bi-car-front"></i>
-      <span>Car Listing</span>
-    </a>
-  <a href="get_motorcycle_admin.php" class="<?= basename($_SERVER['PHP_SELF']) == 'get_motorcycle_admin.php' ? 'active' : '' ?>">
-    <i class="bi bi-motorcycle"></i>
-    <span>Motorcycles</span>
-  </a>
     <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
       <i class="bi bi-person"></i>
       <span>Users Verification</span>
     </a>
+  </div>
+
+  <!-- VEHICLES MANAGEMENT -->
+  <div class="menu-section">
+    <div class="menu-label">Vehicles</div>
+    <a href="get_cars_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'get_cars_admin.php' ? 'active' : ''; ?>">
+      <i class="bi bi-car-front"></i>
+      <span>Car Listings</span>
+    </a>
+    <a href="get_motorcycle_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'get_motorcycle_admin.php' ? 'active' : ''; ?>">
+      <i class="bi bi-bicycle"></i>
+      <span>Motorcycle Listings</span>
+    </a>
+  </div>
+
+  <!-- TRANSACTIONS -->
+  <div class="menu-section">
+    <div class="menu-label">Transactions</div>
     <a href="bookings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'bookings.php' ? 'active' : ''; ?>">
       <i class="bi bi-book"></i>
       <span>Bookings</span>
@@ -140,6 +150,7 @@
     </a>
   </div>
 
+  <!-- REPORTS -->
   <div class="menu-section">
     <div class="menu-label">Report</div>
     <a href="statistics.php" 
@@ -147,13 +158,13 @@
       <i class="bi bi-bar-chart"></i>
       <span>Sales Statistics</span>
     </a>
-
     <a href="reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
       <i class="bi bi-file-text"></i>
       <span>Car Reports</span>
     </a>
   </div>
 
+  <!-- SYSTEM -->
   <div class="menu-section">
     <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
       <i class="bi bi-gear"></i>
