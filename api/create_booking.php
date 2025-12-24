@@ -3,7 +3,7 @@ header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
 
-require_once "../include/db.php";
+require_once "include/db.php";
 
 $response = ["success" => false, "message" => ""];
 

@@ -1,7 +1,7 @@
 <?php
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
-include "../include/db.php";
+include "include/db.php";
 
 $booking_id = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
 

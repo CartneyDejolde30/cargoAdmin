@@ -122,6 +122,10 @@
       <i class="bi bi-car-front"></i>
       <span>Car Listing</span>
     </a>
+  <a href="get_motorcycle_admin.php" class="<?= basename($_SERVER['PHP_SELF']) == 'get_motorcycle_admin.php' ? 'active' : '' ?>">
+    <i class="bi bi-motorcycle"></i>
+    <span>Motorcycles</span>
+  </a>
     <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
       <i class="bi bi-person"></i>
       <span>Users Verification</span>
