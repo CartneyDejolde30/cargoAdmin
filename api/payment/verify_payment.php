@@ -2,7 +2,7 @@
 session_start();
 header("Content-Type: application/json");
 
-require_once __DIR__ . "../../../include/db.php";
+require_once __DIR__ . "/../../include/db.php";  // ✅ FIXED PATH
 require_once __DIR__ . "/transaction_logger.php";
 
 $response = ["success" => false, "message" => ""];

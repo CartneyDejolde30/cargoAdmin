@@ -1,9 +1,13 @@
 <?php
+// ✅ CRITICAL: Prevent any output before JSON
+error_reporting(0);
+ini_set('display_errors', 0);
+
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
 
-require_once "../include/db.php";
+require_once __DIR__ . "/../include/db.php";
 
 $response = ["success" => false, "message" => ""];
 
@@ -48,6 +52,15 @@ $check = $conn->prepare("
   FROM bookings 
   WHERE id = ? AND user_id = ?
 ");
+
+if (!$check) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Database error: " . $conn->error
+    ]);
+    exit;
+}
+
 $check->bind_param("ii", $bookingId, $userId);
 $check->execute();
 $result = $check->get_result();
@@ -95,6 +108,11 @@ try {
   ";
 
   $stmt = $conn->prepare($paymentSql);
+  
+  if (!$stmt) {
+    throw new Exception("Failed to prepare payment statement: " . $conn->error);
+  }
+  
   $stmt->bind_param(
     "iidss",
     $bookingId,
@@ -105,13 +123,14 @@ try {
   );
 
   if (!$stmt->execute()) {
-    throw new Exception("Failed to record payment");
+    throw new Exception("Failed to record payment: " . $stmt->error);
   }
 
   $paymentId = $stmt->insert_id;
 
   /* =========================================================
      UPDATE BOOKING WITH PAYMENT INFO
+     ✅ FIXED: Handle varbinary columns properly
      ========================================================= */
   $update = "
     UPDATE bookings
@@ -126,9 +145,18 @@ try {
   ";
 
   $stmt = $conn->prepare($update);
+  
+  if (!$stmt) {
+    throw new Exception("Failed to prepare booking update: " . $conn->error);
+  }
+  
+  // ✅ FIXED: Use 'ssssi' (all strings) instead of 'isssi'
+  // payment_id is varchar(255) in bookings table
+  $paymentIdStr = (string)$paymentId;
+  
   $stmt->bind_param(
-    "isssi",
-    $paymentId,
+    "ssssi",
+    $paymentIdStr,
     $method,
     $gcashNo,
     $refNo,
@@ -136,7 +164,7 @@ try {
   );
 
   if (!$stmt->execute()) {
-    throw new Exception("Failed to update booking");
+    throw new Exception("Failed to update booking: " . $stmt->error);
   }
 
   /* =========================================================
@@ -156,7 +184,7 @@ try {
 
   echo json_encode([
     "success" => false,
-    "message" => "Server error: " . $e->getMessage()
+    "message" => $e->getMessage()
   ]);
 }
 

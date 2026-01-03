@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . 'include/db.php';
+require_once __DIR__ . '/../../include/db.php';  // ✅ FIXED PATH
 
 /**
  * Centralized Transaction Logging System
