@@ -1,6 +1,11 @@
 <?php
+// ========================================
+// api/dashboard/dashboard_stats.php
+// ========================================
 header('Content-Type: application/json');
-require_once '../config.php';
+header('Access-Control-Allow-Origin: *');
+
+require_once '../../include/db.php';
 
 $owner_id = $_GET['owner_id'] ?? null;
 
@@ -9,75 +14,115 @@ if (!$owner_id) {
     exit;
 }
 
-try {
-    // Total Cars
-    $stmt = $conn->prepare("SELECT COUNT(*) as total FROM cars WHERE owner_id = ?");
-    $stmt->execute([$owner_id]);
-    $total_cars = $stmt->fetch()['total'];
+// Get stats
+$stats = [
+    // Cars
+    'total_cars' => 0,
+    'approved_cars' => 0,
+    'pending_cars' => 0,
+    'rented_cars' => 0,
+    
+    // Bookings
+    'total_bookings' => 0,
+    'pending_requests' => 0,
+    'active_bookings' => 0,
+    
+    // Income
+    'total_income' => 0,
+    'monthly_income' => 0,
+    'weekly_income' => 0,
+    'today_income' => 0,
+    
+    // Notifications
+    'unread_notifications' => 0,
+    'unread_messages' => 0
+];
 
-    // Approved Cars
-    $stmt = $conn->prepare("SELECT COUNT(*) as approved FROM cars WHERE owner_id = ? AND status = 'approved'");
-    $stmt->execute([$owner_id]);
-    $approved_cars = $stmt->fetch()['approved'];
+// Total cars
+$sql = "SELECT COUNT(*) as count FROM cars WHERE owner_id = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['total_cars'] = $stmt->get_result()->fetch_assoc()['count'];
 
-    // Pending Cars
-    $stmt = $conn->prepare("SELECT COUNT(*) as pending FROM cars WHERE owner_id = ? AND status = 'pending'");
-    $stmt->execute([$owner_id]);
-    $pending_cars = $stmt->fetch()['pending'];
+// Approved cars
+$sql = "SELECT COUNT(*) as count FROM cars WHERE owner_id = ? AND status = 'approved'";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['approved_cars'] = $stmt->get_result()->fetch_assoc()['count'];
 
-    // Active Bookings
-    $stmt = $conn->prepare("SELECT COUNT(*) as active FROM bookings WHERE owner_id = ? AND status = 'approved'");
-    $stmt->execute([$owner_id]);
-    $active_bookings = $stmt->fetch()['active'];
+// Pending cars
+$sql = "SELECT COUNT(*) as count FROM cars WHERE owner_id = ? AND status = 'pending'";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['pending_cars'] = $stmt->get_result()->fetch_assoc()['count'];
 
-    // Pending Requests
-    $stmt = $conn->prepare("SELECT COUNT(*) as pending FROM bookings WHERE owner_id = ? AND status = 'pending'");
-    $stmt->execute([$owner_id]);
-    $pending_requests = $stmt->fetch()['pending'];
+// Total bookings
+$sql = "SELECT COUNT(*) as count FROM bookings WHERE owner_id = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['total_bookings'] = $stmt->get_result()->fetch_assoc()['count'];
 
-    // Total Income
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE owner_id = ? AND status IN ('approved', 'completed')");
-    $stmt->execute([$owner_id]);
-    $total_income = $stmt->fetch()['total'];
+// Pending requests
+$sql = "SELECT COUNT(*) as count FROM bookings WHERE owner_id = ? AND status = 'pending'";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['pending_requests'] = $stmt->get_result()->fetch_assoc()['count'];
 
-    // Monthly Income
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amount), 0) as monthly FROM bookings WHERE owner_id = ? AND status IN ('approved', 'completed') AND MONTH(created_at) = MONTH(CURRENT_DATE()) AND YEAR(created_at) = YEAR(CURRENT_DATE())");
-    $stmt->execute([$owner_id]);
-    $monthly_income = $stmt->fetch()['monthly'];
+// Active bookings
+$sql = "SELECT COUNT(*) as count FROM bookings 
+        WHERE owner_id = ? AND status = 'approved' 
+        AND pickup_date <= CURDATE() AND return_date >= CURDATE()";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['active_bookings'] = $stmt->get_result()->fetch_assoc()['count'];
 
-    // Weekly Income
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amount), 0) as weekly FROM bookings WHERE owner_id = ? AND status IN ('approved', 'completed') AND YEARWEEK(created_at, 1) = YEARWEEK(CURRENT_DATE(), 1)");
-    $stmt->execute([$owner_id]);
-    $weekly_income = $stmt->fetch()['weekly'];
+// Total income (completed bookings)
+$sql = "SELECT COALESCE(SUM(total_amount), 0) as total 
+        FROM bookings WHERE owner_id = ? AND status = 'completed'";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['total_income'] = floatval($stmt->get_result()->fetch_assoc()['total']);
 
-    // Today Income
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amount), 0) as today FROM bookings WHERE owner_id = ? AND status IN ('approved', 'completed') AND DATE(created_at) = CURRENT_DATE()");
-    $stmt->execute([$owner_id]);
-    $today_income = $stmt->fetch()['today'];
+// Monthly income
+$sql = "SELECT COALESCE(SUM(total_amount), 0) as total 
+        FROM bookings WHERE owner_id = ? AND status = 'completed'
+        AND MONTH(created_at) = MONTH(CURDATE()) 
+        AND YEAR(created_at) = YEAR(CURDATE())";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['monthly_income'] = floatval($stmt->get_result()->fetch_assoc()['total']);
 
-    // Unread Notifications
-    $stmt = $conn->prepare("SELECT COUNT(*) as unread FROM notifications WHERE user_id = ? AND read_status = 'unread'");
-    $stmt->execute([$owner_id]);
-    $unread_notifications = $stmt->fetch()['unread'];
+// Weekly income
+$sql = "SELECT COALESCE(SUM(total_amount), 0) as total 
+        FROM bookings WHERE owner_id = ? AND status = 'completed'
+        AND YEARWEEK(created_at) = YEARWEEK(CURDATE())";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['weekly_income'] = floatval($stmt->get_result()->fetch_assoc()['total']);
 
-    echo json_encode([
-        'success' => true,
-        'stats' => [
-            'total_cars' => $total_cars,
-            'approved_cars' => $approved_cars,
-            'pending_cars' => $pending_cars,
-            'total_bookings' => $active_bookings + $pending_requests,
-            'active_bookings' => $active_bookings,
-            'pending_requests' => $pending_requests,
-            'total_income' => floatval($total_income),
-            'monthly_income' => floatval($monthly_income),
-            'weekly_income' => floatval($weekly_income),
-            'today_income' => floatval($today_income),
-            'unread_notifications' => $unread_notifications,
-            'unread_messages' => 0 // Implement if needed
-        ]
-    ]);
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-}
+// Today income
+$sql = "SELECT COALESCE(SUM(total_amount), 0) as total 
+        FROM bookings WHERE owner_id = ? AND status = 'completed'
+        AND DATE(created_at) = CURDATE()";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $owner_id);
+$stmt->execute();
+$stats['today_income'] = floatval($stmt->get_result()->fetch_assoc()['total']);
+
+echo json_encode([
+    'success' => true,
+    'stats' => $stats
+]);
+
+$stmt->close();
+$conn->close();
 ?>
