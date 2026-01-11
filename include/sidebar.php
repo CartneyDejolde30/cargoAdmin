@@ -120,7 +120,7 @@
     </a>
     <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
       <i class="bi bi-person"></i>
-      <span>Users Verification</span>
+      <span>User Management</span>
     </a>
   </div>
 
