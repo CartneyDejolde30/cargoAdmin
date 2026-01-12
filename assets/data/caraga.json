@@ -1,0 +1,175 @@
+{
+  "Agusan del Norte": {
+    "Butuan City": [
+      "Ambago","Amparo","Antongalon","Aupagan","Baan KM.3",
+      "Baan Riverside","Babag","Bading","Bancasi","Baobo",
+      "Banza","Bilayong","Bonbon","Bugabus","Buenavista",
+      "Cabcabon","Cabcabon Proper","Cabcaban","Camayahan",
+      "Cugman","Dankias","De Oro","Dulag","Gaco",
+      "Golden Ribbon","Holy Redeemer","Imadejas","Jose Rosales",
+      "Kinamlutan","Limaha","Los Angeles","Lumison","Maon",
+      "Maug","Pagatpatan","Pangabugan","Pinamanculan","Salvador Calo",
+      "Sapang","San Ignacio","San Mateo","San Vicente",
+      "Santo Niño","Sumilihon","Tandang Sora","Taguibo","Taligaman",
+      "Tiniwisan","Villa Kananga"
+    ],
+    "Cabadbaran City": [
+      "Agduhao","Anoling","Basa","Bayabas","Cabatuan","Calamba",
+      "Caridad","Comagascas","Concepcion","Curva","Del Pilar",
+      "Del Rosario","Katugasan","La Union","Mahaba","Mahayahay",
+      "Marcelina","Nueva Era","Poblacion 1","Poblacion 2",
+      "Poblacion 3","Poblacion 4","Poblacion 5","Poblacion 6",
+      "Poblacion 7","Poblacion 8"
+    ],
+    "Buenavista": [
+      "Abilan","Alubihid","Bagong Silang","Bonbon","Cadayunan",
+      "Canaway","Consuelo","Crossing","Gun-ob","Magallanes",
+      "Macalang","Malpoc","Manapa","Matabao","Napo","Poblacion"
+    ],
+    "Carmen": [
+      "Antao","Alegre","Amontay","Anonas","Cauracan","Gosoon",
+      "Hinaplanan","Manila de Bugabos","Manoligao","Poblacion","Vergara"
+    ],
+    "Jabonga": [
+      "Bangonay","Colorado","Cuyago","Libas","Magdagooc",
+      "Mahayahay","Poblacion","San Antonio","San Jose"
+    ],
+    "Kitcharao": [
+      "Anticala","Bangbang","Binuangan","Crossing","Ebro",
+      "Hinimbangan","Jagupit","Mahaba","Poblacion","San Roque"
+    ],
+    "Las Nieves": [
+      "Casiklan","Crossing","Lingayao","Malpoc","Maningalao",
+      "Poblacion","San Isidro","Tinucoran"
+    ],
+    "Magallanes": [
+      "Taod-oy","Belo","Sacol","Poblacion","Santa Cruz"
+    ],
+    "Nasipit": [
+      "Awel","Cubay","Kinabjangan","San Isidro","Tinucoran"
+    ],
+    "RS": [
+      "San Vicente","Tagbongabong","Tagburos"
+    ]
+  },
+
+  "Agusan del Sur": {
+    "Bayugan City": [
+      "Marcor","Bucac","Calaitan","Osmeña","Salvacion","Santa Irene","Taglatawan"
+    ],
+    "San Francisco": [
+      "Alegria","Borbon","Ebro","Hubang","Kapatungan","Lapinigan",
+      "Lucac","Mateo","Oriente","Poblacion","Santa Isabel","Tagapua"
+    ],
+    "Bislig": [
+      "Bunawan Brook","Cebulan","Consuelo","Murit","New Visayas","Philippine"
+    ],
+    "Bunawan": [
+      "Imelda","Poblacion","San Teodoro","Santa Lucia"
+    ],
+    "Esperanza": [
+      "Alubijid","Bah-Bah","Guadalupe","Milagros","Sagunto"
+    ],
+    "Prosperidad": [
+      "Awa","Libertad","Patin-ay","San Vicente","Salvacion"
+    ],
+    "Rosario": [
+      "Bayugan 3","Maban-as","Remedios","San Isidro"
+    ],
+    "Trento": [
+      "Cuevas","Lemong","Manat","Poblacion","Sta. Maria"
+    ],
+    "Talacogon": [
+      "Zillovia","San Agustin","Sagaysayan","San Roque"
+    ],
+    "Veruela": [
+      "Cebulan","Sangay","Santa Emilia","Sisom"
+    ]
+  },
+
+  "Surigao del Norte": {
+    "Surigao City": [
+      "Canlanipa","Lipata","Luneta","Magallanes","Mabua","San Juan",
+      "Washington","Taft","Rizal","Sabang","Ipil"
+    ],
+    "Alegria": [
+      "Budlingin","Camp Edward","Gamuton","Poblacion"
+    ],
+    "Bacuag": [
+      "Alegre","Cabugao","Danao","Poblacion","Payapag"
+    ],
+    "Claver": [
+      "Bagakay","Cagdianao","Daywan","Poblacion","Taganito"
+    ],
+    "Dapa": [
+      "Almendras","Bagacay","J.P Laurel","Poblacion","Union"
+    ],
+    "Del Carmen": [
+      "Cancohoy","Halian","Tuburan","Poblacion","San Roque"
+    ],
+    "General Luna": [
+      "Catangnan","Purok 1","Purok 2","Purok 3","Purok 4","Malinao"
+    ],
+    "Mainit": [
+      "Bagong Silang","Magpayang","Poblacion","San Isidro","Siana"
+    ],
+    "Malimono": [
+      "Banbanon","Cañipa","Poblacion","Tinupan","Masgad"
+    ],
+    "Pilar": [
+      "Caridad","Poblacion","San Miguel","Maasin"
+    ],
+    "Placer": [
+      "Anao-aon","Pahimutang","Poblacion","Sandap"
+    ],
+    "San Benito": [
+      "Sta. Cruz","Talisay","Poblacion"
+    ],
+    "San Francisco": [
+      "Balite","Poblacion","San Jose"
+    ],
+    "San Isidro": [
+      "Pacifico","Del Carmen","San Miguel","Buhangin"
+    ],
+    "Sison": [
+      "Ilihan","Poblacion","Tagbayani"
+    ],
+    "Socorro": [
+      "Pamosaingan","Napo","Poblacion","Sudlon"
+    ],
+    "Tagana-an": [
+      "Azucena","Poblacion","Banbanon"
+    ]
+  },
+
+  "Surigao del Sur": {
+    "Tandag City": ["Awasian","San Agustin","Maticdum","Dagocdoc","Telaje"],
+    "Bislig City": ["Mangagoy","San Isidro","Poblacion","Tabon","Sta. Cruz"],
+    "Barobo": ["Wakat","Tambis","Poblacion","San Jose","Gamut"],
+    "Bayabas": ["La Paz","Magobawok","Poblacion"],
+    "Cagwait": ["Aras-asan","Poblacion","San Vicente","Lindoy"],
+    "Cantilan": ["Calagdaan","General Island","Poblacion"],
+    "Carmen": ["Hinapuyan","Poblacion","San Roque"],
+    "Carrascal": ["Adlay","Bacpaco","Poblacion"],
+    "Cortes": ["Matho","Poblacion","San Isidro"],
+    "Hinatuan": ["Cambatong","New Visayas","Poblacion"],
+    "Lanuza": ["Bunga","Pob.1","Pob.2","Zone 3"],
+    "Lianga": ["Banahao","Banaugan","Poblacion"],
+    "Lingig": ["Maharlika","Poblacion","San Roque"],
+    "Madrid": ["Patong","Poblacion","Capandan"],
+    "Marihatag": ["Antipolo","Poblacion","Mahaba"],
+    "San Agustin": ["Poblacion","Buac","Janipaan"],
+    "San Miguel": ["Baroboan","Calatagan","Poblacion"],
+    "Tago": ["Gamut","Unaban","Poblacion"]
+  },
+
+  "Dinagat Islands": {
+    "San Jose": ["Luna","Mahayahay","Poblacion","Santa Cruz"],
+    "Basilisa": ["Ecleo","Magsaysay","New Mabuhay","Poblacion"],
+    "Cagdianao": ["Boa","Legaspi","Poblacion"],
+    "Dinagat": ["Aguada","Poblacion","Don Ruben"],
+    "Libjo": ["Albor","Garcia","Kanihaan"],
+    "Loreto": ["Esperanza","Poblacion","Leonardo"],
+    "Tubajon": ["Malinao","Poblacion","Primavera"]
+  }
+}

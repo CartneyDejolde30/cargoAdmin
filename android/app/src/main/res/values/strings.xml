@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">carGO</string>
+    
+    <!-- ⚠️ REPLACE WITH YOUR FACEBOOK APP ID -->
+    <string name="facebook_app_id">863405453291479</string>
+    
+    <!-- ⚠️ REPLACE WITH YOUR FACEBOOK APP ID -->
+    <string name="fb_login_protocol_scheme">fb863405453291479</string>
+</resources>
