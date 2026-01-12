@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 import '../Renter/widgets/bottom_nav_bar.dart';
 import 'car_list_screen.dart';
 import '../Renter/chats/chat_list_screen.dart';
-import 'car_detail_screen.dart';
+
+import 'motorcycle_detail_screen.dart';
+
 
 class MotorcycleScreen extends StatefulWidget {
   const MotorcycleScreen({super.key});
@@ -376,14 +378,15 @@ class _MotorcycleScreenState extends State<MotorcycleScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => CarDetailScreen(
-              carId: motorcycleId,
-              carName: name,
-              carImage: image,
-              price: price,
-              rating: rating,
-              location: location,
-            ),
+            builder: (_) => MotorcycleDetailScreen(
+            motorcycleId: motorcycleId,
+            motorcycleName: name,
+            motorcycleImage: image,
+            price: price,
+            rating: rating,
+            location: location,
+          ),
+
           ),
         );
       },
@@ -489,14 +492,15 @@ class _MotorcycleScreenState extends State<MotorcycleScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => CarDetailScreen(
-              carId: motorcycleId,
-              carName: name,
-              carImage: image,
-              price: price,
-              rating: 5.0,
-              location: location,
-            ),
+           builder: (_) => MotorcycleDetailScreen(
+            motorcycleId: motorcycleId,
+            motorcycleName: name,
+            motorcycleImage: image,
+            price: price,
+            rating: 5.0,
+            location: location,
+          ),
+
           ),
         );
       },

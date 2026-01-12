@@ -1417,23 +1417,27 @@ Future<void> _submitBookingToServer() async {
     print("📤 Car ID: ${widget.carId}");
     print("📤 Owner ID: ${widget.ownerId}");
     
-    final requestBody = {
-      "user_id": widget.userId!.toString(),
-      "car_id": widget.carId.toString(),
-      "owner_id": widget.ownerId.toString(),
-      "full_name": fullNameController.text.trim(),
-      "email": emailController.text.trim(),
-      "contact": contactController.text.trim(),
-      "pickup_date": DateFormat('yyyy-MM-dd').format(pickupDate!),
-      "return_date": DateFormat('yyyy-MM-dd').format(returnDate!),
-      "pickup_time": pickupTime.format(context),
-      "return_time": returnTime.format(context),
-      "rental_period": selectedPeriod,
-      "needs_delivery": needsDelivery ? "1" : "0",
-      "total_amount": priceBreakdown!.totalAmount.toStringAsFixed(2),
-      "payment_method": "gcash",
-    };
+  final requestBody = {
+  "user_id": widget.userId!.toString(),
+  "owner_id": widget.ownerId.toString(),
+  "full_name": fullNameController.text.trim(),
+  "email": emailController.text.trim(),
+  "contact": contactController.text.trim(),
+  "pickup_date": DateFormat('yyyy-MM-dd').format(pickupDate!),
+  "return_date": DateFormat('yyyy-MM-dd').format(returnDate!),
+  "pickup_time": pickupTime.format(context),
+  "return_time": returnTime.format(context),
+  "rental_period": selectedPeriod,
+  "needs_delivery": needsDelivery ? "1" : "0",
+  "total_amount": priceBreakdown!.totalAmount.toStringAsFixed(2),
+  "payment_method": "gcash",
+};
 
+if (ModalRoute.of(context)!.settings.name == 'motorcycle') {
+  requestBody["motorcycle_id"] = widget.carId.toString();
+} else {
+  requestBody["car_id"] = widget.carId.toString();
+}
     print("📤 Request body: $requestBody");
 
     final response = await http.post(

@@ -12,30 +12,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../Renter/host/host_profile_screen.dart';
 import 'package:flutter_application_1/USERS-UI/Owner/verification/personal_info_screen.dart';
 import 'package:flutter_application_1/USERS-UI/Reporting/report_screen.dart';
+import 'package:flutter_application_1/USERS-UI/Renter/bookings/motorcycle_booking_screen.dart';
 
-class CarDetailScreen extends StatefulWidget {
-  final int carId;
-  final String carName;
-  final String carImage;
+
+class MotorcycleDetailScreen extends StatefulWidget {
+  final int motorcycleId;
+  final String motorcycleName;
+  final String motorcycleImage;
   final String price;
   final double rating;
   final String location;
 
-  const CarDetailScreen({
+  const MotorcycleDetailScreen({
     super.key,
-    required this.carId,
-    required this.carName,
-    required this.carImage,
+    required this.motorcycleId,
+    required this.motorcycleName,
+    required this.motorcycleImage,
     required this.price,
     required this.rating,
     required this.location,
   });
 
   @override
-  State<CarDetailScreen> createState() => _CarDetailScreenState();
+  State<MotorcycleDetailScreen> createState() =>
+      _MotorcycleDetailScreenState();
 }
 
-class _CarDetailScreenState extends State<CarDetailScreen> {
+class _MotorcycleDetailScreenState
+    extends State<MotorcycleDetailScreen> {
   bool loading = true;
   Map<String, dynamic>? motorcycleData;
   List<dynamic> reviews = [];
@@ -101,9 +105,10 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
     }
   }
 
-  Future<void> fetchCarDetails() async {
+  Future<void> fetchMotorcycleDetails() async {
   final url = Uri.parse(
-    "${baseUrl}api/get_car_details.php?id=${widget.carId}",
+    "${baseUrl}api/get_motorcycle_details.php?id=${widget.motorcycleId}",
+
   );
 
   print("🌐 REQUEST URL: $url"); // 🔥 ADD THIS
@@ -121,7 +126,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
 
     if (result["status"] == "success") {
       setState(() {
-        motorcycleData = result["car"];
+        motorcycleData = result["motorcycle"];
         reviews = result["reviews"] ?? [];
         loading = false;
       });
@@ -190,10 +195,13 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
   }
 
   // ⭐ NEW METHOD ADDED
-  Future<bool> _checkIfUserBookedCar(String userId) async {
+  Future<bool> _checkIfUserBookedMotorcycle(String userId) async {
     try {
       final response = await http.get(
-        Uri.parse("${baseUrl}api/check_user_booking.php?user_id=$userId&car_id=${widget.carId}"),
+        Uri.parse(
+  "${baseUrl}api/check_user_booking.php?user_id=$userId&car_id=${widget.motorcycleId}",
+),
+
       );
       
       if (response.statusCode == 200) {
@@ -210,9 +218,12 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
   @override
   void initState() {
     super.initState();
-     print("🚗 carId passed: ${widget.carId}");
+     print("🏍️ motorcycleId passed: ${widget.motorcycleId}");
+
+
     _checkVerificationStatus();
-    fetchCarDetails();
+    fetchMotorcycleDetails();
+    
   }
 
   @override
@@ -227,24 +238,33 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
     final ownerImage = formatImage(motorcycleData?["owner_image"] ?? "");
     final ownerName = motorcycleData?["owner_name"] ?? "Unknown Owner";
     final phone = motorcycleData?["phone"] ?? "";
-    final price = motorcycleData?["price_per_day"] ?? widget.price;
+    final price = motorcycleData?["price_per_day"]?.toString() ?? widget.price;
+
     final location = motorcycleData?["location"]?.toString().trim().isNotEmpty == true
     ? motorcycleData!["location"]
     : "Location not set";
+    final engineSize = motorcycleData?["engine_displacement"]?.toString() ?? "N/A";
+    final bodyStyle = motorcycleData?["body_style"] ?? "Standard";
+    final transmission = motorcycleData?["transmission_type"] ?? "Manual";
 
     final description = motorcycleData?["description"] ?? "No description available";
+
     final features = motorcycleData?["features"] != null
-        ? List<String>.from(jsonDecode(motorcycleData!["features"]))
-        : <String>[];
-    final rules = motorcycleData?["rules"] != null
-        ? List<String>.from(jsonDecode(motorcycleData!["rules"]))
-        : <String>[];
-    final seats = motorcycleData?["seat"] ?? 4;
-    final deliveryTypes = motorcycleData?["delivery_types"] != null
-        ? List<String>.from(jsonDecode(motorcycleData!["delivery_types"]))
-        : <String>[];
-    final transmission = motorcycleData?["transmission"] ?? "Automatic";
-    final fuelType = motorcycleData?["fuel_type"] ?? "Gasoline";
+    ? List<String>.from(motorcycleData!["features"])
+    : <String>[];
+
+final rules = motorcycleData?["rules"] != null
+    ? List<String>.from(motorcycleData!["rules"])
+    : <String>[];
+
+final deliveryTypes = motorcycleData?["delivery_types"] != null
+    ? List<String>.from(motorcycleData!["delivery_types"])
+    : <String>[];
+
+final extraImages = motorcycleData?["extra_images"] != null
+    ? List<String>.from(motorcycleData!["extra_images"])
+    : <String>[];
+
     final minTripDuration = motorcycleData?["min_trip_duration"] ?? "1";
     final maxTripDuration = motorcycleData?["max_trip_duration"] ?? "7";
     final advanceNotice = motorcycleData?["advance_notice"] ?? "1 hour";
@@ -319,9 +339,9 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ReportScreen(
-                                  reportType: 'car',
-                                  reportedId: widget.carId.toString(),
-                                  reportedName: widget.carName,
+                                  reportType: 'motorcycle',
+                                  reportedId: widget.motorcycleId.toString(),
+                                  reportedName: widget.motorcycleName,
                                 ),
                               ),
                             );
@@ -355,7 +375,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.carName,
+                          widget.motorcycleName,
                           style: GoogleFonts.poppins(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -415,11 +435,10 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                           ),
                           child: Column(
                             children: [
-                              _buildSpecRow(Icons.event_seat, "Seats", "$seats Seater"),
-                              const Divider(height: 24),
+                              _buildSpecRow(Icons.speed, "Engine", "$engineSize cc"),
+                              _buildSpecRow(Icons.category, "Body Style", bodyStyle),
                               _buildSpecRow(Icons.settings, "Transmission", transmission),
-                              const Divider(height: 24),
-                              _buildSpecRow(Icons.local_gas_station, "Fuel Type", fuelType),
+
                             ],
                           ),
                         ),
@@ -663,7 +682,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Car Owner",
+                          "Motor Cycle Owner",
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -744,8 +763,8 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => ReviewsScreen(
-                                    carId: widget.carId,
-                                    carName: widget.carName,
+                                    carId: widget.motorcycleId,
+                                    carName: widget.motorcycleName,
                                     totalReviews: reviews.length,
                                     averageRating: widget.rating,
                                   ),
@@ -787,7 +806,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                         }
                         
                         // Check if user has booked this car
-                        final hasBooked = await _checkIfUserBookedCar(userId);
+                        final hasBooked = await _checkIfUserBookedMotorcycle(userId);
                         
                         if (!hasBooked) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -806,9 +825,9 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                           MaterialPageRoute(
                             builder: (_) => SubmitReviewScreen(
                               bookingId: '', // Not tied to specific booking
-                              carId: widget.carId.toString(),
-                              carName: widget.carName,
-                              carImage: widget.carImage,
+                              carId: widget.motorcycleId.toString(),
+                              carName: widget.motorcycleName,
+                              carImage: widget.motorcycleImage,
                               ownerId: motorcycleData?["owner_id"].toString() ?? "",
                               ownerName: motorcycleData?["owner_name"] ?? "Unknown",
                               ownerImage: motorcycleData?["owner_image"] ?? "",
@@ -816,7 +835,8 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                           ),
                         ).then((result) {
                           if (result == true) {
-                            fetchCarDetails(); // Refresh to show new review
+                            fetchMotorcycleDetails();
+ // Refresh to show new review
                           }
                         });
                       },
@@ -901,25 +921,32 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                             ? () async {
                                 final userData = await _getUserData();  
 
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => BookingScreen(
-                                      carId: widget.carId,
-                                      carName: widget.carName,
-                                      carImage: widget.carImage,
-                                      pricePerDay: price,
-                                      location: location,
-                                      ownerId: motorcycleData?["owner_id"].toString() ?? "",
-                                      userId: userData['userId'],                
-                                      userFullName: userData['fullName'],         
-                                      userEmail: userData['email'],               
-                                      userMunicipality: userData['municipality'], 
-                                      ownerLatitude: double.tryParse(motorcycleData?["latitude"]?.toString() ?? ""),
-                                      ownerLongitude: double.tryParse(motorcycleData?["longitude"]?.toString() ?? ""),     
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  settings: const RouteSettings(name: 'motorcycle'),
+                                  builder: (_) => MotorcycleBookingScreen(
+                                    motorcycleId: widget.motorcycleId,
+                                    motorcycleName: widget.motorcycleName,
+                                    motorcycleImage: widget.motorcycleImage,
+                                    pricePerDay: price,
+                                    location: location,
+                                    ownerId: motorcycleData?["owner_id"]?.toString() ?? "",
+                                    userId: userData['userId'],
+                                    userFullName: userData['fullName'],
+                                    userEmail: userData['email'],
+                                    userContact: userData['contact'],
+                                    userMunicipality: userData['municipality'],
+                                    ownerLatitude: double.tryParse(
+                                      motorcycleData?["latitude"]?.toString() ?? "",
+                                    ),
+                                    ownerLongitude: double.tryParse(
+                                      motorcycleData?["longitude"]?.toString() ?? "",
                                     ),
                                   ),
-                                );
+                                ),
+                              );
+
                               }
                             : () {
                                 _showVerificationRequiredDialog();
@@ -958,7 +985,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                             Text(
                               isCheckingVerification 
                                   ? "Checking..."
-                                  : (isVerified ? "Book Car" : "Verification Required"),
+                                  : (isVerified ? "Book Motorcycle" : "Verification Required"),
                               style: GoogleFonts.poppins(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -996,30 +1023,42 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
   }
 
   IconData _getFeatureIcon(String featureName) {
-    final featureIcons = {
-      'AUX input': Icons.audiotrack,
-      'All-wheel drive': Icons.all_inclusive,
-      'Android auto': Icons.android,
-      'Apple Carplay': Icons.apple,
-      'Autosweep': Icons.toll,
-      'Backup camera': Icons.videocam,
-      'Bike rack': Icons.directions_bike,
-      'Blind spot warning': Icons.warning,
-      'Bluetooth': Icons.bluetooth,
-      'Child seat': Icons.child_care,
-      'Convertible': Icons.directions_car,
-      'Easytrip': Icons.credit_card,
-      'GPS': Icons.gps_fixed,
-      'Keyless entry': Icons.vpn_key,
-      'Pet-friendly': Icons.pets,
-      'Sunroof': Icons.wb_sunny,
-      'USB Charger': Icons.usb,
-      'USB input': Icons.cable,
-      'Wheelchair accessible': Icons.accessible,
-    };
-    
-    return featureIcons[featureName] ?? Icons.check_circle;
-  }
+  final name = featureName.toLowerCase();
+
+  // Motorcycle-specific features
+  if (name.contains('abs')) return Icons.security;
+  if (name.contains('disc brake')) return Icons.stop_circle;
+  if (name.contains('drum brake')) return Icons.circle;
+  if (name.contains('electric start')) return Icons.flash_on;
+  if (name.contains('kick start')) return Icons.directions_run;
+  if (name.contains('fuel injection')) return Icons.local_gas_station;
+  if (name.contains('carburetor')) return Icons.settings;
+  if (name.contains('digital meter')) return Icons.speed;
+  if (name.contains('analog meter')) return Icons.speed_outlined;
+  if (name.contains('led')) return Icons.lightbulb;
+  if (name.contains('halogen')) return Icons.lightbulb_outline;
+  if (name.contains('alloy wheel')) return Icons.album;
+  if (name.contains('spoke wheel')) return Icons.radio_button_unchecked;
+  if (name.contains('top box')) return Icons.inventory_2;
+  if (name.contains('side mirror')) return Icons.visibility;
+  if (name.contains('crash guard')) return Icons.shield;
+  if (name.contains('anti theft')) return Icons.lock;
+  if (name.contains('usb charger')) return Icons.usb;
+  if (name.contains('gps')) return Icons.gps_fixed;
+
+  // Riding & comfort
+  if (name.contains('comfortable seat')) return Icons.event_seat;
+  if (name.contains('windshield')) return Icons.air;
+  if (name.contains('heated grips')) return Icons.wb_sunny;
+
+  // Documents / legality
+  if (name.contains('registered')) return Icons.assignment_turned_in;
+  if (name.contains('insured')) return Icons.verified;
+
+  // Default fallback
+  return Icons.check_circle;
+}
+
 
   Widget _buildSpecRow(IconData icon, String label, String value) {
     return Row(
@@ -1162,7 +1201,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
           children: [
             Text(
               verificationMessage.isEmpty
-                  ? 'You need to verify your account before booking a car.'
+                  ? 'You need to verify your account before booking a Motorcycle.'
                   : verificationMessage,
               style: GoogleFonts.poppins(fontSize: 14, height: 1.5),
             ),
