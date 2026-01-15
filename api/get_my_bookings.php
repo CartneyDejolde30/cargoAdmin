@@ -79,7 +79,7 @@ while ($row = mysqli_fetch_assoc($result)) {
     // Format car image URL
     $carImage = $row['carImage'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://192.168.1.11/carGOAdmin/' . $carImage;
+        $carImage = 'http://10.244.29.49/carGOAdmin/' . $carImage;
     }
     
     // Format dates

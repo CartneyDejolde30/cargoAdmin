@@ -129,7 +129,7 @@ function generateReceipt($bookingId, $conn = null) {
             return [
                 'success' => true,
                 'receipt_path' => $receiptPath,
-                'receipt_url' => 'http://192.168.1.11/carGOAdmin/' . $receiptPath,
+                'receipt_url' => 'http://10.244.29.49/carGOAdmin/' . $receiptPath,
                 'receipt_no' => $receiptNo
             ];
         } else {

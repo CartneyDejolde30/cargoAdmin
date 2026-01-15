@@ -56,7 +56,7 @@ while ($row = $result->fetch_assoc()) {
     
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://192.168.1.110/carGOAdmin/' . $carImage;
+        $carImage = 'http://10.244.29.490/carGOAdmin/' . $carImage;
     }
     
     // Calculate rental days
