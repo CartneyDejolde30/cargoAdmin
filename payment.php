@@ -16,14 +16,14 @@ $escrowed = mysqli_fetch_assoc(mysqli_query($conn,
     "SELECT SUM(amount) AS total FROM payments WHERE payment_status='verified'"
 ))['total'] ?? 0;
 
-// Pending payouts (same as escrow held)
+// Pending payouts (escrow released but payout not completed)
 $pendingPayouts = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COUNT(*) AS c FROM payments WHERE payment_status='verified'"
+    "SELECT COUNT(*) AS c FROM bookings WHERE escrow_status='released_to_owner' AND payout_status='pending'"
 ))['c'];
 
 // Completed payouts
 $completedPayouts = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT SUM(amount) AS total FROM payments WHERE payment_status='released'"
+    "SELECT SUM(owner_payout) AS total FROM bookings WHERE payout_status='completed'"
 ))['total'] ?? 0;
 
 /* =========================================================
@@ -52,7 +52,7 @@ if ($statusFilter !== "" && $statusFilter !== "all") {
 }
 
 /* =========================================================
-   MAIN QUERY
+   MAIN QUERY - FIXED WITH MOTORCYCLE SUPPORT
    ========================================================= */
 $sql = "SELECT 
     /* ================= PAYMENTS ================= */
@@ -72,6 +72,7 @@ $sql = "SELECT
     b.payout_status,
     b.pickup_date,
     b.return_date,
+    b.vehicle_type,
 
     /* ================= USERS ================= */
     u1.id AS renter_id,
@@ -82,27 +83,39 @@ $sql = "SELECT
     u2.fullname AS owner_name,
     u2.email AS owner_email,
 
-    /* ================= CARS ================= */
-    c.brand,
-    c.model,
-    c.car_year,
-    c.plate_number
+    /* ================= VEHICLE (CAR OR MOTORCYCLE) ================= */
+    COALESCE(c.brand, m.brand) AS brand,
+    COALESCE(c.model, m.model) AS model,
+    COALESCE(c.car_year, m.motorcycle_year) AS car_year,
+    COALESCE(c.plate_number, m.plate_number) AS plate_number
 
 FROM payments p
 JOIN bookings b ON p.booking_id = b.id
 JOIN users u1 ON p.user_id = u1.id
 JOIN users u2 ON b.owner_id = u2.id
-JOIN cars c ON b.car_id = c.id
+
+-- Support both cars and motorcycles
+LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+
 $where
 ORDER BY p.created_at DESC
 LIMIT $limit OFFSET $offset";
 
 $result = mysqli_query($conn, $sql);
 
+if (!$result) {
+    die("SQL ERROR: " . mysqli_error($conn));
+}
+
 /* =========================================================
    COUNT FOR PAGINATION
    ========================================================= */
-$countSql = "SELECT COUNT(*) AS total FROM payments p $where";
+$countSql = "SELECT COUNT(*) AS total 
+FROM payments p 
+JOIN bookings b ON p.booking_id = b.id
+$where";
+
 $countRes = mysqli_query($conn, $countSql);
 $totalRows = mysqli_fetch_assoc($countRes)['total'];
 $totalPages = max(1, ceil($totalRows / $limit));
@@ -518,13 +531,13 @@ $totalPages = max(1, ceil($totalRows / $limit));
       color: white;
     }
 
-    .modern-badge.escrow {
+    .modern-badge.held {
       background: #fafafa;
       color: #000;
       border: 1px solid #e5e5e5;
     }
 
-    .modern-badge.payout-pending {
+    .modern-badge.released_to_owner {
       background: #f5f5f5;
       color: #666;
       border: 1px dashed #ccc;
@@ -546,10 +559,12 @@ $totalPages = max(1, ceil($totalRows / $limit));
     .payment-actions-modern {
       display: flex;
       gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
     .action-btn-modern {
       flex: 1;
+      min-width: 140px;
       padding: 0.75rem;
       border: 1px solid #e5e5e5;
       border-radius: 8px;
@@ -732,9 +747,18 @@ $totalPages = max(1, ceil($totalRows / $limit));
       background: #fafafa;
     }
 
+    .modern-alert.error {
+      background: #fee;
+      border-color: #fcc;
+    }
+
     .modern-alert i {
       font-size: 1.25rem;
       color: #666;
+    }
+
+    .modern-alert.error i {
+      color: #c00;
     }
 
     .modern-alert-content {
@@ -746,6 +770,10 @@ $totalPages = max(1, ceil($totalRows / $limit));
       color: #000;
       margin-bottom: 0.25rem;
       font-size: 0.9375rem;
+    }
+
+    .modern-alert.error .modern-alert-title {
+      color: #c00;
     }
 
     .modern-alert-text {
@@ -1007,11 +1035,11 @@ $totalPages = max(1, ceil($totalRows / $limit));
         </button>
         <button class="modern-tab <?= $statusFilter === 'verified' ? 'active' : '' ?>" onclick="filterPayments('verified')">
           Verified
-          <span class="tab-count"><?= $pendingPayouts ?></span>
+          <span class="tab-count"><?= mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM payments WHERE payment_status='verified'"))['c'] ?></span>
         </button>
-        <button class="modern-tab <?= $statusFilter === 'released' ? 'active' : '' ?>" onclick="filterPayments('released')">
+        <button class="modern-tab" onclick="filterPayments('released')">
           Released
-          <span class="tab-count">0</span>
+          <span class="tab-count"><?= mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM payments WHERE payment_status='released'"))['c'] ?></span>
         </button>
       </div>
 
@@ -1023,6 +1051,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
         while ($row = mysqli_fetch_assoc($result)): 
           $paymentId = "#PAY-" . str_pad($row['id'], 4, "0", STR_PAD_LEFT);
           $bookingId = "#BK-" . str_pad($row['booking_id'], 4, "0", STR_PAD_LEFT);
+          $vehicleType = ucfirst($row['vehicle_type'] ?? 'car');
           $carName = $row['brand'] . " " . $row['model'] . " " . $row['car_year'];
         ?>
         <div class="modern-payment-card">
@@ -1030,7 +1059,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
             <div class="payment-id-section">
               <div class="payment-id-modern"><?= $paymentId ?></div>
               <div class="payment-meta"><?= $row['renter_name'] ?></div>
-              <div class="payment-meta"><?= $carName ?></div>
+              <div class="payment-meta"><?= $carName ?> <small>(<?= $vehicleType ?>)</small></div>
             </div>
             <div class="payment-amount-section">
               <div class="payment-amount-modern">₱<?= number_format($row['amount'], 2) ?></div>
@@ -1083,14 +1112,28 @@ $totalPages = max(1, ceil($totalRows / $limit));
             </span>
 
             <?php if ($row['escrow_status']): ?>
-            <span class="modern-badge escrow">
-              🔒 <?= ucfirst($row['escrow_status']) ?>
+            <span class="modern-badge <?= $row['escrow_status'] ?>">
+              <?php if ($row['escrow_status'] === 'held'): ?>
+                🔒 Escrow Held
+              <?php elseif ($row['escrow_status'] === 'released_to_owner'): ?>
+                🔓 Released to Owner
+              <?php else: ?>
+                <?= ucfirst(str_replace('_', ' ', $row['escrow_status'])) ?>
+              <?php endif; ?>
             </span>
             <?php endif; ?>
 
             <?php if ($row['payout_status']): ?>
-            <span class="modern-badge payout-pending">
-              ⏳ Payout: <?= ucfirst($row['payout_status']) ?>
+            <span class="modern-badge <?= $row['payout_status'] ?>">
+              <?php if ($row['payout_status'] === 'pending'): ?>
+                ⏳ Payout Pending
+              <?php elseif ($row['payout_status'] === 'processing'): ?>
+                🔄 Processing
+              <?php elseif ($row['payout_status'] === 'completed'): ?>
+                ✅ Payout Completed
+              <?php else: ?>
+                <?= ucfirst($row['payout_status']) ?>
+              <?php endif; ?>
             </span>
             <?php endif; ?>
           </div>
@@ -1112,14 +1155,28 @@ $totalPages = max(1, ceil($totalRows / $limit));
             </button>
             <?php endif; ?>
 
-            <?php if ($row['payment_status'] === 'verified' && $row['booking_status'] === 'completed' && !$row['payout_status']): ?>
+            <?php 
+            // Show Release Escrow button when:
+            // - Payment is verified
+            // - Escrow is held
+            // - Booking is completed
+            if ($row['payment_status'] === 'verified' && 
+                $row['escrow_status'] === 'held' && 
+                $row['booking_status'] === 'completed'): 
+            ?>
             <button class="action-btn-modern primary" onclick="releaseEscrow(<?= $row['booking_id'] ?>)">
               <i class="bi bi-unlock"></i>
               Release Escrow
             </button>
             <?php endif; ?>
 
-            <?php if ($row['payout_status'] === 'pending'): ?>
+            <?php 
+            // Show Complete Payout button when:
+            // - Escrow is released to owner
+            // - Payout status is pending
+            if ($row['escrow_status'] === 'released_to_owner' && 
+                $row['payout_status'] === 'pending'): 
+            ?>
             <button class="action-btn-modern primary" onclick='completePayout(<?= $row['booking_id'] ?>)'>
               <i class="bi bi-cash-coin"></i>
               Complete Payout
@@ -1176,7 +1233,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
   </div>
 </div>
 
-<!-- Payout Modal -->
+<!-- Payout Modal - IMPROVED WITH ERROR HANDLING -->
 <div class="modern-modal" id="payoutModal">
   <div class="modern-modal-content">
     <div class="modern-modal-header">
@@ -1184,6 +1241,15 @@ $totalPages = max(1, ceil($totalRows / $limit));
       <button class="modern-modal-close" onclick="closePayoutModal()">×</button>
     </div>
     <div class="modern-modal-body">
+      <!-- Error Alert (hidden by default) -->
+      <div id="payoutError" class="modern-alert error" style="display: none;">
+        <i class="bi bi-exclamation-circle"></i>
+        <div class="modern-alert-content">
+          <div class="modern-alert-title">Error</div>
+          <p class="modern-alert-text" id="payoutErrorMessage"></p>
+        </div>
+      </div>
+
       <div class="modern-alert">
         <i class="bi bi-exclamation-triangle"></i>
         <div class="modern-alert-content">
@@ -1203,11 +1269,14 @@ $totalPages = max(1, ceil($totalRows / $limit));
         <div class="modern-form-group">
           <label class="modern-form-label">Transfer Proof (Optional)</label>
           <input type="file" class="modern-form-control" id="payout_proof" name="proof" accept="image/*">
+          <small style="color: #999; font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+            Upload screenshot of the transfer confirmation
+          </small>
         </div>
 
         <div class="modern-modal-actions">
           <button type="button" class="modern-btn modern-btn-secondary" onclick="closePayoutModal()">Cancel</button>
-          <button type="submit" class="modern-btn modern-btn-primary">
+          <button type="submit" class="modern-btn modern-btn-primary" id="payoutSubmitBtn">
             <i class="bi bi-check-circle"></i>
             Complete Payout
           </button>
@@ -1227,8 +1296,8 @@ function viewPaymentDetails(payment) {
     const modal = document.getElementById('paymentModal');
     const modalBody = document.getElementById('modalBody');
     
-    const escrowBadge = payment.escrow_status ? `<span class="modern-badge escrow">🔒 ${payment.escrow_status}</span>` : '';
-    const payoutBadge = payment.payout_status ? `<span class="modern-badge payout-pending">⏳ ${payment.payout_status}</span>` : '';
+    const escrowBadge = payment.escrow_status ? `<span class="modern-badge ${payment.escrow_status}">${payment.escrow_status === 'held' ? '🔒 Escrow Held' : (payment.escrow_status === 'released_to_owner' ? '🔓 Released to Owner' : payment.escrow_status)}</span>` : '';
+    const payoutBadge = payment.payout_status ? `<span class="modern-badge ${payment.payout_status}">${payment.payout_status === 'pending' ? '⏳ Payout Pending' : (payment.payout_status === 'completed' ? '✅ Completed' : payment.payout_status)}</span>` : '';
     
     modalBody.innerHTML = `
       <div class="modal-section-modern">
@@ -1324,32 +1393,72 @@ function closeModal() {
 
 function completePayout(bookingId) {
     document.getElementById('payout_booking_id').value = bookingId;
+    document.getElementById('payoutError').style.display = 'none';
     document.getElementById('payoutModal').classList.add('active');
 }
 
 function closePayoutModal() {
     document.getElementById('payoutModal').classList.remove('active');
     document.getElementById('payoutForm').reset();
+    document.getElementById('payoutError').style.display = 'none';
 }
 
 function submitPayout(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
+    const submitBtn = document.getElementById('payoutSubmitBtn');
+    const errorDiv = document.getElementById('payoutError');
+    const errorMsg = document.getElementById('payoutErrorMessage');
+    
+    // Hide previous errors
+    errorDiv.style.display = 'none';
+    
+    // Disable submit button
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
     
     fetch('api/payment/complete_payout.php', {
         method: 'POST',
         body: formData
     })
-    .then(r => r.json())
+    .then(response => {
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            // Log the actual response for debugging
+            return response.text().then(text => {
+                console.error('Non-JSON response:', text);
+                throw new Error("Server returned an error. Check browser console for details.");
+            });
+        }
+        return response.json();
+    })
     .then(data => {
-        alert(data.message);
         if (data.success) {
+            alert('✅ ' + data.message);
             closePayoutModal();
             location.reload();
+        } else {
+            // Show error in modal
+            errorMsg.textContent = data.message;
+            errorDiv.style.display = 'flex';
+            
+            // Re-enable button
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Complete Payout';
         }
     })
-    .catch(err => alert('Error: ' + err));
+    .catch(err => {
+        console.error('Error:', err);
+        
+        // Show error in modal
+        errorMsg.textContent = err.message;
+        errorDiv.style.display = 'flex';
+        
+        // Re-enable button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Complete Payout';
+    });
 }
 
 function verifyPayment(paymentId, action) {
@@ -1372,7 +1481,10 @@ function verifyPayment(paymentId, action) {
         alert(data.message);
         if (data.success) location.reload();
     })
-    .catch(err => alert('Error: ' + err));
+    .catch(err => {
+        console.error('Error:', err);
+        alert('Error: ' + err.message);
+    });
 }
 
 function releaseEscrow(bookingId) {
@@ -1390,7 +1502,10 @@ function releaseEscrow(bookingId) {
         alert(data.message);
         if (data.success) location.reload();
     })
-    .catch(err => alert('Error: ' + err));
+    .catch(err => {
+        console.error('Error:', err);
+        alert('Error: ' + err.message);
+    });
 }
 
 // Close modal when clicking outside

@@ -52,7 +52,7 @@ if ($password === $row["password"]) {
         "address" => $row["address"] ?? "",
         "role" => $row["role"],
         "profile_image" => !empty($row["profile_image"])
-    ? "http://10.139.150.2/carGOAdmin/uploads/profile_images/" . $row["profile_image"]
+    ? "http://10.244.29.49/carGOAdmin/uploads/profile_images/" . $row["profile_image"]
     : ""
 
     ]);
