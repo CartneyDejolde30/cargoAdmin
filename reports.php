@@ -2,71 +2,119 @@
 session_start();
 require_once 'include/db.php';
 
-// Check admin authentication
+// ---------------------------
+// AUTH CHECK
+// ---------------------------
 if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
 
-// Get filter parameters
-$filterType = isset($_GET['type']) ? $_GET['type'] : 'all';
-$filterStatus = isset($_GET['status']) ? $_GET['status'] : 'all';
-$search = isset($_GET['search']) ? $_GET['search'] : '';
+// ---------------------------
+// FILTERS
+// ---------------------------
+$filterType   = $_GET['type'] ?? 'all';
+$filterStatus = $_GET['status'] ?? 'all';
+$search       = $_GET['search'] ?? '';
 
-// Build query
+// Escape inputs
+$filterType   = mysqli_real_escape_string($conn, $filterType);
+$filterStatus = mysqli_real_escape_string($conn, $filterStatus);
+$searchEsc    = mysqli_real_escape_string($conn, $search);
+
+// ---------------------------
+// MAIN QUERY
+// ---------------------------
 $query = "
-    SELECT 
-        r.*,
-        reporter.fullname as reporter_name,
-        reporter.email as reporter_email,
-        admin.fullname as reviewer_name,
-        CASE 
-            WHEN r.report_type = 'car' THEN (SELECT CONCAT(brand, ' ', model) FROM cars WHERE id = r.reported_id)
-            WHEN r.report_type = 'user' THEN (SELECT fullname FROM users WHERE id = r.reported_id)
-            WHEN r.report_type = 'booking' THEN CONCAT('Booking #', r.reported_id)
-            WHEN r.report_type = 'chat' THEN CONCAT('Chat #', r.reported_id)
-        END as reported_item_name
-    FROM reports r
-    LEFT JOIN users reporter ON r.reporter_id = reporter.id
-    LEFT JOIN admin ON r.reviewed_by = admin.id
-    WHERE 1=1
+SELECT 
+    r.*,
+    COALESCE(reporter.fullname, 'Unknown') AS reporter_name,
+
+    COALESCE(reporter.email, 'N/A') AS reporter_email,
+
+    admin.fullname AS reviewer_name,
+
+    CASE 
+        WHEN r.report_type = 'car' THEN 
+            (SELECT CONCAT(brand, ' ', model) FROM cars WHERE id = r.reported_id)
+
+        WHEN r.report_type = 'motorcycle' THEN 
+            (SELECT CONCAT(brand, ' ', model) FROM motorcycles WHERE id = r.reported_id)
+
+        WHEN r.report_type = 'user' THEN 
+            (SELECT fullname FROM users WHERE id = r.reported_id)
+
+        WHEN r.report_type = 'booking' THEN 
+            CONCAT('Booking #', r.reported_id)
+
+        WHEN r.report_type = 'chat' THEN 
+            CONCAT('Chat #', r.reported_id)
+
+        ELSE 'Unknown'
+    END AS reported_item_name
+
+FROM reports r
+LEFT JOIN users reporter ON r.reporter_id = reporter.id
+LEFT JOIN admin ON r.reviewed_by = admin.id
+WHERE 1=1
 ";
 
+// ---------------------------
+// APPLY FILTERS
+// ---------------------------
 if ($filterType !== 'all') {
-    $query .= " AND r.report_type = '" . mysqli_real_escape_string($conn, $filterType) . "'";
+    $query .= " AND r.report_type = '$filterType' ";
 }
 
 if ($filterStatus !== 'all') {
-    $query .= " AND r.status = '" . mysqli_real_escape_string($conn, $filterStatus) . "'";
+    $query .= " AND r.status = '$filterStatus' ";
 }
 
-if (!empty($search)) {
-    $search = mysqli_real_escape_string($conn, $search);
-    $query .= " AND (reporter.fullname LIKE '%$search%' OR r.reason LIKE '%$search%' OR r.details LIKE '%$search%')";
+if (!empty($searchEsc)) {
+    $query .= "
+        AND (
+            reporter.fullname LIKE '%$searchEsc%' OR
+            r.reason LIKE '%$searchEsc%' OR
+            r.details LIKE '%$searchEsc%'
+        )
+    ";
 }
 
+// ---------------------------
 $query .= " ORDER BY r.created_at DESC LIMIT 50";
 
+$result = mysqli_query($conn, $query);
 
-$result = $conn->query($query);
+if (!$result) {
+    die("SQL ERROR: " . mysqli_error($conn));
+}
 
-// Get statistics
+// ---------------------------
+// STATS QUERY
+// ---------------------------
 $statsQuery = "
-    SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
-        SUM(CASE WHEN status = 'dismissed' THEN 1 ELSE 0 END) as dismissed,
-        SUM(CASE WHEN report_type = 'car' THEN 1 ELSE 0 END) as car_reports,
-        SUM(CASE WHEN report_type = 'user' THEN 1 ELSE 0 END) as user_reports,
-        SUM(CASE WHEN report_type = 'booking' THEN 1 ELSE 0 END) as booking_reports,
-        SUM(CASE WHEN report_type = 'chat' THEN 1 ELSE 0 END) as chat_reports
-    FROM reports
+SELECT 
+    COUNT(*) AS total,
+
+    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+    SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) AS under_review,
+    SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
+    SUM(CASE WHEN status = 'dismissed' THEN 1 ELSE 0 END) AS dismissed,
+
+    SUM(CASE WHEN report_type = 'car' THEN 1 ELSE 0 END) AS car_reports,
+    SUM(CASE WHEN report_type = 'motorcycle' THEN 1 ELSE 0 END) AS motorcycle_reports,
+    SUM(CASE WHEN report_type = 'user' THEN 1 ELSE 0 END) AS user_reports,
+    SUM(CASE WHEN report_type = 'booking' THEN 1 ELSE 0 END) AS booking_reports,
+    SUM(CASE WHEN report_type = 'chat' THEN 1 ELSE 0 END) AS chat_reports
+
+FROM reports
 ";
-$statsResult = $conn->query($statsQuery);
-$stats = $statsResult->fetch_assoc();
+
+$statsResult = mysqli_query($conn, $statsQuery);
+$stats = mysqli_fetch_assoc($statsResult);
 ?>
+
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -149,12 +197,29 @@ $stats = $statsResult->fetch_assoc();
             <form method="GET" class="search-form">
                 <input type="text" name="search" class="search-input" placeholder="Search reports..." value="<?php echo htmlspecialchars($search); ?>">
                 <select name="type" class="filter-select">
-                    <option value="all" <?php echo $filterType === 'all' ? 'selected' : ''; ?>>All Types</option>
-                    <option value="car" <?php echo $filterType === 'car' ? 'selected' : ''; ?>>Car Reports (<?php echo $stats['car_reports']; ?>)</option>
-                    <option value="user" <?php echo $filterType === 'user' ? 'selected' : ''; ?>>User Reports (<?php echo $stats['user_reports']; ?>)</option>
-                    <option value="booking" <?php echo $filterType === 'booking' ? 'selected' : ''; ?>>Booking Reports (<?php echo $stats['booking_reports']; ?>)</option>
-                    <option value="chat" <?php echo $filterType === 'chat' ? 'selected' : ''; ?>>Chat Reports (<?php echo $stats['chat_reports']; ?>)</option>
+                    <option value="all" <?= $filterType === 'all' ? 'selected' : '' ?>>All Types</option>
+
+                    <option value="car" <?= $filterType === 'car' ? 'selected' : '' ?>>
+                        Car Reports (<?= $stats['car_reports'] ?>)
+                    </option>
+
+                    <option value="motorcycle" <?= $filterType === 'motorcycle' ? 'selected' : '' ?>>
+                        Motorcycle Reports (<?= $stats['motorcycle_reports'] ?>)
+                    </option>
+
+                    <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>
+                        User Reports (<?= $stats['user_reports'] ?>)
+                    </option>
+
+                    <option value="booking" <?= $filterType === 'booking' ? 'selected' : '' ?>>
+                        Booking Reports (<?= $stats['booking_reports'] ?>)
+                    </option>
+
+                    <option value="chat" <?= $filterType === 'chat' ? 'selected' : '' ?>>
+                        Chat Reports (<?= $stats['chat_reports'] ?>)
+                    </option>
                 </select>
+
                 <select name="status" class="filter-select">
                     <option value="all" <?php echo $filterStatus === 'all' ? 'selected' : ''; ?>>All Status</option>
                     <option value="pending" <?php echo $filterStatus === 'pending' ? 'selected' : ''; ?>>Pending</option>
@@ -195,8 +260,10 @@ $stats = $statsResult->fetch_assoc();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if ($result && $result->num_rows > 0): ?>
-                            <?php while ($row = $result->fetch_assoc()): ?>
+                        <?php if ($result && mysqli_num_rows($result) > 0): ?>
+
+                            <?php while ($row = mysqli_fetch_assoc($result)): ?>
+
                                 <tr style="<?php echo $row['status'] === 'pending' ? 'background-color: #fff3cd;' : ''; ?>">
                                     <td><strong>#<?php echo $row['id']; ?></strong></td>
                                     <td>
