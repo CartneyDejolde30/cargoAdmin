@@ -74,17 +74,32 @@ if ($search !== "") {
 $sql = "
 SELECT 
     b.*,
-    c.brand, c.model, c.car_year, c.daily_rate,
+
+    -- Vehicle info (car OR motorcycle)
+    COALESCE(c.brand, m.brand) AS brand,
+    COALESCE(c.model, m.model) AS model,
+    COALESCE(c.car_year, m.motorcycle_year) AS vehicle_year,
+    COALESCE(c.price_per_day, m.price_per_day) AS price_per_day,
+
     u1.fullname AS renter_name,
     u2.fullname AS owner_name
+
 FROM bookings b
-LEFT JOIN cars c ON b.car_id = c.id
+
+LEFT JOIN cars c 
+    ON b.vehicle_type = 'car' AND b.car_id = c.id
+
+LEFT JOIN motorcycles m 
+    ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+
 LEFT JOIN users u1 ON b.user_id = u1.id
 LEFT JOIN users u2 ON b.owner_id = u2.id
+
 $where
 ORDER BY b.created_at DESC
 LIMIT $limit OFFSET $offset
 ";
+
 
 $result = mysqli_query($conn, $sql);
 
@@ -355,7 +370,7 @@ while ($row = mysqli_fetch_assoc($result)):
         <!-- Car Details -->
         <td>
             <strong><?= htmlspecialchars($car) ?></strong><br>
-            <small style="color:#999;"><?= $row['car_year'] ?> • ₱<?= number_format($row['daily_rate'], 0) ?>/day</small>
+            <small style="color:#999;"><?= $row['vehicle_year'] ?> • ₱<?= number_format($row['price_per_day'], 0) ?>/day</small>
         </td>
 
         <!-- Rental Period -->
