@@ -36,8 +36,7 @@ $offset = ($page - 1) * $limit;
 /* =========================================================
    FILTERS
    ========================================================= */
-
-   $allowedStatuses = [
+$allowedStatuses = [
     'pending','verified','processing','released',
     'completed','rejected','failed','refunded'
 ];
@@ -71,14 +70,23 @@ $sql = "SELECT
     b.owner_payout,
     b.escrow_status,
     b.payout_status,
+    b.pickup_date,
+    b.return_date,
 
     /* ================= USERS ================= */
+    u1.id AS renter_id,
     u1.fullname AS renter_name,
+    u1.email AS renter_email,
+    u1.phone AS renter_phone,
+    u2.id AS owner_id,
     u2.fullname AS owner_name,
+    u2.email AS owner_email,
 
     /* ================= CARS ================= */
     c.brand,
-    c.model
+    c.model,
+    c.car_year,
+    c.plate_number
 
 FROM payments p
 JOIN bookings b ON p.booking_id = b.id
@@ -88,7 +96,6 @@ JOIN cars c ON b.car_id = c.id
 $where
 ORDER BY p.created_at DESC
 LIMIT $limit OFFSET $offset";
-
 
 $result = mysqli_query($conn, $sql);
 
@@ -101,7 +108,6 @@ $totalRows = mysqli_fetch_assoc($countRes)['total'];
 $totalPages = max(1, ceil($totalRows / $limit));
 ?>
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,15 +116,791 @@ $totalPages = max(1, ceil($totalRows / $limit));
   <title>Payment Management - CarGo Admin</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
+  <style>
+    /* Modern Black & White Payment Dashboard */
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #fafafa;
+    }
+
+    .payment-dashboard {
+      background: #fafafa;
+      min-height: 100vh;
+    }
+
+    /* Modern Stats Cards */
+    .modern-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .modern-stat-card {
+      background: white;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 1.75rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .modern-stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: #000;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.3s ease;
+    }
+
+    .modern-stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+      border-color: #000;
+    }
+
+    .modern-stat-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .stat-header-modern {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-icon-modern {
+      width: 56px;
+      height: 56px;
+      background: #000;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      transition: all 0.3s ease;
+    }
+
+    .modern-stat-card:hover .stat-icon-modern {
+      transform: rotate(5deg) scale(1.05);
+    }
+
+    .stat-badge {
+      padding: 6px 12px;
+      background: #f5f5f5;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value-modern {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: #000;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-label-modern {
+      font-size: 0.875rem;
+      color: #666;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    /* Modern Filter Section */
+    .modern-filter-section {
+      background: white;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .modern-search-box {
+      position: relative;
+    }
+
+    .modern-search-input {
+      width: 100%;
+      padding: 0.875rem 1rem 0.875rem 3rem;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      background: #fafafa;
+    }
+
+    .modern-search-input:focus {
+      outline: none;
+      border-color: #000;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .modern-search-box i {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #999;
+      font-size: 16px;
+    }
+
+    .modern-filter-dropdown {
+      padding: 0.875rem 1rem;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #fafafa;
+      min-width: 200px;
+    }
+
+    .modern-filter-dropdown:focus {
+      outline: none;
+      border-color: #000;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .modern-btn {
+      padding: 0.875rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .modern-btn-primary {
+      background: #000;
+      color: white;
+    }
+
+    .modern-btn-primary:hover {
+      background: #1a1a1a;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .modern-btn-secondary {
+      background: white;
+      color: #000;
+      border: 1px solid #e5e5e5;
+    }
+
+    .modern-btn-secondary:hover {
+      background: #fafafa;
+      border-color: #000;
+    }
+
+    /* Modern Tab Navigation */
+    .modern-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .modern-tab {
+      padding: 1rem 1.5rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      margin-bottom: -1px;
+    }
+
+    .modern-tab.active {
+      color: #000;
+      border-bottom-color: #000;
+    }
+
+    .modern-tab:hover:not(.active) {
+      color: #000;
+      background: #fafafa;
+    }
+
+    .tab-count {
+      margin-left: 0.5rem;
+      padding: 2px 8px;
+      background: #f5f5f5;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .modern-tab.active .tab-count {
+      background: #000;
+      color: white;
+    }
+
+    /* Modern Payment Cards */
+    .payment-cards-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .modern-payment-card {
+      background: white;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 1.75rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .modern-payment-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: #000;
+      transform: scaleY(0);
+      transition: transform 0.3s ease;
+    }
+
+    .modern-payment-card:hover {
+      border-color: #000;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .modern-payment-card:hover::before {
+      transform: scaleY(1);
+    }
+
+    .payment-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid #f5f5f5;
+    }
+
+    .payment-id-section {
+      flex: 1;
+    }
+
+    .payment-id-modern {
+      font-weight: 800;
+      font-size: 1.125rem;
+      color: #000;
+      margin-bottom: 0.375rem;
+      letter-spacing: -0.01em;
+    }
+
+    .payment-meta {
+      font-size: 0.8125rem;
+      color: #666;
+      margin-bottom: 0.25rem;
+    }
+
+    .payment-amount-section {
+      text-align: right;
+    }
+
+    .payment-amount-modern {
+      font-size: 1.875rem;
+      font-weight: 800;
+      color: #000;
+      margin-bottom: 0.25rem;
+      letter-spacing: -0.02em;
+    }
+
+    .payment-fee-breakdown {
+      font-size: 0.75rem;
+      color: #666;
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .fee-item {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
+    .payment-details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .detail-modern {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .detail-label-modern {
+      font-size: 0.6875rem;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .detail-value-modern {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #000;
+    }
+
+    .modern-badges {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+
+    .modern-badge {
+      padding: 0.5rem 0.875rem;
+      border-radius: 6px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .modern-badge.pending {
+      background: #f5f5f5;
+      color: #666;
+      border: 1px solid #e5e5e5;
+    }
+
+    .modern-badge.verified {
+      background: #000;
+      color: white;
+    }
+
+    .modern-badge.escrow {
+      background: #fafafa;
+      color: #000;
+      border: 1px solid #e5e5e5;
+    }
+
+    .modern-badge.payout-pending {
+      background: #f5f5f5;
+      color: #666;
+      border: 1px dashed #ccc;
+    }
+
+    .modern-badge.completed,
+    .modern-badge.released {
+      background: #000;
+      color: white;
+    }
+
+    .modern-badge.rejected,
+    .modern-badge.cancelled {
+      background: white;
+      color: #000;
+      border: 1px solid #000;
+    }
+
+    .payment-actions-modern {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .action-btn-modern {
+      flex: 1;
+      padding: 0.75rem;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      background: white;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn-modern:hover {
+      border-color: #000;
+      background: #fafafa;
+      transform: translateY(-1px);
+    }
+
+    .action-btn-modern.primary {
+      background: #000;
+      color: white;
+      border-color: #000;
+    }
+
+    .action-btn-modern.primary:hover {
+      background: #1a1a1a;
+    }
+
+    .action-btn-modern.danger {
+      border-color: #e5e5e5;
+      color: #000;
+    }
+
+    .action-btn-modern.danger:hover {
+      border-color: #000;
+      background: #000;
+      color: white;
+    }
+
+    /* Modern Modal */
+    .modern-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modern-modal.active {
+      display: flex;
+    }
+
+    .modern-modal-content {
+      background: white;
+      border-radius: 16px;
+      max-width: 900px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modern-modal-header {
+      padding: 1.75rem 2rem;
+      border-bottom: 1px solid #e5e5e5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modern-modal-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #000;
+      letter-spacing: -0.01em;
+    }
+
+    .modern-modal-close {
+      width: 36px;
+      height: 36px;
+      background: #f5f5f5;
+      border: none;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 20px;
+      color: #666;
+    }
+
+    .modern-modal-close:hover {
+      background: #000;
+      color: white;
+    }
+
+    .modern-modal-body {
+      padding: 2rem;
+      overflow-y: auto;
+    }
+
+    .modal-section-modern {
+      margin-bottom: 2rem;
+    }
+
+    .modal-section-title-modern {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #000;
+    }
+
+    .info-grid-modern {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+    }
+
+    .info-item-modern {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .info-label-modern {
+      font-size: 0.6875rem;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .info-value-modern {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #000;
+    }
+
+    .modern-alert {
+      padding: 1.25rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: start;
+      gap: 1rem;
+      border: 1px solid #e5e5e5;
+      background: #fafafa;
+    }
+
+    .modern-alert i {
+      font-size: 1.25rem;
+      color: #666;
+    }
+
+    .modern-alert-content {
+      flex: 1;
+    }
+
+    .modern-alert-title {
+      font-weight: 700;
+      color: #000;
+      margin-bottom: 0.25rem;
+      font-size: 0.9375rem;
+    }
+
+    .modern-alert-text {
+      font-size: 0.8125rem;
+      color: #666;
+      margin: 0;
+    }
+
+    .modern-form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .modern-form-label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #000;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .modern-form-control {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      transition: all 0.2s ease;
+      background: #fafafa;
+    }
+
+    .modern-form-control:focus {
+      outline: none;
+      border-color: #000;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .modern-modal-actions {
+      padding: 1.5rem 2rem;
+      border-top: 1px solid #e5e5e5;
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      background: #fafafa;
+    }
+
+    /* Empty State */
+    .modern-empty-state {
+      text-align: center;
+      padding: 5rem 2rem;
+      background: white;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+    }
+
+    .modern-empty-state i {
+      font-size: 4rem;
+      color: #e5e5e5;
+      margin-bottom: 1.5rem;
+    }
+
+    .modern-empty-state h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #000;
+      margin-bottom: 0.5rem;
+    }
+
+    .modern-empty-state p {
+      font-size: 0.9375rem;
+      color: #666;
+      margin: 0;
+    }
+
+    /* Modern Pagination */
+    .modern-pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .pagination-info-modern {
+      font-size: 0.875rem;
+      color: #666;
+    }
+
+    .pagination-controls-modern {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .page-btn-modern {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      background: white;
+      color: #666;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+
+    .page-btn-modern:hover {
+      background: #fafafa;
+      border-color: #000;
+      color: #000;
+    }
+
+    .page-btn-modern.active {
+      background: #000;
+      color: white;
+      border-color: #000;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .filter-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .payment-cards-container {
+        grid-template-columns: 1fr;
+      }
+
+      .payment-details-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .info-grid-modern {
+        grid-template-columns: 1fr;
+      }
+
+      .modern-stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
 
 <div class="dashboard-wrapper">
   <?php include 'include/sidebar.php' ?>
 
-  <main class="main-content">
+  <main class="main-content payment-dashboard">
     <div class="top-bar">
       <h1 class="page-title">
         <i class="bi bi-credit-card"></i>
@@ -127,279 +909,463 @@ $totalPages = max(1, ceil($totalRows / $limit));
       <div class="user-profile">
         <button class="notification-btn">
           <i class="bi bi-bell"></i>
+          <?php if ($pendingVerification > 0): ?>
           <span class="notification-badge"><?= $pendingVerification ?></span>
+          <?php endif; ?>
         </button>
         <div class="user-avatar">
-          <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+          <img src="https://ui-avatars.com/api/?name=Admin+User&background=000000&color=fff" alt="Admin">
         </div>
       </div>
     </div>
 
-    <!-- Stats Grid -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
-            <i class="bi bi-clock-history"></i>
+    <div class="container-fluid p-4">
+      <!-- Modern Stats Grid -->
+      <div class="modern-stats-grid">
+        <div class="modern-stat-card">
+          <div class="stat-header-modern">
+            <div class="stat-icon-modern">
+              <i class="bi bi-clock-history"></i>
+            </div>
+            <span class="stat-badge">Urgent</span>
           </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            Urgent
-          </div>
+          <div class="stat-value-modern"><?= $pendingVerification ?></div>
+          <div class="stat-label-modern">Pending Verification</div>
         </div>
-        <div class="stat-value"><?= $pendingVerification ?></div>
-        <div class="stat-label">Pending Verification</div>
+
+        <div class="modern-stat-card">
+          <div class="stat-header-modern">
+            <div class="stat-icon-modern">
+              <i class="bi bi-shield-check"></i>
+            </div>
+            <span class="stat-badge">Secured</span>
+          </div>
+          <div class="stat-value-modern">₱<?= number_format($escrowed, 2) ?></div>
+          <div class="stat-label-modern">Funds in Escrow</div>
+        </div>
+
+        <div class="modern-stat-card">
+          <div class="stat-header-modern">
+            <div class="stat-icon-modern">
+              <i class="bi bi-hourglass-split"></i>
+            </div>
+            <span class="stat-badge">Processing</span>
+          </div>
+          <div class="stat-value-modern"><?= $pendingPayouts ?></div>
+          <div class="stat-label-modern">Pending Payouts</div>
+        </div>
+
+        <div class="modern-stat-card">
+          <div class="stat-header-modern">
+            <div class="stat-icon-modern">
+              <i class="bi bi-check-circle"></i>
+            </div>
+            <span class="stat-badge">+18%</span>
+          </div>
+          <div class="stat-value-modern">₱<?= number_format($completedPayouts, 2) ?></div>
+          <div class="stat-label-modern">Total Payouts</div>
+        </div>
       </div>
 
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
-            <i class="bi bi-shield-check"></i>
+      <!-- Modern Filter Section -->
+      <div class="modern-filter-section">
+        <div class="filter-grid">
+          <div class="modern-search-box">
+            <i class="bi bi-search"></i>
+            <input type="text" class="modern-search-input" placeholder="Search by reference, customer, or car...">
           </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            Secured
-          </div>
+          
+          <select class="modern-filter-dropdown" id="statusFilter" onchange="filterPayments()">
+            <option value="">All Payments</option>
+            <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>>Pending Verification</option>
+            <option value="verified" <?= $statusFilter === 'verified' ? 'selected' : '' ?>>Verified</option>
+            <option value="released" <?= $statusFilter === 'released' ? 'selected' : '' ?>>Released</option>
+            <option value="rejected" <?= $statusFilter === 'rejected' ? 'selected' : '' ?>>Rejected</option>
+          </select>
+
+          <button class="modern-btn modern-btn-secondary">
+            <i class="bi bi-filter"></i>
+            Filter
+          </button>
+
+          <button class="modern-btn modern-btn-primary">
+            <i class="bi bi-download"></i>
+            Export
+          </button>
         </div>
-        <div class="stat-value">₱<?= number_format($escrowed, 2) ?></div>
-        <div class="stat-label">Funds in Escrow</div>
       </div>
 
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
-            <i class="bi bi-hourglass-split"></i>
-          </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            Processing
-          </div>
-        </div>
-        <div class="stat-value"><?= $pendingPayouts ?></div>
-        <div class="stat-label">Pending Payouts</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
-            <i class="bi bi-check-circle"></i>
-          </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +18%
-          </div>
-        </div>
-        <div class="stat-value">₱<?= number_format($completedPayouts, 2) ?></div>
-        <div class="stat-label">Total Payouts</div>
-      </div>
-    </div>
-
-    <!-- Filter Section -->
-    <div class="filter-section">
-      <div class="filter-row">
-        <div class="search-box">
-          <input type="text" placeholder="Search by reference, customer, or car...">
-          <i class="bi bi-search"></i>
-        </div>
-        <select class="filter-dropdown" id="statusFilter" onchange="filterPayments()">
-          <option value="">All Payments</option>
-          <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>>Pending Verification</option>
-          <option value="verified" <?= $statusFilter === 'verified' ? 'selected' : '' ?>>Verified</option>
-          <option value="released" <?= $statusFilter === 'released' ? 'selected' : '' ?>>Released</option>
-          <option value="rejected" <?= $statusFilter === 'rejected' ? 'selected' : '' ?>>Rejected</option>
-        </select>
-
-        <button class="export-btn">
-          <i class="bi bi-download"></i>
-          Export
+      <!-- Modern Tab Navigation -->
+      <div class="modern-tabs">
+        <button class="modern-tab <?= $statusFilter === '' ? 'active' : '' ?>" onclick="filterPayments('')">
+          All Payments
+          <span class="tab-count"><?= $totalRows ?></span>
+        </button>
+        <button class="modern-tab <?= $statusFilter === 'pending' ? 'active' : '' ?>" onclick="filterPayments('pending')">
+          Pending
+          <span class="tab-count"><?= $pendingVerification ?></span>
+        </button>
+        <button class="modern-tab <?= $statusFilter === 'verified' ? 'active' : '' ?>" onclick="filterPayments('verified')">
+          Verified
+          <span class="tab-count"><?= $pendingPayouts ?></span>
+        </button>
+        <button class="modern-tab <?= $statusFilter === 'released' ? 'active' : '' ?>" onclick="filterPayments('released')">
+          Released
+          <span class="tab-count">0</span>
         </button>
       </div>
-    </div>
 
-    <!-- Table Section -->
-    <div class="table-section">
-      <div class="section-header">
-        <h2 class="section-title">Payment Transactions</h2>
-        <div class="table-controls">
-          <a href="payments.php" class="table-btn <?= ($statusFilter == "") ? 'active' : '' ?>">
-            All (<?= $totalRows ?>)
-          </a>
-          <a href="payments.php?status=pending" class="table-btn <?= ($statusFilter == "pending") ? 'active' : '' ?>">
-            Pending (<?= $pendingVerification ?>)
-          </a>
+      <!-- Payment Cards -->
+      <?php if (mysqli_num_rows($result) > 0): ?>
+      <div class="payment-cards-container">
+        <?php 
+        mysqli_data_seek($result, 0);
+        while ($row = mysqli_fetch_assoc($result)): 
+          $paymentId = "#PAY-" . str_pad($row['id'], 4, "0", STR_PAD_LEFT);
+          $bookingId = "#BK-" . str_pad($row['booking_id'], 4, "0", STR_PAD_LEFT);
+          $carName = $row['brand'] . " " . $row['model'] . " " . $row['car_year'];
+        ?>
+        <div class="modern-payment-card">
+          <div class="payment-card-header">
+            <div class="payment-id-section">
+              <div class="payment-id-modern"><?= $paymentId ?></div>
+              <div class="payment-meta"><?= $row['renter_name'] ?></div>
+              <div class="payment-meta"><?= $carName ?></div>
+            </div>
+            <div class="payment-amount-section">
+              <div class="payment-amount-modern">₱<?= number_format($row['amount'], 2) ?></div>
+              <div class="payment-fee-breakdown">
+                <div class="fee-item">
+                  <span>Fee:</span>
+                  <strong>₱<?= number_format($row['platform_fee'], 2) ?></strong>
+                </div>
+                <div class="fee-item">
+                  <span>Owner:</span>
+                  <strong>₱<?= number_format($row['owner_payout'], 2) ?></strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="payment-details-grid">
+            <div class="detail-modern">
+              <span class="detail-label-modern">Booking ID</span>
+              <span class="detail-value-modern"><?= $bookingId ?></span>
+            </div>
+            <div class="detail-modern">
+              <span class="detail-label-modern">Payment Method</span>
+              <span class="detail-value-modern"><?= strtoupper($row['payment_method']) ?></span>
+            </div>
+            <div class="detail-modern">
+              <span class="detail-label-modern">Owner</span>
+              <span class="detail-value-modern"><?= $row['owner_name'] ?></span>
+            </div>
+            <div class="detail-modern">
+              <span class="detail-label-modern">Submitted</span>
+              <span class="detail-value-modern"><?= date("M d, Y h:i A", strtotime($row['created_at'])) ?></span>
+            </div>
+          </div>
+
+          <div class="modern-badges">
+            <?php
+            $statusLabels = [
+              'pending' => 'Pending Verification',
+              'verified' => 'Verified',
+              'released' => 'Released',
+              'rejected' => 'Rejected',
+              'refunded' => 'Refunded'
+            ];
+            $statusClass = $row['payment_status'];
+            $statusLabel = $statusLabels[$statusClass] ?? ucfirst($statusClass);
+            ?>
+            <span class="modern-badge <?= $statusClass ?>">
+              <?= $statusLabel ?>
+            </span>
+
+            <?php if ($row['escrow_status']): ?>
+            <span class="modern-badge escrow">
+              🔒 <?= ucfirst($row['escrow_status']) ?>
+            </span>
+            <?php endif; ?>
+
+            <?php if ($row['payout_status']): ?>
+            <span class="modern-badge payout-pending">
+              ⏳ Payout: <?= ucfirst($row['payout_status']) ?>
+            </span>
+            <?php endif; ?>
+          </div>
+
+          <div class="payment-actions-modern">
+            <button class="action-btn-modern" onclick='viewPaymentDetails(<?= json_encode($row) ?>)'>
+              <i class="bi bi-eye"></i>
+              View Details
+            </button>
+
+            <?php if ($row['payment_status'] === 'pending'): ?>
+            <button class="action-btn-modern primary" onclick="verifyPayment(<?= $row['id'] ?>, 'verify')">
+              <i class="bi bi-check-circle"></i>
+              Verify
+            </button>
+            <button class="action-btn-modern danger" onclick="verifyPayment(<?= $row['id'] ?>, 'reject')">
+              <i class="bi bi-x-circle"></i>
+              Reject
+            </button>
+            <?php endif; ?>
+
+            <?php if ($row['payment_status'] === 'verified' && $row['booking_status'] === 'completed' && !$row['payout_status']): ?>
+            <button class="action-btn-modern primary" onclick="releaseEscrow(<?= $row['booking_id'] ?>)">
+              <i class="bi bi-unlock"></i>
+              Release Escrow
+            </button>
+            <?php endif; ?>
+
+            <?php if ($row['payout_status'] === 'pending'): ?>
+            <button class="action-btn-modern primary" onclick='completePayout(<?= $row['booking_id'] ?>)'>
+              <i class="bi bi-cash-coin"></i>
+              Complete Payout
+            </button>
+            <?php endif; ?>
+          </div>
         </div>
+        <?php endwhile; ?>
       </div>
-
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>Payment ID</th>
-              <th>Booking</th>
-              <th>Renter</th>
-              <th>Owner</th>
-              <th>Amount</th>
-              <th>Fee Split</th>
-              <th>Payment Status</th>
-              <th>Escrow</th>
-              <th>Payout</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-<?php while ($row = mysqli_fetch_assoc($result)): 
-    $paymentId = "#PAY-" . str_pad($row['id'], 4, "0", STR_PAD_LEFT);
-    $bookingId = "#BK-" . str_pad($row['booking_id'], 4, "0", STR_PAD_LEFT);
-?>
-            <tr>
-              <td><strong><?= $paymentId ?></strong><br>
-                  <small style="color:#999;"><?= date("M d, Y", strtotime($row['created_at'])) ?></small>
-              </td>
-              <td><strong><?= $bookingId ?></strong><br>
-                  <small style="color:#999;"><?= $row['brand'] . " " . $row['model'] ?></small>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=<?= urlencode($row['renter_name']) ?>&background=1a1a1a&color=fff">
-                  </div>
-                  <span><?= $row['renter_name'] ?></span>
-                </div>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=<?= urlencode($row['owner_name']) ?>&background=1a1a1a&color=fff">
-                  </div>
-                  <span><?= $row['owner_name'] ?></span>
-                </div>
-              </td>
-              <td><strong>₱<?= number_format($row['amount'], 2) ?></strong><br>
-                  <small style="color:#999;"><?= $row['payment_method'] ?></small>
-              </td>
-              <td>
-                <div style="font-size: 11px;">
-                  <div>Platform: <strong>₱<?= number_format($row['platform_fee'], 2) ?></strong></div>
-                  <div>Owner: <strong>₱<?= number_format($row['owner_payout'], 2) ?></strong></div>
-                </div>
-              </td>
-              <td>
-                <?php
-                $statusMap = [
-    "pending"    => "pending",
-    "verified"   => "confirmed",
-    "processing" => "pending",
-    "released"   => "approved",
-    "completed"  => "approved",
-    "rejected"   => "cancelled",
-    "failed"     => "cancelled",
-    "refunded"   => "cancelled"
-];
-
-$status = $row['payment_status'] ?: 'pending';
-$statusClass = $statusMap[$status] ?? 'pending';
-
-
-                ?>
-                <span class="status-badge <?= $statusClass ?>">
-                    <?= strtoupper($status) ?>
-                </span>
-
-              </td>
-              <td>
-                <?php
-                $escrowClass = [
-                    "pending" => "pending",
-                    "held" => "confirmed",
-                    "released" => "approved"
-                ][$row["escrow_status"]] ?? "pending";
-                ?>
-                <span class="status-badge <?= $escrowClass ?>">
-                    <?= ucfirst($row['escrow_status']) ?>
-                </span>
-              </td>
-              <td>
-                <?php
-                $payoutClass = [
-                    "pending" => "pending",
-                    "processing" => "pending",
-                    "completed" => "approved",
-                    "failed" => "cancelled"
-                ][$row["payout_status"]];
-                ?>
-                <span class="status-badge <?= $payoutClass ?>">
-                    <?= ucfirst($row['payout_status']) ?>
-                </span>
-              </td>
-              <td>
-                <div class="action-buttons">
-                  <button class="action-btn view" onclick="viewPaymentDetails(<?= $row['id'] ?>)">
-                    <i class="bi bi-eye"></i>
-                  </button>
-                  <?php if ($row['payment_status'] === 'pending'): ?>
-                    <button class="action-btn approve" onclick="verifyPayment(<?= $row['id'] ?>, 'verify')">
-                      <i class="bi bi-check"></i>
-                    </button>
-                    <button class="action-btn reject" onclick="verifyPayment(<?= $row['id'] ?>, 'reject')">
-                      <i class="bi bi-x"></i>
-                    </button>
-                  <?php endif; ?>
-                  <?php if ($row['payment_status'] === 'verified' && $row['booking_status'] === 'completed'): ?>
-                  <button class="action-btn approve"
-                    onclick="releaseEscrow(<?= $row['booking_id'] ?>)">
-                    <i class="bi bi-unlock"></i>
-                  </button>
-                <?php endif; ?>
-                </div>
-              </td>
-            </tr>
-<?php endwhile; ?>
-          </tbody>
-        </table>
+      <?php else: ?>
+      <div class="modern-empty-state">
+        <i class="bi bi-inbox"></i>
+        <h3>No payments found</h3>
+        <p>There are no payment transactions matching your criteria</p>
       </div>
+      <?php endif; ?>
 
-      <!-- Pagination -->
-      <div class="pagination-section">
-        <div class="pagination-info">
+      <!-- Modern Pagination -->
+      <?php if ($totalPages > 1): ?>
+      <div class="modern-pagination">
+        <div class="pagination-info-modern">
           Showing <strong><?= $offset + 1 ?></strong> - <strong><?= min($offset + $limit, $totalRows) ?></strong>
           of <strong><?= $totalRows ?></strong> payments
         </div>
-        <div class="pagination-controls">
-          <a href="?page=<?= max(1, $page - 1) ?>" class="page-btn">
+        <div class="pagination-controls-modern">
+          <a href="?page=<?= max(1, $page - 1) ?>&status=<?= $statusFilter ?>" class="page-btn-modern">
             <i class="bi bi-chevron-left"></i>
           </a>
-          <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-            <a href="?page=<?= $i ?>" class="page-btn <?= ($i == $page) ? 'active' : '' ?>">
-              <?= $i ?>
-            </a>
+          <?php for ($i = 1; $i <= min($totalPages, 5); $i++): ?>
+          <a href="?page=<?= $i ?>&status=<?= $statusFilter ?>" class="page-btn-modern <?= $i == $page ? 'active' : '' ?>">
+            <?= $i ?>
+          </a>
           <?php endfor; ?>
-          <a href="?page=<?= min($totalPages, $page + 1) ?>" class="page-btn">
+          <a href="?page=<?= min($totalPages, $page + 1) ?>&status=<?= $statusFilter ?>" class="page-btn-modern">
             <i class="bi bi-chevron-right"></i>
           </a>
         </div>
       </div>
+      <?php endif; ?>
     </div>
   </main>
 </div>
 
+<!-- Payment Details Modal -->
+<div class="modern-modal" id="paymentModal">
+  <div class="modern-modal-content">
+    <div class="modern-modal-header">
+      <h2 class="modern-modal-title">Payment Details</h2>
+      <button class="modern-modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modern-modal-body" id="modalBody">
+      <!-- Content will be loaded dynamically -->
+    </div>
+  </div>
+</div>
+
+<!-- Payout Modal -->
+<div class="modern-modal" id="payoutModal">
+  <div class="modern-modal-content">
+    <div class="modern-modal-header">
+      <h2 class="modern-modal-title">Complete Payout</h2>
+      <button class="modern-modal-close" onclick="closePayoutModal()">×</button>
+    </div>
+    <div class="modern-modal-body">
+      <div class="modern-alert">
+        <i class="bi bi-exclamation-triangle"></i>
+        <div class="modern-alert-content">
+          <div class="modern-alert-title">Manual Transfer Required</div>
+          <p class="modern-alert-text">Complete the GCash transfer manually and enter the reference number below.</p>
+        </div>
+      </div>
+
+      <form id="payoutForm" onsubmit="submitPayout(event)">
+        <input type="hidden" id="payout_booking_id" name="booking_id">
+        
+        <div class="modern-form-group">
+          <label class="modern-form-label">Transfer Reference Number</label>
+          <input type="text" class="modern-form-control" id="payout_reference" name="reference" required placeholder="Enter GCash reference number">
+        </div>
+
+        <div class="modern-form-group">
+          <label class="modern-form-label">Transfer Proof (Optional)</label>
+          <input type="file" class="modern-form-control" id="payout_proof" name="proof" accept="image/*">
+        </div>
+
+        <div class="modern-modal-actions">
+          <button type="button" class="modern-btn modern-btn-secondary" onclick="closePayoutModal()">Cancel</button>
+          <button type="submit" class="modern-btn modern-btn-primary">
+            <i class="bi bi-check-circle"></i>
+            Complete Payout
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function filterPayments() {
-    const status = document.getElementById('statusFilter').value;
-    window.location.href = `payments.php?status=${status}`;
+function filterPayments(status) {
+    window.location.href = `payment.php${status ? '?status=' + status : ''}`;
+}
+
+function viewPaymentDetails(payment) {
+    const modal = document.getElementById('paymentModal');
+    const modalBody = document.getElementById('modalBody');
+    
+    const escrowBadge = payment.escrow_status ? `<span class="modern-badge escrow">🔒 ${payment.escrow_status}</span>` : '';
+    const payoutBadge = payment.payout_status ? `<span class="modern-badge payout-pending">⏳ ${payment.payout_status}</span>` : '';
+    
+    modalBody.innerHTML = `
+      <div class="modal-section-modern">
+        <div class="modal-section-title-modern">Payment Information</div>
+        <div class="info-grid-modern">
+          <div class="info-item-modern">
+            <span class="info-label-modern">Payment ID</span>
+            <span class="info-value-modern">#PAY-${String(payment.id).padStart(4, '0')}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Booking ID</span>
+            <span class="info-value-modern">#BK-${String(payment.booking_id).padStart(4, '0')}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Amount</span>
+            <span class="info-value-modern">₱${parseFloat(payment.amount).toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Payment Method</span>
+            <span class="info-value-modern">${payment.payment_method.toUpperCase()}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Reference Number</span>
+            <span class="info-value-modern" style="font-family: monospace; font-size: 0.75rem;">${payment.payment_reference || 'N/A'}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Status</span>
+            <span class="info-value-modern">${payment.payment_status.toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-section-modern">
+        <div class="modal-section-title-modern">Fee Breakdown</div>
+        <div class="info-grid-modern">
+          <div class="info-item-modern">
+            <span class="info-label-modern">Platform Fee (10%)</span>
+            <span class="info-value-modern">₱${parseFloat(payment.platform_fee).toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Owner Payout</span>
+            <span class="info-value-modern">₱${parseFloat(payment.owner_payout).toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-section-modern">
+        <div class="modal-section-title-modern">Rental Details</div>
+        <div class="info-grid-modern">
+          <div class="info-item-modern">
+            <span class="info-label-modern">Renter</span>
+            <span class="info-value-modern">${payment.renter_name}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Renter Email</span>
+            <span class="info-value-modern">${payment.renter_email}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Owner</span>
+            <span class="info-value-modern">${payment.owner_name}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Owner Email</span>
+            <span class="info-value-modern">${payment.owner_email}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Vehicle</span>
+            <span class="info-value-modern">${payment.brand} ${payment.model} ${payment.car_year}</span>
+          </div>
+          <div class="info-item-modern">
+            <span class="info-label-modern">Plate Number</span>
+            <span class="info-value-modern">${payment.plate_number}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-section-modern">
+        <div class="modal-section-title-modern">Status Badges</div>
+        <div class="modern-badges">
+          <span class="modern-badge ${payment.payment_status}">${payment.payment_status.toUpperCase()}</span>
+          ${escrowBadge}
+          ${payoutBadge}
+        </div>
+      </div>
+    `;
+    
+    modal.classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('paymentModal').classList.remove('active');
+}
+
+function completePayout(bookingId) {
+    document.getElementById('payout_booking_id').value = bookingId;
+    document.getElementById('payoutModal').classList.add('active');
+}
+
+function closePayoutModal() {
+    document.getElementById('payoutModal').classList.remove('active');
+    document.getElementById('payoutForm').reset();
+}
+
+function submitPayout(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    
+    fetch('api/payment/complete_payout.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(data.message);
+        if (data.success) {
+            closePayoutModal();
+            location.reload();
+        }
+    })
+    .catch(err => alert('Error: ' + err));
 }
 
 function verifyPayment(paymentId, action) {
     const message = action === 'verify' ? 
-        'Are you sure you want to verify this payment?' : 
-        'Are you sure you want to reject this payment?';
+        'Are you sure you want to verify this payment? Funds will be held in escrow.' : 
+        'Are you sure you want to reject this payment? The booking will be cancelled.';
     
     if (!confirm(message)) return;
 
+    const formData = new FormData();
+    formData.append('payment_id', paymentId);
+    formData.append('action', action);
+
     fetch('api/payment/verify_payment.php', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: `payment_id=${paymentId}&action=${action}`
+        body: formData
     })
     .then(r => r.json())
     .then(data => {
@@ -410,12 +1376,14 @@ function verifyPayment(paymentId, action) {
 }
 
 function releaseEscrow(bookingId) {
-    if (!confirm('Release escrow and process payout to owner?')) return;
+    if (!confirm('Release escrow and schedule payout to owner?')) return;
+
+    const formData = new FormData();
+    formData.append('booking_id', bookingId);
 
     fetch('api/payment/release_escrow.php', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: `booking_id=${bookingId}`
+        body: formData
     })
     .then(r => r.json())
     .then(data => {
@@ -425,10 +1393,14 @@ function releaseEscrow(bookingId) {
     .catch(err => alert('Error: ' + err));
 }
 
-function viewPaymentDetails(paymentId) {
-    // Implement modal view for payment details
-    alert('View payment details for ID: ' + paymentId);
-}
+// Close modal when clicking outside
+document.getElementById('paymentModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+document.getElementById('payoutModal').addEventListener('click', function(e) {
+    if (e.target === this) closePayoutModal();
+});
 </script>
 </body>
 </html>

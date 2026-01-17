@@ -100,7 +100,6 @@ ORDER BY b.created_at DESC
 LIMIT $limit OFFSET $offset
 ";
 
-
 $result = mysqli_query($conn, $sql);
 
 if (!$result) {

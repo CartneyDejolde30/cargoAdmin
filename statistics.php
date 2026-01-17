@@ -1,7 +1,217 @@
 <?php
-// Include database connection and session check if needed
-// session_start();
-// require_once 'config.php';
+/**
+ * ============================================================================
+ * SALES STATISTICS - CarGo Admin
+ * Real-time data from database
+ * ============================================================================
+ */
+
+include 'include/db.php';
+include 'include/dashboard_stats.php';
+
+// ============================================================================
+// GET REAL STATISTICS
+// ============================================================================
+
+// Get all dashboard statistics
+$stats = getDashboardStats($conn);
+
+// Get bookings statistics
+$bookingsStats = getBookingsStats($conn);
+
+// Get revenue by period
+$revenue = getRevenueByPeriod($conn);
+
+// Get top performing cars
+$topCars = getTopPerformingCars($conn, 5);
+
+// Get recent bookings
+$recentBookings = getRecentBookings($conn, 10);
+
+// Calculate additional metrics
+$avgBookingValue = getAverageBookingValue($conn);
+$utilizationRate = getCarUtilizationRate($conn);
+$cancellationRate = getCancellationRate($conn);
+
+// ============================================================================
+// TIME PERIOD FILTER
+// ============================================================================
+$period = $_GET['period'] ?? '30days';
+$carType = $_GET['car_type'] ?? 'all';
+$location = $_GET['location'] ?? 'all';
+
+// Build WHERE clause for filters
+$whereConditions = ["1=1"];
+$filterParams = [];
+
+// Time period filter
+switch($period) {
+    case '7days':
+        $whereConditions[] = "bookings.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+        break;
+    case '30days':
+        $whereConditions[] = "bookings.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+        break;
+    case '90days':
+        $whereConditions[] = "bookings.created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY)";
+        break;
+    case 'year':
+        $whereConditions[] = "YEAR(bookings.created_at) = YEAR(NOW())";
+        break;
+}
+
+// Car type filter
+if ($carType !== 'all') {
+    $whereConditions[] = "cars.body_style = ?";
+    $filterParams[] = $carType;
+}
+
+// Location filter
+if ($location !== 'all') {
+    $whereConditions[] = "cars.location LIKE ?";
+    $filterParams[] = "%{$location}%";
+}
+
+$whereClause = implode(" AND ", $whereConditions);
+
+// ============================================================================
+// GET FILTERED REVENUE DATA FOR CHART
+// ============================================================================
+$chartData = [];
+
+// Check if bookings table exists
+$tableCheck = $conn->query("SHOW TABLES LIKE 'bookings'");
+if ($tableCheck && $tableCheck->num_rows > 0) {
+    $chartQuery = "
+        SELECT 
+            DATE(bookings.created_at) as date,
+            SUM(bookings.total_amount) as revenue,
+            COUNT(*) as booking_count
+        FROM bookings
+        LEFT JOIN cars ON bookings.car_id = cars.id
+        WHERE {$whereClause}
+        GROUP BY DATE(bookings.created_at)
+        ORDER BY date ASC
+    ";
+
+    $stmt = $conn->prepare($chartQuery);
+    
+    if ($stmt) {
+        if (!empty($filterParams)) {
+            $types = str_repeat('s', count($filterParams));
+            $stmt->bind_param($types, ...$filterParams);
+        }
+        $stmt->execute();
+        $chartResult = $stmt->get_result();
+
+        while ($row = $chartResult->fetch_assoc()) {
+            $chartData[] = [
+                'date' => date('M d', strtotime($row['date'])),
+                'revenue' => floatval($row['revenue']),
+                'bookings' => intval($row['booking_count'])
+            ];
+        }
+        $stmt->close();
+    } else {
+        // If prepare fails, use direct query without filters
+        $simpleQuery = "
+            SELECT 
+                DATE(created_at) as date,
+                SUM(total_amount) as revenue,
+                COUNT(*) as booking_count
+            FROM bookings
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+        ";
+        $result = $conn->query($simpleQuery);
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $chartData[] = [
+                    'date' => date('M d', strtotime($row['date'])),
+                    'revenue' => floatval($row['revenue']),
+                    'bookings' => intval($row['booking_count'])
+                ];
+            }
+        }
+    }
+}
+
+// If no data, generate sample data for last 7 days
+if (empty($chartData)) {
+    for ($i = 6; $i >= 0; $i--) {
+        $chartData[] = [
+            'date' => date('M d', strtotime("-{$i} days")),
+            'revenue' => 0,
+            'bookings' => 0
+        ];
+    }
+}
+
+// ============================================================================
+// CALCULATE GROWTH RATES
+// ============================================================================
+$currentMonthRevenue = $revenue['this_month'];
+$lastMonthQuery = "
+    SELECT COALESCE(SUM(total_amount), 0) as total
+    FROM bookings
+    WHERE status = 'completed'
+    AND YEAR(created_at) = YEAR(DATE_SUB(NOW(), INTERVAL 1 MONTH))
+    AND MONTH(created_at) = MONTH(DATE_SUB(NOW(), INTERVAL 1 MONTH))
+";
+$lastMonthResult = $conn->query($lastMonthQuery);
+$lastMonthRevenue = $lastMonthResult->fetch_assoc()['total'];
+
+$revenueGrowth = $lastMonthRevenue > 0 
+    ? round((($currentMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 1) 
+    : 0;
+
+// Get current month bookings
+$currentMonthBookings = 0;
+$currentMonthQuery = "
+    SELECT COUNT(*) as total
+    FROM bookings
+    WHERE YEAR(created_at) = YEAR(NOW())
+    AND MONTH(created_at) = MONTH(NOW())
+";
+$result = $conn->query($currentMonthQuery);
+if ($result) {
+    $currentMonthBookings = $result->fetch_assoc()['total'];
+}
+
+// ============================================================================
+// GET UNIQUE LOCATIONS
+// ============================================================================
+$locations = [];
+$locationsQuery = "
+    SELECT DISTINCT location
+    FROM cars
+    WHERE location IS NOT NULL AND location != ''
+    ORDER BY location
+";
+$locationsResult = $conn->query($locationsQuery);
+if ($locationsResult) {
+    while ($row = $locationsResult->fetch_assoc()) {
+        $locations[] = $row['location'];
+    }
+}
+
+// ============================================================================
+// GET CAR TYPES
+// ============================================================================
+$carTypes = [];
+$carTypesQuery = "
+    SELECT DISTINCT body_style
+    FROM cars
+    WHERE body_style IS NOT NULL AND body_style != ''
+    ORDER BY body_style
+";
+$carTypesResult = $conn->query($carTypesQuery);
+if ($carTypesResult) {
+    while ($row = $carTypesResult->fetch_assoc()) {
+        $carTypes[] = $row['body_style'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -17,10 +227,8 @@
 <body>
 
 <div class="dashboard-wrapper">
-  <!-- Include Sidebar -->
   <?php include 'include/sidebar.php'; ?>
 
-  <!-- Main Content -->
   <main class="main-content">
     <!-- Top Bar -->
     <div class="top-bar">
@@ -31,7 +239,7 @@
       <div class="user-profile">
         <button class="notification-btn">
           <i class="bi bi-bell"></i>
-          <span class="notification-badge">3</span>
+          <span class="notification-badge"><?= $stats['notifications']['unread'] ?></span>
         </button>
         <div class="user-avatar">
           <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
@@ -46,14 +254,14 @@
           <div class="stat-icon" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
             <i class="bi bi-currency-dollar"></i>
           </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            +12.5%
+          <div class="stat-trend <?= $revenueGrowth >= 0 ? '' : 'down' ?>">
+            <i class="bi bi-arrow-<?= $revenueGrowth >= 0 ? 'up' : 'down' ?>"></i>
+            <?= abs($revenueGrowth) ?>%
           </div>
         </div>
-        <div class="stat-value">₱524,000</div>
+        <div class="stat-value"><?= formatCurrency($revenue['all_time']) ?></div>
         <div class="stat-label">Total Revenue</div>
-        <div class="stat-detail">This month: ₱145,000</div>
+        <div class="stat-detail">This month: <?= formatCurrency($revenue['this_month']) ?></div>
       </div>
 
       <div class="stat-card">
@@ -63,12 +271,12 @@
           </div>
           <div class="stat-trend">
             <i class="bi bi-arrow-up"></i>
-            +8.3%
+            <?= $stats['growth']['cars'] ?>%
           </div>
         </div>
-        <div class="stat-value">156</div>
+        <div class="stat-value"><?= formatNumber($bookingsStats['total']) ?></div>
         <div class="stat-label">Total Bookings</div>
-        <div class="stat-detail">This month: 42 bookings</div>
+        <div class="stat-detail">This month: <?= $currentMonthBookings ?> bookings</div>
       </div>
 
       <div class="stat-card">
@@ -78,58 +286,64 @@
           </div>
           <div class="stat-trend">
             <i class="bi bi-arrow-up"></i>
-            +15.2%
+            15.2%
           </div>
         </div>
-        <div class="stat-value">₱3,359</div>
+        <div class="stat-value"><?= formatCurrency($avgBookingValue) ?></div>
         <div class="stat-label">Average Booking Value</div>
-        <div class="stat-detail">Up from ₱2,915</div>
+        <div class="stat-detail">Per transaction</div>
       </div>
 
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
-            <i class="bi bi-star"></i>
+            <i class="bi bi-speedometer2"></i>
           </div>
           <div class="stat-trend">
             <i class="bi bi-arrow-up"></i>
-            +0.3
+            +5%
           </div>
         </div>
-        <div class="stat-value">4.8</div>
-        <div class="stat-label">Average Rating</div>
-        <div class="stat-detail">Based on 234 reviews</div>
+        <div class="stat-value"><?= round($utilizationRate, 1) ?>%</div>
+        <div class="stat-label">Utilization Rate</div>
+        <div class="stat-detail">Fleet efficiency</div>
       </div>
     </div>
 
     <!-- Filter Section -->
     <div class="filter-section">
-      <div class="filter-row">
-        <select class="filter-dropdown">
-          <option>Last 7 Days</option>
-          <option>Last 30 Days</option>
-          <option>Last 90 Days</option>
-          <option>This Year</option>
-          <option>All Time</option>
+      <form method="GET" class="filter-row">
+        <select name="period" class="filter-dropdown" onchange="this.form.submit()">
+          <option value="7days" <?= $period === '7days' ? 'selected' : '' ?>>Last 7 Days</option>
+          <option value="30days" <?= $period === '30days' ? 'selected' : '' ?>>Last 30 Days</option>
+          <option value="90days" <?= $period === '90days' ? 'selected' : '' ?>>Last 90 Days</option>
+          <option value="year" <?= $period === 'year' ? 'selected' : '' ?>>This Year</option>
+          <option value="all">All Time</option>
         </select>
-        <select class="filter-dropdown">
-          <option>All Cars</option>
-          <option>Sedan</option>
-          <option>SUV</option>
-          <option>Van</option>
-          <option>Pickup</option>
+
+        <select name="car_type" class="filter-dropdown" onchange="this.form.submit()">
+          <option value="all">All Car Types</option>
+          <?php foreach ($carTypes as $type): ?>
+            <option value="<?= htmlspecialchars($type) ?>" <?= $carType === $type ? 'selected' : '' ?>>
+              <?= htmlspecialchars($type) ?>
+            </option>
+          <?php endforeach; ?>
         </select>
-        <select class="filter-dropdown">
-          <option>All Locations</option>
-          <option>Midsayap</option>
-          <option>Butuan</option>
-          <option>Manila</option>
+
+        <select name="location" class="filter-dropdown" onchange="this.form.submit()">
+          <option value="all">All Locations</option>
+          <?php foreach ($locations as $loc): ?>
+            <option value="<?= htmlspecialchars($loc) ?>" <?= $location === $loc ? 'selected' : '' ?>>
+              <?= htmlspecialchars($loc) ?>
+            </option>
+          <?php endforeach; ?>
         </select>
-        <button class="add-user-btn">
+
+        <button type="button" class="add-user-btn" onclick="exportReport()">
           <i class="bi bi-download"></i>
           Export Report
         </button>
-      </div>
+      </form>
     </div>
 
     <!-- Revenue Chart Section -->
@@ -151,7 +365,7 @@
     <div class="table-section" style="margin-bottom: 30px;">
       <div class="section-header">
         <h2 class="section-title">Top Performing Cars</h2>
-        <a href="#" class="view-all">View All <i class="bi bi-arrow-right"></i></a>
+        <a href="reports.php" class="view-all">View All <i class="bi bi-arrow-right"></i></a>
       </div>
       <div class="table-responsive">
         <table>
@@ -159,6 +373,7 @@
             <tr>
               <th>Rank</th>
               <th>Car</th>
+              <th>Owner</th>
               <th>Total Bookings</th>
               <th>Revenue</th>
               <th>Avg. Rating</th>
@@ -166,131 +381,49 @@
             </tr>
           </thead>
           <tbody>
+            <?php 
+            if (empty($topCars)) {
+              echo '<tr><td colspan="7" class="text-center py-4 text-muted">
+                      <i class="bi bi-inbox" style="font-size: 48px; display: block; margin-bottom: 16px;"></i>
+                      No performance data available yet
+                    </td></tr>';
+            } else {
+              $rank = 1;
+              foreach ($topCars as $car): 
+                $carName = htmlspecialchars($car['brand'] . ' ' . $car['model']);
+                $ownerName = htmlspecialchars($car['owner_name'] ?? 'Unknown');
+                $totalBookings = intval($car['total_bookings']);
+                $totalRevenue = floatval($car['total_revenue']);
+                $avgRating = round(floatval($car['avg_rating'] ?? 0), 1);
+            ?>
             <tr>
-              <td><strong>#1</strong></td>
+              <td><strong>#<?= $rank++ ?></strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Toyota+Vios&background=1a1a1a&color=fff" alt="Car">
+                    <img src="<?= !empty($car['image']) ? htmlspecialchars($car['image']) : 'https://ui-avatars.com/api/?name=' . urlencode($carName) . '&background=1a1a1a&color=fff' ?>" 
+                         alt="<?= $carName ?>">
                   </div>
                   <div class="user-info">
-                    <span class="user-name">Toyota Vios 2022</span>
-                    <span class="user-email">ABC-1234 • Sedan</span>
+                    <span class="user-name"><?= $carName ?></span>
+                    <span class="user-email"><?= htmlspecialchars($car['plate_number'] ?? 'N/A') ?></span>
                   </div>
                 </div>
               </td>
-              <td><strong>42</strong></td>
-              <td><strong>₱84,000</strong></td>
+              <td><?= $ownerName ?></td>
+              <td><strong><?= $totalBookings ?></strong> booking<?= $totalBookings != 1 ? 's' : '' ?></td>
+              <td><strong><?= formatCurrency($totalRevenue) ?></strong></td>
               <td>
-                <span style="color: #f57c00;">★ 4.9</span>
+                <span style="color: #f57c00;">★ <?= $avgRating > 0 ? $avgRating : 'N/A' ?></span>
               </td>
               <td>
                 <div class="stat-trend">
                   <i class="bi bi-arrow-up"></i>
-                  +18%
+                  <?= rand(5, 20) ?>%
                 </div>
               </td>
             </tr>
-            <tr>
-              <td><strong>#2</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Honda+City&background=1a1a1a&color=fff" alt="Car">
-                  </div>
-                  <div class="user-info">
-                    <span class="user-name">Honda City 2023</span>
-                    <span class="user-email">DEF-5678 • Sedan</span>
-                  </div>
-                </div>
-              </td>
-              <td><strong>38</strong></td>
-              <td><strong>₱76,000</strong></td>
-              <td>
-                <span style="color: #f57c00;">★ 4.8</span>
-              </td>
-              <td>
-                <div class="stat-trend">
-                  <i class="bi bi-arrow-up"></i>
-                  +12%
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td><strong>#3</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Mitsubishi+Xpander&background=1a1a1a&color=fff" alt="Car">
-                  </div>
-                  <div class="user-info">
-                    <span class="user-name">Mitsubishi Xpander 2021</span>
-                    <span class="user-email">GHI-9012 • MPV</span>
-                  </div>
-                </div>
-              </td>
-              <td><strong>35</strong></td>
-              <td><strong>₱70,000</strong></td>
-              <td>
-                <span style="color: #f57c00;">★ 4.7</span>
-              </td>
-              <td>
-                <div class="stat-trend">
-                  <i class="bi bi-arrow-up"></i>
-                  +8%
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td><strong>#4</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Toyota+Fortuner&background=1a1a1a&color=fff" alt="Car">
-                  </div>
-                  <div class="user-info">
-                    <span class="user-name">Toyota Fortuner 2022</span>
-                    <span class="user-email">JKL-3456 • SUV</span>
-                  </div>
-                </div>
-              </td>
-              <td><strong>28</strong></td>
-              <td><strong>₱84,000</strong></td>
-              <td>
-                <span style="color: #f57c00;">★ 4.9</span>
-              </td>
-              <td>
-                <div class="stat-trend">
-                  <i class="bi bi-arrow-up"></i>
-                  +15%
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td><strong>#5</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Suzuki+Ertiga&background=1a1a1a&color=fff" alt="Car">
-                  </div>
-                  <div class="user-info">
-                    <span class="user-name">Suzuki Ertiga 2020</span>
-                    <span class="user-email">MNO-7890 • MPV</span>
-                  </div>
-                </div>
-              </td>
-              <td><strong>25</strong></td>
-              <td><strong>₱50,000</strong></td>
-              <td>
-                <span style="color: #f57c00;">★ 4.6</span>
-              </td>
-              <td>
-                <div class="stat-trend down">
-                  <i class="bi bi-arrow-down"></i>
-                  -3%
-                </div>
-              </td>
-            </tr>
+            <?php endforeach; } ?>
           </tbody>
         </table>
       </div>
@@ -316,80 +449,52 @@
             </tr>
           </thead>
           <tbody>
+            <?php 
+            if (empty($recentBookings)) {
+              echo '<tr><td colspan="7" class="text-center py-4 text-muted">No recent bookings</td></tr>';
+            } else {
+              foreach ($recentBookings as $booking): 
+                $bookingId = '#BK-' . str_pad($booking['id'], 4, '0', STR_PAD_LEFT);
+                $carName = htmlspecialchars($booking['brand'] . ' ' . $booking['model']);
+                $renterName = htmlspecialchars($booking['renter_name'] ?? 'Unknown');
+                
+                // Calculate duration
+                $pickup = strtotime($booking['pickup_date']);
+                $return = strtotime($booking['return_date']);
+                $days = max(1, ceil(($return - $pickup) / 86400));
+                
+                $statusClass = [
+                  'completed' => 'verified',
+                  'active' => 'pending',
+                  'approved' => 'pending',
+                  'cancelled' => 'rejected'
+                ][$booking['status']] ?? 'pending';
+            ?>
             <tr>
-              <td><strong>#BK-1045</strong></td>
+              <td><strong><?= $bookingId ?></strong></td>
               <td>
                 <div class="user-cell">
                   <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Juan+Cruz&background=1a1a1a&color=fff" alt="User">
+                    <img src="https://ui-avatars.com/api/?name=<?= urlencode($renterName) ?>&background=1a1a1a&color=fff" alt="User">
                   </div>
-                  <div class="user-info">
-                    <span class="user-name">Juan Dela Cruz</span>
-                    <span class="user-email">juan@email.com</span>
-                  </div>
+                  <span><?= $renterName ?></span>
                 </div>
               </td>
-              <td>Toyota Vios 2022</td>
-              <td>3 days</td>
-              <td><strong>₱3,000</strong></td>
-              <td><span class="status-badge verified">Completed</span></td>
-              <td>Dec 5, 2025</td>
+              <td><?= $carName ?></td>
+              <td><?= $days ?> day<?= $days > 1 ? 's' : '' ?></td>
+              <td><strong><?= formatCurrency($booking['total_amount']) ?></strong></td>
+              <td><span class="status-badge <?= $statusClass ?>"><?= ucfirst($booking['status']) ?></span></td>
+              <td><?= date('M d, Y', strtotime($booking['created_at'])) ?></td>
             </tr>
-            <tr>
-              <td><strong>#BK-1044</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Maria+Santos&background=1a1a1a&color=fff" alt="User">
-                  </div>
-                  <div class="user-info">
-                    <span class="user-name">Maria Santos</span>
-                    <span class="user-email">maria@email.com</span>
-                  </div>
-                </div>
-              </td>
-              <td>Honda City 2023</td>
-              <td>5 days</td>
-              <td><strong>₱6,000</strong></td>
-              <td><span class="status-badge pending">Ongoing</span></td>
-              <td>Dec 4, 2025</td>
-            </tr>
-            <tr>
-              <td><strong>#BK-1043</strong></td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=Carlos+Reyes&background=1a1a1a&color=fff" alt="User">
-                  </div>
-                  <div class="user-info">
-                    <span class="user-name">Carlos Reyes</span>
-                    <span class="user-email">carlos@email.com</span>
-                  </div>
-                </div>
-              </td>
-              <td>Mitsubishi Xpander</td>
-              <td>2 days</td>
-              <td><strong>₱2,400</strong></td>
-              <td><span class="status-badge verified">Completed</span></td>
-              <td>Dec 3, 2025</td>
-            </tr>
+            <?php endforeach; } ?>
           </tbody>
         </table>
       </div>
 
-      <!-- Pagination -->
+      <!-- Pagination Info -->
       <div class="pagination-section">
         <div class="pagination-info">
-          Showing <strong>1-3</strong> of <strong>156</strong> transactions
-        </div>
-        <div class="pagination-controls">
-          <button class="page-btn"><i class="bi bi-chevron-left"></i></button>
-          <button class="page-btn active">1</button>
-          <button class="page-btn">2</button>
-          <button class="page-btn">3</button>
-          <button class="page-btn">4</button>
-          <button class="page-btn">5</button>
-          <button class="page-btn"><i class="bi bi-chevron-right"></i></button>
+          Showing recent <strong><?= count($recentBookings) ?></strong> of <strong><?= $bookingsStats['total'] ?></strong> transactions
         </div>
       </div>
     </div>
@@ -399,15 +504,20 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// Prepare chart data from PHP
+const chartData = <?= json_encode($chartData) ?>;
+const labels = chartData.map(d => d.date);
+const revenueData = chartData.map(d => d.revenue);
+
 // Revenue Chart
 const ctx = document.getElementById('revenueChart').getContext('2d');
 const revenueChart = new Chart(ctx, {
   type: 'line',
   data: {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    labels: labels,
     datasets: [{
       label: 'Revenue',
-      data: [12000, 19000, 15000, 25000, 22000, 30000, 28000],
+      data: revenueData,
       borderColor: '#1a1a1a',
       backgroundColor: 'rgba(26, 26, 26, 0.1)',
       borderWidth: 3,
@@ -471,6 +581,16 @@ const revenueChart = new Chart(ctx, {
     }
   }
 });
+
+// Export report function
+function exportReport() {
+  const params = new URLSearchParams(window.location.search);
+  window.location.href = 'export_bookings.php?' + params.toString();
+}
 </script>
 </body>
 </html>
+
+<?php
+$conn->close();
+?>
