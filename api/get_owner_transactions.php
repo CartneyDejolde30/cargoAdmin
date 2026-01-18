@@ -2,7 +2,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-require_once '../include/db.php';
+require_once __DIR__ . '/../include/db.php';
 
 if (!isset($_GET['owner_id'])) {
     echo json_encode(['success' => false, 'message' => 'Owner ID required']);
@@ -103,7 +103,7 @@ try {
         // Format vehicle image
         $vehicleImage = $row['vehicle_image'];
         if (!empty($vehicleImage) && strpos($vehicleImage, 'http') !== 0) {
-            $vehicleImage = 'http://10.139.150.2/carGOAdmin/' . $vehicleImage;
+            $vehicleImage = 'http://192.168.137.1/carGOAdmin/' . $vehicleImage;
         }
         
         // Determine status and badge
@@ -204,7 +204,7 @@ try {
             'paid_count' => $paidCount,
             'pending_count' => $pendingCount,
             'escrowed_count' => $escrowedCount,
-            'completed_count' => $completedCount,
+            'completed_count' => $completedCount, 
             'total_transactions' => count($transactions),
             
             // Averages

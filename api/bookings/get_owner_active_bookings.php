@@ -66,7 +66,7 @@ while ($row = $result->fetch_assoc()) {
     // Format image URL
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.244.29.49/carGOAdmin/' . $carImage;
+        $carImage = 'http://192.168.137.1/carGOAdmin/' . $carImage;
     }
     
     // Calculate trip progress
