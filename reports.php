@@ -265,7 +265,7 @@ $stats = mysqli_fetch_assoc($statsResult);
                             <?php while ($row = mysqli_fetch_assoc($result)): ?>
 
                                 <tr style="<?php echo $row['status'] === 'pending' ? 'background-color: #fff3cd;' : ''; ?>">
-                                    <td><strong>#<?php echo $row['id']; ?></strong></td>
+                                    <td><strong># <?php echo $row['id']; ?></strong></td>
                                     <td>
                                         <span class="role-badge" style="<?php
                                             echo $row['report_type'] === 'car' ? 'background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);' : 

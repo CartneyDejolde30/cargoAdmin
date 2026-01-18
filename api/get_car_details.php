@@ -59,8 +59,9 @@ $car["image"] = !empty($cleanImage) ? $baseUrl . $cleanImage : "";
 
 /* Owner image */
 $car["owner_image"] = !empty($car["owner_image"])
-    ? $baseUrl . "uploads/" . $car["owner_image"]
+    ? $baseUrl . "uploads/profile_images/" . $car["owner_image"]
     : "";
+
 
 /* --------------------------------------------
    Fix Location
