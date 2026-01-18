@@ -76,6 +76,7 @@
       font-size: 14px;
       font-weight: 500;
       margin-bottom: 6px;
+      position: relative;
     }
 
     .menu-item:hover {
@@ -92,6 +93,24 @@
       font-size: 18px;
       width: 20px;
       text-align: center;
+    }
+
+    .menu-badge {
+      position: absolute;
+      right: 12px;
+      background: #dc3545;
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    .menu-item.active .menu-badge {
+      background: #fff;
+      color: #1a1a1a;
     }
 
     .logout-item {
@@ -150,6 +169,62 @@
     </a>
   </div>
 
+  <!-- FINANCIAL MANAGEMENT -->
+  <div class="menu-section">
+    <div class="menu-label">Financial</div>
+    <a href="refunds.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'refunds.php' ? 'active' : ''; ?>">
+      <i class="bi bi-arrow-counterclockwise"></i>
+      <span>Refunds</span>
+      <?php
+      // Get pending refunds count
+      if (isset($conn)) {
+        $refund_query = "SELECT COUNT(*) as count FROM refunds WHERE status = 'pending'";
+        $refund_result = mysqli_query($conn, $refund_query);
+        if ($refund_result) {
+          $refund_data = mysqli_fetch_assoc($refund_result);
+          if ($refund_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $refund_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
+    <a href="payouts.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'payouts.php' ? 'active' : ''; ?>">
+      <i class="bi bi-cash-stack"></i>
+      <span>Payouts</span>
+      <?php
+      // Get pending payouts count
+      if (isset($conn)) {
+        $payout_query = "SELECT COUNT(*) as count FROM payouts WHERE status IN ('pending', 'processing')";
+        $payout_result = mysqli_query($conn, $payout_query);
+        if ($payout_result) {
+          $payout_data = mysqli_fetch_assoc($payout_result);
+          if ($payout_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $payout_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
+    <a href="escrow.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'escrow.php' ? 'active' : ''; ?>">
+      <i class="bi bi-shield-lock"></i>
+      <span>Escrow Management</span>
+      <?php
+      // Get held escrow count
+      if (isset($conn)) {
+        $escrow_query = "SELECT COUNT(*) as count FROM escrow WHERE status = 'held'";
+        $escrow_result = mysqli_query($conn, $escrow_query);
+        if ($escrow_result) {
+          $escrow_data = mysqli_fetch_assoc($escrow_result);
+          if ($escrow_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $escrow_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
+  </div>
+
   <!-- REPORTS -->
   <div class="menu-section">
     <div class="menu-label">Report</div>
@@ -160,7 +235,7 @@
     </a>
     <a href="reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
       <i class="bi bi-file-text"></i>
-      <span>Car Reports</span>
+      <span>User Reports</span>
     </a>
   </div>
 

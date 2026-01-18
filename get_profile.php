@@ -19,7 +19,7 @@ $result = $stmt->get_result();
 if ($row = $result->fetch_assoc()) {
     // If profile_image is relative, prepend domain
     if (!empty($row["profile_image"]) && !preg_match("~^https?://~", $row["profile_image"])) {
-        $row["profile_image"] = "http://10.139.150.2/carGOAdmin/" . $row["profile_image"];
+        $row["profile_image"] = "http://192.168.137.1/carGOAdmin/" . $row["profile_image"];
     }
 
     echo json_encode([

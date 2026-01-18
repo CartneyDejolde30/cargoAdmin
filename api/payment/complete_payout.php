@@ -1,271 +1,293 @@
 <?php
 /**
- * COMPLETE PAYOUT TO OWNER
- * Called after manual GCash transfer or bank transfer completed
+ * =====================================================
+ * COMPLETE PAYOUT HANDLER (IMPROVED VERSION)
+ * Handles manual GCash payouts to car owners
+ * =====================================================
  */
 
 session_start();
 header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
 
 require_once __DIR__ . "/../../include/db.php";
 require_once __DIR__ . "/transaction_logger.php";
 
-$response = ["success" => false, "message" => ""];
-
-// Auth check
+// Check authentication
 if (!isset($_SESSION['admin_id'])) {
-    $response["message"] = "Unauthorized access";
-    echo json_encode($response);
+    http_response_code(401);
+    echo json_encode([
+        "success" => false,
+        "message" => "Unauthorized. Admin login required."
+    ]);
     exit;
 }
 
 $adminId = intval($_SESSION['admin_id']);
 
-<<<<<<< HEAD
-// Input validation
-if (empty($_POST['payout_id']) || empty($_POST['reference'])) {
-    $response["message"] = "Missing payout ID or transfer reference";
-=======
-// Input validation - Accept EITHER booking_id OR payout_id
-$bookingId = !empty($_POST['booking_id']) ? intval($_POST['booking_id']) : null;
-$payoutId = !empty($_POST['payout_id']) ? intval($_POST['payout_id']) : null;
-$transferReference = !empty($_POST['reference']) ? trim($_POST['reference']) : null;
+// Validate inputs
+$bookingId = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : null;
+$payoutReference = isset($_POST['reference']) ? trim($_POST['reference']) : null;
+$gcashNumber = isset($_POST['gcash_number']) ? trim($_POST['gcash_number']) : null;
 
-if ((!$bookingId && !$payoutId) || !$transferReference) {
-    $response["message"] = "Missing booking/payout ID or transfer reference";
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
-    echo json_encode($response);
+if (!$bookingId || !$payoutReference) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Missing required fields: booking_id and reference are required"
+    ]);
     exit;
 }
 
-<<<<<<< HEAD
-$payoutId = intval($_POST['payout_id']);
-$transferReference = trim($_POST['reference']);
-=======
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
-$transferProof = $_FILES['proof'] ?? null;
+// Validate reference format (optional but recommended)
+if (strlen($payoutReference) < 8) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Invalid reference number. Must be at least 8 characters."
+    ]);
+    exit;
+}
 
+// Handle file upload
+$proofPath = null;
+if (isset($_FILES['proof']) && $_FILES['proof']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = __DIR__ . '/../../uploads/payout_proofs/';
+    
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+    
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    $fileType = $_FILES['proof']['type'];
+    
+    if (!in_array($fileType, $allowedTypes)) {
+        echo json_encode([
+            "success" => false,
+            "message" => "Invalid file type. Only JPG and PNG images are allowed."
+        ]);
+        exit;
+    }
+    
+    if ($_FILES['proof']['size'] > 5 * 1024 * 1024) { // 5MB limit
+        echo json_encode([
+            "success" => false,
+            "message" => "File too large. Maximum size is 5MB."
+        ]);
+        exit;
+    }
+    
+    $extension = pathinfo($_FILES['proof']['name'], PATHINFO_EXTENSION);
+    $filename = 'payout_' . $bookingId . '_' . time() . '.' . $extension;
+    $fullPath = $uploadDir . $filename;
+    
+    if (move_uploaded_file($_FILES['proof']['tmp_name'], $fullPath)) {
+        $proofPath = 'uploads/payout_proofs/' . $filename;
+    } else {
+        echo json_encode([
+            "success" => false,
+            "message" => "Failed to upload proof of transfer"
+        ]);
+        exit;
+    }
+}
+
+// Start transaction
 mysqli_begin_transaction($conn);
 
 try {
     $logger = new TransactionLogger($conn);
     
-<<<<<<< HEAD
-    // Lock payout
-=======
-    // If only booking_id provided, find or create payout record
-    if ($bookingId && !$payoutId) {
-        // Check if payout already exists
-        $stmt = $conn->prepare("SELECT id FROM payouts WHERE booking_id = ? LIMIT 1");
-        $stmt->bind_param("i", $bookingId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($result->num_rows > 0) {
-            $payoutId = $result->fetch_assoc()['id'];
-        } else {
-            // Create payout record if it doesn't exist
-            $stmt = $conn->prepare("
-                SELECT 
-                    b.id as booking_id,
-                    b.owner_id,
-                    b.owner_payout,
-                    b.platform_fee,
-                    e.id as escrow_id
-                FROM bookings b
-                LEFT JOIN escrow e ON b.id = e.booking_id AND e.status = 'held'
-                WHERE b.id = ?
-            ");
-            $stmt->bind_param("i", $bookingId);
-            $stmt->execute();
-            $booking = $stmt->get_result()->fetch_assoc();
-            
-            if (!$booking) {
-                throw new Exception("Booking not found");
-            }
-            
-            if (!$booking['escrow_id']) {
-                throw new Exception("No escrow found for this booking");
-            }
-            
-            // Create payout record
-            $stmt = $conn->prepare("
-                INSERT INTO payouts (
-                    booking_id,
-                    owner_id,
-                    escrow_id,
-                    amount,
-                    platform_fee,
-                    net_amount,
-                    status,
-                    scheduled_at,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
-            ");
-            $stmt->bind_param(
-                "iiiddd",
-                $booking['booking_id'],
-                $booking['owner_id'],
-                $booking['escrow_id'],
-                $booking['owner_payout'],
-                $booking['platform_fee'],
-                $booking['owner_payout']
-            );
-            $stmt->execute();
-            $payoutId = $conn->insert_id;
-        }
-    }
-    
-    // Now lock and process the payout
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
+    // Step 1: Get booking and verify state
     $stmt = $conn->prepare("
         SELECT 
-            p.id,
-            p.booking_id,
-            p.owner_id,
-            p.net_amount,
-            p.status,
-<<<<<<< HEAD
-            b.escrow_status
-        FROM payouts p
-        INNER JOIN bookings b ON p.booking_id = b.id
-=======
+            b.id,
+            b.owner_id,
+            b.owner_payout,
+            b.platform_fee,
+            b.total_amount,
             b.escrow_status,
-            u.fullname as owner_name
-        FROM payouts p
-        INNER JOIN bookings b ON p.booking_id = b.id
-        INNER JOIN users u ON p.owner_id = u.id
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
-        WHERE p.id = ?
+            b.payout_status,
+            b.status AS booking_status,
+            u.fullname AS owner_name,
+            u.gcash_number AS owner_gcash,
+            e.id AS escrow_id
+        FROM bookings b
+        INNER JOIN users u ON b.owner_id = u.id
+        LEFT JOIN escrow e ON b.id = e.booking_id AND e.status = 'released'
+        WHERE b.id = ?
         FOR UPDATE
     ");
     
-    $stmt->bind_param("i", $payoutId);
+    $stmt->bind_param("i", $bookingId);
     $stmt->execute();
-    $payout = $stmt->get_result()->fetch_assoc();
+    $result = $stmt->get_result();
     
-    if (!$payout) {
-        throw new Exception("Payout not found");
+    if ($result->num_rows === 0) {
+        throw new Exception("Booking not found");
     }
     
-    if ($payout['status'] === 'completed') {
-        throw new Exception("Payout already completed");
+    $booking = $result->fetch_assoc();
+    
+    // Step 2: Validate booking state
+    if ($booking['payout_status'] === 'completed') {
+        throw new Exception("Payout already completed for this booking");
     }
     
-<<<<<<< HEAD
-    if ($payout['escrow_status'] !== 'released_to_owner') {
-        throw new Exception("Escrow not released yet");
+    if ($booking['escrow_status'] !== 'released_to_owner') {
+        throw new Exception("Escrow must be released before completing payout. Current status: " . $booking['escrow_status']);
     }
     
-=======
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
-    // Handle proof upload
-    $proofPath = null;
-    if ($transferProof && $transferProof['error'] === UPLOAD_ERR_OK) {
-        $uploadDir = __DIR__ . '/../../uploads/payout_proofs/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-        
-        $filename = 'payout_' . $payoutId . '_' . time() . '.' . pathinfo($transferProof['name'], PATHINFO_EXTENSION);
-<<<<<<< HEAD
-        $proofPath = $uploadDir . $filename;
-        
-        if (!move_uploaded_file($transferProof['tmp_name'], $proofPath)) {
-=======
-        $fullPath = $uploadDir . $filename;
-        
-        if (!move_uploaded_file($transferProof['tmp_name'], $fullPath)) {
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
-            throw new Exception("Failed to upload proof");
-        }
-        
-        $proofPath = 'uploads/payout_proofs/' . $filename;
+    if ($booking['booking_status'] !== 'completed') {
+        throw new Exception("Booking must be completed before payout. Current status: " . $booking['booking_status']);
     }
     
-    // Complete payout
+    // Step 3: Check if payout record exists, create if not
+    $stmt = $conn->prepare("SELECT id FROM payouts WHERE booking_id = ? LIMIT 1");
+    $stmt->bind_param("i", $bookingId);
+    $stmt->execute();
+    $payoutResult = $stmt->get_result();
+    
+    if ($payoutResult->num_rows === 0) {
+        // Create payout record
+        $stmt = $conn->prepare("
+            INSERT INTO payouts (
+                booking_id,
+                owner_id,
+                escrow_id,
+                amount,
+                platform_fee,
+                net_amount,
+                status,
+                scheduled_at,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'processing', NOW(), NOW())
+        ");
+        
+        $stmt->bind_param(
+            "iiiddd",
+            $bookingId,
+            $booking['owner_id'],
+            $booking['escrow_id'],
+            $booking['total_amount'],
+            $booking['platform_fee'],
+            $booking['owner_payout']
+        );
+        $stmt->execute();
+        $payoutId = $conn->insert_id;
+    } else {
+        $payoutId = $payoutResult->fetch_assoc()['id'];
+    }
+    
+    // Step 4: Complete the payout
     $stmt = $conn->prepare("
         UPDATE payouts SET
             status = 'completed',
             completion_reference = ?,
             transfer_proof = ?,
+            payout_account = ?,
             processed_at = NOW(),
             processed_by = ?
         WHERE id = ?
     ");
-    $stmt->bind_param("ssii", $transferReference, $proofPath, $adminId, $payoutId);
+    
+    $gcashToUse = $gcashNumber ?: $booking['owner_gcash'];
+    
+    $stmt->bind_param(
+        "sssii",
+        $payoutReference,
+        $proofPath,
+        $gcashToUse,
+        $adminId,
+        $payoutId
+    );
     $stmt->execute();
     
-    // Update booking
+    // Step 5: Update booking payout status
     $stmt = $conn->prepare("
         UPDATE bookings SET
             payout_status = 'completed',
-<<<<<<< HEAD
-            payout_completed_at = NOW()
-        WHERE id = ?
-    ");
-=======
             payout_completed_at = NOW(),
             payout_reference = ?
         WHERE id = ?
     ");
-    $stmt->bind_param("si", $transferReference, $payout['booking_id']);
+    $stmt->bind_param("si", $payoutReference, $bookingId);
     $stmt->execute();
     
-    // Update escrow status
-    $stmt = $conn->prepare("
-        UPDATE escrow SET
-            status = 'released',
-            released_at = NOW()
-        WHERE booking_id = ? AND status = 'held'
-    ");
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
-    $stmt->bind_param("i", $payout['booking_id']);
-    $stmt->execute();
+    // Step 6: Update escrow to fully released
+    if ($booking['escrow_id']) {
+        $stmt = $conn->prepare("
+            UPDATE escrow SET
+                status = 'released',
+                released_at = NOW(),
+                release_reason = 'Payout completed to owner',
+                processed_by = ?
+            WHERE id = ?
+        ");
+        $stmt->bind_param("ii", $adminId, $booking['escrow_id']);
+        $stmt->execute();
+    }
     
-    // Log transaction
+    // Step 7: Log the transaction
     $logger->log(
-        $payout['booking_id'],
+        $bookingId,
         'payout',
-        $payout['net_amount'],
-<<<<<<< HEAD
-        "Payout completed. Transfer ref: $transferReference",
-=======
-        "Payout completed to {$payout['owner_name']}. Transfer ref: $transferReference",
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
+        $booking['owner_payout'],
+        "Payout completed to {$booking['owner_name']}. GCash ref: {$payoutReference}",
         $adminId,
         [
             'payout_id' => $payoutId,
-            'transfer_reference' => $transferReference,
+            'transfer_reference' => $payoutReference,
+            'gcash_number' => $gcashToUse,
             'proof_path' => $proofPath
         ]
     );
     
-    // Notify owner
+    // Step 8: Notify the owner
     $stmt = $conn->prepare("
-        INSERT INTO notifications (user_id, title, message)
-        VALUES (?, 'Payout Completed 💸', CONCAT('Your payout of ₱', FORMAT(?, 2), ' has been transferred. Ref: ', ?))
+        INSERT INTO notifications (user_id, title, message, created_at)
+        VALUES (?, 'Payout Completed 💸', ?, NOW())
     ");
-    $stmt->bind_param("ids", $payout['owner_id'], $payout['net_amount'], $transferReference);
+    
+    $message = sprintf(
+        'Your payout of ₱%s for booking #BK-%04d has been transferred to your GCash account. Reference: %s',
+        number_format($booking['owner_payout'], 2),
+        $bookingId,
+        $payoutReference
+    );
+    
+    $stmt->bind_param("is", $booking['owner_id'], $message);
     $stmt->execute();
     
+    // Commit transaction
     mysqli_commit($conn);
     
-    $response["success"] = true;
-<<<<<<< HEAD
-    $response["message"] = "Payout completed successfully";
-=======
-    $response["message"] = "Payout completed successfully. ₱" . number_format($payout['net_amount'], 2) . " transferred to " . $payout['owner_name'];
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
+    // Success response
+    echo json_encode([
+        "success" => true,
+        "message" => sprintf(
+            "Payout completed successfully! ₱%s transferred to %s",
+            number_format($booking['owner_payout'], 2),
+            $booking['owner_name']
+        ),
+        "data" => [
+            "payout_id" => $payoutId,
+            "amount" => $booking['owner_payout'],
+            "reference" => $payoutReference,
+            "owner" => $booking['owner_name'],
+            "gcash_number" => $gcashToUse
+        ]
+    ]);
     
 } catch (Exception $e) {
+    // Rollback on error
     mysqli_rollback($conn);
-    $response["message"] = $e->getMessage();
-<<<<<<< HEAD
-=======
-    error_log("Complete Payout Error: " . $e->getMessage());
->>>>>>> fd3412cec13f65276ca33caa906de09680d00ba5
+    
+    // Log error
+    error_log("Payout Error (Booking #{$bookingId}): " . $e->getMessage());
+    
+    echo json_encode([
+        "success" => false,
+        "message" => $e->getMessage()
+    ]);
 }
 
-echo json_encode($response);
 $conn->close();

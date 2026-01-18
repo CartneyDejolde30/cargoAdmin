@@ -1,6 +1,9 @@
 <?php
 header('Content-Type: application/json');
-require_once '../config.php';
+header('Access-Control-Allow-Origin: *');
+
+// ✅ FIXED: Changed from '../config.php' to '../../include/db.php'
+require_once '../../include/db.php';
 
 $owner_id = $_GET['owner_id'] ?? null;
 
@@ -31,8 +34,14 @@ try {
         ORDER BY b.pickup_date ASC
         LIMIT 10
     ");
-    $stmt->execute([$owner_id]);
-    $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->bind_param("s", $owner_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $bookings = [];
+    while ($row = $result->fetch_assoc()) {
+        $bookings[] = $row;
+    }
 
     echo json_encode([
         'success' => true,
@@ -41,4 +50,7 @@ try {
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
+
+$stmt->close();
+$conn->close();
 ?>

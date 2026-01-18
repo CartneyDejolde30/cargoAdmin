@@ -1,11 +1,11 @@
 <?php
 // ========================================
-// api/get_owner_active_bookings.php
+// api/bookings/get_owner_active_bookings.php
 // ========================================
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-require_once '../include/db.php';
+require_once '../../include/db.php'; // FIXED: Go up TWO levels to reach carGOAdmin/include/db.php
 
 $owner_id = $_GET['owner_id'] ?? null;
 
@@ -66,7 +66,7 @@ while ($row = $result->fetch_assoc()) {
     // Format image URL
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.244.29.49/carGOAdmin/' . $carImage;
+        $carImage = 'http://192.168.137.1/carGOAdmin/' . $carImage;
     }
     
     // Calculate trip progress
