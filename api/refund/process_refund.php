@@ -1,285 +1,275 @@
 <?php
 /**
- * =====================================================
- * PROCESS REFUND HANDLER
- * Handles refund processing for cancelled bookings
- * =====================================================
+ * ============================================================================
+ * PROCESS REFUND API - Admin processes refund requests
+ * Actions: approve, reject, complete
+ * ============================================================================
  */
 
 session_start();
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
+header('Content-Type: application/json');
 
-require_once __DIR__ . "/../../include/db.php";
-require_once __DIR__ . "/../payment/transaction_logger.php";
+require_once '../../include/db.php';
 
-// Check authentication
+// ============================================================================
+// CHECK ADMIN AUTHENTICATION
+// ============================================================================
+
 if (!isset($_SESSION['admin_id'])) {
     http_response_code(401);
     echo json_encode([
-        "success" => false,
-        "message" => "Unauthorized. Admin login required."
+        'success' => false,
+        'message' => 'Unauthorized. Admin login required.'
     ]);
     exit;
 }
 
-$adminId = intval($_SESSION['admin_id']);
+$admin_id = $_SESSION['admin_id'];
 
-// Get request data
-$input = json_decode(file_get_contents('php://input'), true);
+// ============================================================================
+// VALIDATE REQUEST
+// ============================================================================
 
-$refundId = isset($input['refund_id']) ? intval($input['refund_id']) : null;
-$action = isset($input['action']) ? trim($input['action']) : null; // 'approve' or 'reject'
-$transferReference = isset($input['transfer_reference']) ? trim($input['transfer_reference']) : null;
-$rejectionReason = isset($input['rejection_reason']) ? trim($input['rejection_reason']) : null;
-
-if (!$refundId || !$action) {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
     echo json_encode([
-        "success" => false,
-        "message" => "Missing required fields: refund_id and action"
+        'success' => false,
+        'message' => 'Method not allowed'
     ]);
     exit;
 }
 
-if (!in_array($action, ['approve', 'reject'])) {
+$refund_id = isset($_POST['refund_id']) ? intval($_POST['refund_id']) : 0;
+$action = isset($_POST['action']) ? $_POST['action'] : '';
+$admin_notes = isset($_POST['admin_notes']) ? mysqli_real_escape_string($conn, $_POST['admin_notes']) : '';
+$rejection_reason = isset($_POST['rejection_reason']) ? mysqli_real_escape_string($conn, $_POST['rejection_reason']) : '';
+$refund_reference = isset($_POST['refund_reference']) ? mysqli_real_escape_string($conn, $_POST['refund_reference']) : '';
+$deduction_amount = isset($_POST['deduction_amount']) ? floatval($_POST['deduction_amount']) : 0;
+$deduction_reason = isset($_POST['deduction_reason']) ? mysqli_real_escape_string($conn, $_POST['deduction_reason']) : '';
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+if ($refund_id <= 0) {
+    http_response_code(400);
     echo json_encode([
-        "success" => false,
-        "message" => "Invalid action. Must be 'approve' or 'reject'"
+        'success' => false,
+        'message' => 'Invalid refund ID'
     ]);
     exit;
 }
 
-if ($action === 'approve' && !$transferReference) {
+$allowed_actions = ['approve', 'reject', 'complete'];
+if (!in_array($action, $allowed_actions)) {
+    http_response_code(400);
     echo json_encode([
-        "success" => false,
-        "message" => "Transfer reference is required for approval"
+        'success' => false,
+        'message' => 'Invalid action. Allowed: approve, reject, complete'
     ]);
     exit;
 }
 
-if ($action === 'reject' && !$rejectionReason) {
+// ============================================================================
+// GET REFUND DETAILS
+// ============================================================================
+
+$refund_query = "
+    SELECT 
+        r.*,
+        b.status AS booking_status,
+        b.total_amount AS booking_amount,
+        p.payment_status,
+        p.id AS payment_id
+    FROM refunds r
+    JOIN bookings b ON r.booking_id = b.id
+    JOIN payments p ON r.payment_id = p.id
+    WHERE r.id = ?
+    LIMIT 1
+";
+
+$stmt = $conn->prepare($refund_query);
+$stmt->bind_param("i", $refund_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows === 0) {
+    http_response_code(404);
     echo json_encode([
-        "success" => false,
-        "message" => "Rejection reason is required"
+        'success' => false,
+        'message' => 'Refund request not found'
     ]);
     exit;
 }
 
-// Start transaction
-mysqli_begin_transaction($conn);
+$refund = $result->fetch_assoc();
+
+// ============================================================================
+// PROCESS ACTION
+// ============================================================================
+
+$conn->begin_transaction();
 
 try {
-    $logger = new TransactionLogger($conn);
-    
-    // Step 1: Get refund request details
-    $stmt = $conn->prepare("
-        SELECT 
-            r.*,
-            b.total_amount,
-            b.escrow_status,
-            b.payment_status,
-            b.status AS booking_status,
-            u.fullname AS renter_name,
-            u.email AS renter_email,
-            u.gcash_number AS renter_gcash,
-            p.payment_method,
-            p.payment_reference
-        FROM refunds r
-        INNER JOIN bookings b ON r.booking_id = b.id
-        INNER JOIN users u ON r.user_id = u.id
-        LEFT JOIN payments p ON r.payment_id = p.id
-        WHERE r.id = ?
-        FOR UPDATE
-    ");
-    
-    $stmt->bind_param("i", $refundId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows === 0) {
-        throw new Exception("Refund request not found");
-    }
-    
-    $refund = $result->fetch_assoc();
-    
-    // Step 2: Validate refund state
-    if ($refund['status'] !== 'pending') {
-        throw new Exception("Refund request already processed. Current status: " . $refund['status']);
-    }
-    
-    if (!in_array($refund['booking_status'], ['cancelled', 'rejected'])) {
-        throw new Exception("Refunds can only be processed for cancelled or rejected bookings");
-    }
-    
-    // === APPROVE REFUND ===
-    if ($action === 'approve') {
-        
-        // Step 3: Update refund record
-        $stmt = $conn->prepare("
-            UPDATE refunds SET
-                status = 'completed',
-                processed_by = ?,
-                processed_at = NOW(),
-                completion_reference = ?
-            WHERE id = ?
-        ");
-        $stmt->bind_param("isi", $adminId, $transferReference, $refundId);
-        $stmt->execute();
-        
-        // Step 4: Update booking payment status
-        $stmt = $conn->prepare("
-            UPDATE bookings SET
-                payment_status = 'refunded',
-                refund_status = 'completed',
-                refund_completed_at = NOW()
-            WHERE id = ?
-        ");
-        $stmt->bind_param("i", $refund['booking_id']);
-        $stmt->execute();
-        
-        // Step 5: Update payment record
-        $stmt = $conn->prepare("
-            UPDATE payments SET
-                payment_status = 'refunded'
-            WHERE id = ?
-        ");
-        $stmt->bind_param("i", $refund['payment_id']);
-        $stmt->execute();
-        
-        // Step 6: Update or release escrow if held
-        if ($refund['escrow_status'] === 'held') {
-            $stmt = $conn->prepare("
-                UPDATE escrow SET
-                    status = 'refunded',
-                    refunded_at = NOW(),
-                    refund_reason = ?,
+    switch ($action) {
+        // ========================================
+        // APPROVE REFUND
+        // ========================================
+        case 'approve':
+            if ($refund['status'] !== 'pending') {
+                throw new Exception('Only pending refunds can be approved');
+            }
+
+            // Calculate final refund amount after deductions
+            $final_refund_amount = $refund['refund_amount'] - $deduction_amount;
+
+            if ($final_refund_amount < 0) {
+                throw new Exception('Deduction amount cannot exceed refund amount');
+            }
+
+            // Update refund record
+            $update_refund = "
+                UPDATE refunds 
+                SET 
+                    status = 'approved',
+                    deduction_amount = ?,
+                    deduction_reason = ?,
+                    admin_notes = ?,
+                    approved_at = NOW(),
                     processed_by = ?
-                WHERE booking_id = ? AND status = 'held'
-            ");
-            
-            $reason = "Refund processed: " . $refund['refund_reason'];
-            $stmt->bind_param("sii", $reason, $adminId, $refund['booking_id']);
+                WHERE id = ?
+            ";
+
+            $stmt = $conn->prepare($update_refund);
+            $stmt->bind_param(
+                "dssii",
+                $deduction_amount,
+                $deduction_reason,
+                $admin_notes,
+                $admin_id,
+                $refund_id
+            );
             $stmt->execute();
-        }
-        
-        // Step 7: Log transaction
-        $logger->log(
-            $refund['booking_id'],
-            'refund',
-            $refund['refund_amount'],
-            "Refund completed to {$refund['renter_name']}. Reason: {$refund['refund_reason']}. GCash ref: {$transferReference}",
-            $adminId,
-            [
-                'refund_id' => $refundId,
-                'transfer_reference' => $transferReference,
-                'refund_method' => $refund['refund_method'],
-                'account_number' => $refund['account_number']
-            ]
-        );
-        
-        // Step 8: Notify renter
-        $stmt = $conn->prepare("
-            INSERT INTO notifications (user_id, title, message, created_at)
-            VALUES (?, 'Refund Processed 💵', ?, NOW())
-        ");
-        
-        $message = sprintf(
-            'Your refund of ₱%s has been processed and sent to your %s account. Reference: %s',
-            number_format($refund['refund_amount'], 2),
-            ucfirst($refund['refund_method']),
-            $transferReference
-        );
-        
-        $stmt->bind_param("is", $refund['user_id'], $message);
-        $stmt->execute();
-        
-        $responseMessage = sprintf(
-            "Refund approved! ₱%s transferred to %s",
-            number_format($refund['refund_amount'], 2),
-            $refund['renter_name']
-        );
-        
-    } 
-    // === REJECT REFUND ===
-    else {
-        
-        // Step 3: Update refund record
-        $stmt = $conn->prepare("
-            UPDATE refunds SET
-                status = 'rejected',
-                processed_by = ?,
-                processed_at = NOW(),
-                rejection_reason = ?
-            WHERE id = ?
-        ");
-        $stmt->bind_param("isi", $adminId, $rejectionReason, $refundId);
-        $stmt->execute();
-        
-        // Step 4: Update booking refund status
-        $stmt = $conn->prepare("
-            UPDATE bookings SET
-                refund_status = 'rejected'
-            WHERE id = ?
-        ");
-        $stmt->bind_param("i", $refund['booking_id']);
-        $stmt->execute();
-        
-        // Step 5: Log transaction
-        $logger->log(
-            $refund['booking_id'],
-            'refund',
-            $refund['refund_amount'],
-            "Refund request rejected. Reason: {$rejectionReason}",
-            $adminId,
-            [
-                'refund_id' => $refundId,
-                'rejection_reason' => $rejectionReason
-            ]
-        );
-        
-        // Step 6: Notify renter
-        $stmt = $conn->prepare("
-            INSERT INTO notifications (user_id, title, message, created_at)
-            VALUES (?, 'Refund Request Rejected ❌', ?, NOW())
-        ");
-        
-        $message = sprintf(
-            'Your refund request for booking #BK-%04d has been rejected. Reason: %s. Please contact support if you have questions.',
-            $refund['booking_id'],
-            $rejectionReason
-        );
-        
-        $stmt->bind_param("is", $refund['user_id'], $message);
-        $stmt->execute();
-        
-        $responseMessage = "Refund request rejected";
+
+            // Update booking
+            $conn->query("UPDATE bookings SET refund_status = 'approved' WHERE id = {$refund['booking_id']}");
+
+            $message = 'Refund approved successfully';
+            break;
+
+        // ========================================
+        // REJECT REFUND
+        // ========================================
+        case 'reject':
+            if ($refund['status'] !== 'pending') {
+                throw new Exception('Only pending refunds can be rejected');
+            }
+
+            if (empty($rejection_reason)) {
+                throw new Exception('Rejection reason is required');
+            }
+
+            // Update refund record
+            $update_refund = "
+                UPDATE refunds 
+                SET 
+                    status = 'rejected',
+                    rejection_reason = ?,
+                    admin_notes = ?,
+                    processed_by = ?,
+                    updated_at = NOW()
+                WHERE id = ?
+            ";
+
+            $stmt = $conn->prepare($update_refund);
+            $stmt->bind_param("ssii", $rejection_reason, $admin_notes, $admin_id, $refund_id);
+            $stmt->execute();
+
+            // Update booking
+            $conn->query("UPDATE bookings SET refund_status = 'rejected' WHERE id = {$refund['booking_id']}");
+
+            $message = 'Refund rejected';
+            break;
+
+        // ========================================
+        // COMPLETE REFUND (Mark as transferred)
+        // ========================================
+        case 'complete':
+            if (!in_array($refund['status'], ['approved', 'processing'])) {
+                throw new Exception('Only approved refunds can be completed');
+            }
+
+            if (empty($refund_reference)) {
+                throw new Exception('Refund reference number is required');
+            }
+
+            // Update refund record
+            $update_refund = "
+                UPDATE refunds 
+                SET 
+                    status = 'completed',
+                    refund_reference = ?,
+                    admin_notes = ?,
+                    completed_at = NOW(),
+                    processed_by = ?
+                WHERE id = ?
+            ";
+
+            $stmt = $conn->prepare($update_refund);
+            $stmt->bind_param("ssii", $refund_reference, $admin_notes, $admin_id, $refund_id);
+            $stmt->execute();
+
+            // Update booking
+            $conn->query("UPDATE bookings SET refund_status = 'completed' WHERE id = {$refund['booking_id']}");
+
+            // Mark payment as refunded
+            $conn->query("
+                UPDATE payments 
+                SET 
+                    is_refunded = 1,
+                    refund_id = {$refund_id},
+                    refunded_at = NOW()
+                WHERE id = {$refund['payment_id']}
+            ");
+
+            // If escrow is held, release it back to renter
+            if ($refund['payment_status'] === 'verified') {
+                $conn->query("
+                    UPDATE bookings 
+                    SET escrow_status = 'refunded'
+                    WHERE id = {$refund['booking_id']}
+                ");
+            }
+
+            $message = 'Refund completed and funds transferred';
+            break;
     }
-    
-    // Commit transaction
-    mysqli_commit($conn);
-    
-    // Success response
+
+    $conn->commit();
+
+    // ============================================================================
+    // SUCCESS RESPONSE
+    // ============================================================================
+
     echo json_encode([
-        "success" => true,
-        "message" => $responseMessage,
-        "data" => [
-            "refund_id" => $refundId,
-            "action" => $action,
-            "amount" => $refund['refund_amount'],
-            "booking_id" => $refund['booking_id']
+        'success' => true,
+        'message' => $message,
+        'data' => [
+            'refund_id' => $refund_id,
+            'action' => $action,
+            'new_status' => $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'completed'),
+            'processed_at' => date('Y-m-d H:i:s'),
+            'processed_by' => $admin_id
         ]
     ]);
-    
+
 } catch (Exception $e) {
-    // Rollback on error
-    mysqli_rollback($conn);
+    $conn->rollback();
     
-    // Log error
-    error_log("Refund Processing Error (Refund #{$refundId}): " . $e->getMessage());
-    
+    http_response_code(400);
     echo json_encode([
-        "success" => false,
-        "message" => $e->getMessage()
+        'success' => false,
+        'message' => $e->getMessage()
     ]);
 }
 

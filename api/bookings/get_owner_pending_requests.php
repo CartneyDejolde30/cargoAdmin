@@ -1,11 +1,11 @@
 <?php
 // ========================================
-// api/get_owner_pending_requests.php
+// api/bookings/get_owner_pending_requests.php
 // ========================================
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-require_once '../include/db.php';
+require_once '../../include/db.php'; // FIXED: Go up TWO levels to reach carGOAdmin/include/db.php
 
 $owner_id = $_GET['owner_id'] ?? null;
 
