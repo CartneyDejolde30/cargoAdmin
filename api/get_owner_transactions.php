@@ -33,7 +33,7 @@ try {
             b.escrow_held_at,
             b.escrow_released_at,
             b.payout_reference,
-            b.payout_date,
+            b.payout_completed_at AS payout_date,
             
             -- Payment details
             p.id AS payment_id,
@@ -70,13 +70,26 @@ try {
             e.released_at AS escrow_released_date
             
         FROM bookings b
-        LEFT JOIN payments p ON b.id = p.booking_id
+                        LEFT JOIN payments p 
+                ON b.id = p.booking_id 
+                AND p.id = (
+                SELECT MAX(id) 
+                FROM payments 
+                WHERE booking_id = b.id
+                )
+
         LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
         LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
         LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN escrow e ON b.id = e.booking_id
         WHERE b.owner_id = ?
-        AND b.payment_status IN ('paid', 'pending', 'escrowed', 'released')
+       AND (
+            b.payout_status = 'completed'
+            OR b.escrow_status IN ('held', 'released_to_owner')
+            OR b.payment_status IN ('pending', 'verified', 'paid')
+        )
+
+
         ORDER BY b.created_at DESC
     ");
     
@@ -103,7 +116,7 @@ try {
         // Format vehicle image
         $vehicleImage = $row['vehicle_image'];
         if (!empty($vehicleImage) && strpos($vehicleImage, 'http') !== 0) {
-            $vehicleImage = 'http://192.168.137.1/carGOAdmin/' . $vehicleImage;
+            $vehicleImage = 'http://10.139.150.2/carGOAdmin/' . $vehicleImage;
         }
         
         // Determine status and badge
@@ -119,11 +132,11 @@ try {
         $paymentStatus = $row['payment_status'];
         $payoutStatus = $row['payout_status'];
         
-        if ($escrowStatus === 'released' || $payoutStatus === 'completed') {
+        if ($escrowStatus === 'released_to_owner' || $payoutStatus === 'completed') {
             $completedPayouts += $ownerPayout;
             $totalEarnings += $ownerPayout;
             $completedCount++;
-        } elseif ($escrowStatus === 'held' || $paymentStatus === 'escrowed') {
+        } elseif ($escrowStatus === 'held') {
             $pendingPayouts += $ownerPayout;
             $escrowedCount++;
         } elseif ($paymentStatus === 'paid') {
@@ -183,7 +196,7 @@ try {
             // Helper flags
             'is_paid' => !empty($row['payment_verified_at']),
             'is_escrowed' => $escrowStatus === 'held',
-            'is_completed' => $escrowStatus === 'released' || $payoutStatus === 'completed',
+            'is_completed' => $escrowStatus === 'released_to_owner' || $payoutStatus === 'completed',
         ];
     }
     
@@ -225,7 +238,7 @@ function getOwnerTransactionStatus($booking) {
     $payoutStatus = $booking['payout_status'];
     
     // Completed - Money released to owner
-    if ($escrowStatus === 'released' || $payoutStatus === 'completed') {
+    if ($escrowStatus === 'released_to_owner' || $payoutStatus === 'completed') {
         return [
             'label' => 'COMPLETED',
             'sublabel' => 'Payout Released',

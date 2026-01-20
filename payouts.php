@@ -57,16 +57,30 @@ $page = isset($_GET["page"]) ? max(1, intval($_GET["page"])) : 1;
 $offset = ($page - 1) * $limit;
 
 $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : 'pending';
+$bookingFocus = isset($_GET['booking_id']) 
+    ? intval($_GET['booking_id']) 
+    : null;
+if ($bookingFocus) {
+    $statusFilter = 'pending';
+}
+
 
 /* =========================================================
    BUILD WHERE CLAUSE
    ========================================================= */
 $where = " WHERE 1 ";
+if ($bookingFocus) {
+    $where .= " AND b.id = $bookingFocus ";
+}
+
 
 switch($statusFilter) {
     case 'pending':
-        $where .= " AND b.escrow_status = 'released_to_owner' AND b.payout_status IN ('pending', 'processing') ";
-        break;
+    $where .= " 
+        AND b.escrow_status IN ('held', 'released_to_owner')
+        AND b.payout_status IN ('pending', 'processing') 
+    ";
+    break;
     case 'completed':
         $where .= " AND p.status = 'completed' ";
         break;
@@ -356,6 +370,8 @@ $totalPages = max(1, ceil($totalRows / $limit));
           </thead>
           <tbody>
             <?php while ($row = mysqli_fetch_assoc($result)): 
+             $isFocused = $bookingFocus && $bookingFocus == $row['booking_id'];
+
               if ($statusFilter == 'pending') {
                 // Pending payouts from bookings table
                 $bookingId = $row['booking_id'];
@@ -389,7 +405,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
                 'failed' => 'cancelled'
               ][$status] ?? 'pending';
             ?>
-            <tr>
+            <tr style="<?= $isFocused ? 'background:#fff3cd; border-left:5px solid #000;' : '' ?>">
               <td>
                 <strong><?= $payoutId ?></strong><br>
                 <small style="color:#999;">Booking #<?= $bookingId ?></small>
