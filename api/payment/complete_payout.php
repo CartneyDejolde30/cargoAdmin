@@ -203,14 +203,15 @@ try {
     
     // Step 5: Update booking payout status
     $stmt = $conn->prepare("
-        UPDATE bookings SET
-            payout_status = 'completed',
-            payout_completed_at = NOW(),
-            payout_reference = ?
-        WHERE id = ?
-    ");
-    $stmt->bind_param("si", $payoutReference, $bookingId);
-    $stmt->execute();
+    UPDATE bookings SET
+        escrow_status = 'released_to_owner',
+        payout_status = 'completed',
+        payout_completed_at = NOW(),
+        payout_reference = ?
+    WHERE id = ?
+");
+$stmt->bind_param("si", $payoutReference, $bookingId);
+$stmt->execute();
     
     // Step 6: Update escrow to fully released
     if ($booking['escrow_id']) {

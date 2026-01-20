@@ -674,6 +674,9 @@ tbody tr:hover {
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
 }
 
+tbody tr:last-child td {
+  border-bottom: none;
+}
 
 /* Highlighted Row */
 tr[style*="background-color: #fff3cd"] {
@@ -2077,22 +2080,7 @@ tbody tr[style*="background-color"] {
   position: relative;
 }
 
-tbody tr[style*="background-color"]::before {
-  content: '⚠️ Pending Review';
-  position: absolute;
-  left: -100px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
-  padding: 0.4rem 0.8rem;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  opacity: 0;
-  transition: all 0.3s ease;
-}
+
 
 tbody tr[style*="background-color"]:hover::before {
   opacity: 1;

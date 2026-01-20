@@ -17,7 +17,7 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 }
 
 $carId = intval($_GET['id']);
-$baseUrl = "http://192.168.137.1/carGOAdmin/";
+$baseUrl = "http://10.139.150.2/carGOAdmin/";
 
 /* --------------------------------------------
    Fetch Car + Owner Information
@@ -59,8 +59,9 @@ $car["image"] = !empty($cleanImage) ? $baseUrl . $cleanImage : "";
 
 /* Owner image */
 $car["owner_image"] = !empty($car["owner_image"])
-    ? $baseUrl . "uploads/" . $car["owner_image"]
+    ? $baseUrl . "uploads/profile_images/" . $car["owner_image"]
     : "";
+
 
 /* --------------------------------------------
    Fix Location

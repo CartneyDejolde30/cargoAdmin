@@ -2,53 +2,97 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-include '../include/db.php';  // ✅ FIXED PATH
+require_once '../include/db.php';
 
-$owner_id = $_GET['owner_id'] ?? '';
+// Accept BOTH parameters
+$car_id   = $_GET['car_id'] ?? null;
+$owner_id = $_GET['owner_id'] ?? null;
 
-if (empty($owner_id)) {
-    echo json_encode(["status" => "error", "message" => "Owner ID required"]);
+// --------------------------------------------------
+// Resolve owner
+// --------------------------------------------------
+if ($car_id && is_numeric($car_id)) {
+    // Get owner from car
+    $ownerQuery = $conn->prepare("
+        SELECT u.id, u.fullname, u.email, u.profile_image, u.created_at
+        FROM cars c
+        INNER JOIN users u ON c.owner_id = u.id
+        WHERE c.id = ?
+    ");
+    $ownerQuery->bind_param("i", $car_id);
+    $ownerQuery->execute();
+    $ownerResult = $ownerQuery->get_result();
+
+} elseif ($owner_id && is_numeric($owner_id)) {
+    // Get owner directly
+    $ownerQuery = $conn->prepare("
+        SELECT id, fullname, email, profile_image, created_at
+        FROM users
+        WHERE id = ?
+    ");
+    $ownerQuery->bind_param("i", $owner_id);
+    $ownerQuery->execute();
+    $ownerResult = $ownerQuery->get_result();
+
+} else {
+    echo json_encode([
+        "status" => "error",
+        "message" => "car_id or owner_id required"
+    ]);
     exit;
 }
 
-// Get owner details
-$ownerQuery = $conn->prepare("SELECT id, fullname, email, profile_image, created_at FROM users WHERE id = ?");
-$ownerQuery->bind_param("s", $owner_id);
-$ownerQuery->execute();
-$ownerResult = $ownerQuery->get_result();
-
-if ($ownerResult->num_rows == 0) {
-    echo json_encode(["status" => "error", "message" => "Owner not found"]);
+// --------------------------------------------------
+// Validate owner found
+// --------------------------------------------------
+if ($ownerResult->num_rows === 0) {
+    echo json_encode([
+        "status" => "error",
+        "message" => "Owner not found"
+    ]);
     exit;
 }
 
 $owner = $ownerResult->fetch_assoc();
+$owner_id = $owner['id']; // normalize for queries below
 
-// Count ONLY approved cars for this owner
-$carsQuery = $conn->prepare("SELECT COUNT(*) as total FROM cars WHERE owner_id = ? AND status = 'approved'");
-$carsQuery->bind_param("s", $owner_id);
+// --------------------------------------------------
+// Count approved cars
+// --------------------------------------------------
+$carsQuery = $conn->prepare("
+    SELECT COUNT(*) AS total
+    FROM cars
+    WHERE owner_id = ?
+      AND status = 'approved'
+");
+$carsQuery->bind_param("i", $owner_id);
 $carsQuery->execute();
-$carsResult = $carsQuery->get_result();
-$totalCars = $carsResult->fetch_assoc()['total'];
+$totalCars = $carsQuery->get_result()->fetch_assoc()['total'] ?? 0;
 
-// Get total reviews and average rating
+// --------------------------------------------------
+// Reviews + rating
+// --------------------------------------------------
 $reviewsQuery = $conn->prepare("
-    SELECT COUNT(*) as total_reviews, COALESCE(AVG(r.rating), 0) as avg_rating 
+    SELECT 
+        COUNT(*) AS total_reviews,
+        COALESCE(AVG(r.rating), 0) AS avg_rating
     FROM reviews r
     INNER JOIN cars c ON r.car_id = c.id
     WHERE c.owner_id = ?
 ");
-$reviewsQuery->bind_param("s", $owner_id);
+$reviewsQuery->bind_param("i", $owner_id);
 $reviewsQuery->execute();
-$reviewsResult = $reviewsQuery->get_result();
-$reviewStats = $reviewsResult->fetch_assoc();
+$reviewStats = $reviewsQuery->get_result()->fetch_assoc();
 
+// --------------------------------------------------
+// Response
+// --------------------------------------------------
 echo json_encode([
     "status" => "success",
     "owner" => $owner,
-    "total_cars" => (int)$totalCars,
-    "total_reviews" => (int)$reviewStats['total_reviews'],
-    "average_rating" => round((float)$reviewStats['avg_rating'], 1)
+    "total_cars" => (int) $totalCars,
+    "total_reviews" => (int) ($reviewStats['total_reviews'] ?? 0),
+    "average_rating" => round((float) ($reviewStats['avg_rating'] ?? 0), 1)
 ]);
 
 $conn->close();
