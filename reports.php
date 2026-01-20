@@ -50,10 +50,11 @@ SELECT
     admin.fullname AS reviewer_name,
     
     CASE 
-        WHEN r.report_type = 'car' THEN 
-            (SELECT CONCAT(brand, ' ', model, ' (', year, ')') FROM cars WHERE id = r.reported_id)
-        WHEN r.report_type = 'motorcycle' THEN 
-            (SELECT CONCAT(brand, ' ', model, ' (', year, ')') FROM motorcycles WHERE id = r.reported_id)
+       WHEN r.report_type = 'car' THEN 
+    (SELECT CONCAT(brand, ' ', model, ' (', car_year, ')') FROM cars WHERE id = r.reported_id)
+WHEN r.report_type = 'motorcycle' THEN 
+    (SELECT CONCAT(brand, ' ', model, ' (', motorcycle_year, ')') FROM motorcycles WHERE id = r.reported_id)
+
         WHEN r.report_type = 'user' THEN 
             (SELECT fullname FROM users WHERE id = r.reported_id)
         WHEN r.report_type = 'booking' THEN 
@@ -129,26 +130,41 @@ if (!$result) {
 $statsQuery = "
 SELECT 
     COUNT(*) AS total,
-    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-    SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) AS under_review,
-    SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
-    SUM(CASE WHEN status = 'dismissed' THEN 1 ELSE 0 END) AS dismissed,
-    
-    SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) AS high_priority,
-    SUM(CASE WHEN priority = 'medium' THEN 1 ELSE 0 END) AS medium_priority,
-    SUM(CASE WHEN priority = 'low' THEN 1 ELSE 0 END) AS low_priority,
-    
-    SUM(CASE WHEN report_type = 'car' THEN 1 ELSE 0 END) AS car_reports,
-    SUM(CASE WHEN report_type = 'motorcycle' THEN 1 ELSE 0 END) AS motorcycle_reports,
-    SUM(CASE WHEN report_type = 'user' THEN 1 ELSE 0 END) AS user_reports,
-    SUM(CASE WHEN report_type = 'booking' THEN 1 ELSE 0 END) AS booking_reports,
-    SUM(CASE WHEN report_type = 'chat' THEN 1 ELSE 0 END) AS chat_reports,
-    
-    SUM(CASE WHEN status = 'pending' AND TIMESTAMPDIFF(HOUR, created_at, NOW()) > 48 THEN 1 ELSE 0 END) AS overdue
+
+    SUM(IF(`status` = 'pending', 1, 0)) AS pending,
+    SUM(IF(`status` = 'under_review', 1, 0)) AS under_review,
+    SUM(IF(`status` = 'resolved', 1, 0)) AS resolved,
+    SUM(IF(`status` = 'dismissed', 1, 0)) AS dismissed,
+
+    SUM(IF(`priority` = 'high', 1, 0)) AS `high_priority`,
+    SUM(IF(`priority` = 'medium', 1, 0)) AS `medium_priority`,
+    SUM(IF(`priority` = 'low', 1, 0)) AS `low_priority`,
+
+    SUM(IF(report_type = 'car', 1, 0)) AS car_reports,
+    SUM(IF(report_type = 'motorcycle', 1, 0)) AS motorcycle_reports,
+    SUM(IF(report_type = 'user', 1, 0)) AS user_reports,
+    SUM(IF(report_type = 'booking', 1, 0)) AS booking_reports,
+    SUM(IF(report_type = 'chat', 1, 0)) AS chat_reports,
+
+    SUM(
+        IF(
+            `status` = 'pending' 
+            AND TIMESTAMPDIFF(HOUR, created_at, NOW()) > 48,
+            1,
+            0
+        )
+    ) AS overdue
 FROM reports
 ";
 
+
+
+
 $statsResult = mysqli_query($conn, $statsQuery);
+if (!$statsResult) {
+    die("STATS SQL ERROR: " . mysqli_error($conn) . "<br><pre>$statsQuery</pre>");
+}
+
 $stats = mysqli_fetch_assoc($statsResult);
 ?>
 

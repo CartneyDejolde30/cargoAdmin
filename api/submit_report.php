@@ -142,7 +142,8 @@ function isDuplicateReport($conn, $reporterId, $reportedId, $reportType) {
         AND reported_id = ? 
         AND report_type = ?
         AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
-        AND status != 'dismissed'
+        AND status IN ('pending', 'under_review')
+
     ");
     $stmt->bind_param("iss", $reporterId, $reportedId, $reportType);
     $stmt->execute();
