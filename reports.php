@@ -10,17 +10,33 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
+$adminId = $_SESSION['admin_id'];
+$adminName = $_SESSION['admin_name'] ?? 'Admin';
+
+// ---------------------------
+// PAGINATION
+// ---------------------------
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$perPage = 25;
+$offset = ($page - 1) * $perPage;
+
 // ---------------------------
 // FILTERS
 // ---------------------------
 $filterType   = $_GET['type'] ?? 'all';
 $filterStatus = $_GET['status'] ?? 'all';
+$filterPriority = $_GET['priority'] ?? 'all';
 $search       = $_GET['search'] ?? '';
+$sortBy       = $_GET['sort'] ?? 'created_at';
+$sortOrder    = $_GET['order'] ?? 'DESC';
 
 // Escape inputs
 $filterType   = mysqli_real_escape_string($conn, $filterType);
 $filterStatus = mysqli_real_escape_string($conn, $filterStatus);
+$filterPriority = mysqli_real_escape_string($conn, $filterPriority);
 $searchEsc    = mysqli_real_escape_string($conn, $search);
+$sortBy       = mysqli_real_escape_string($conn, $sortBy);
+$sortOrder    = $sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
 // ---------------------------
 // MAIN QUERY
@@ -29,29 +45,35 @@ $query = "
 SELECT 
     r.*,
     COALESCE(reporter.fullname, 'Unknown') AS reporter_name,
-
     COALESCE(reporter.email, 'N/A') AS reporter_email,
-
+    COALESCE(reporter.phone, 'N/A') AS reporter_phone,
     admin.fullname AS reviewer_name,
-
+    
     CASE 
         WHEN r.report_type = 'car' THEN 
-            (SELECT CONCAT(brand, ' ', model) FROM cars WHERE id = r.reported_id)
-
+            (SELECT CONCAT(brand, ' ', model, ' (', year, ')') FROM cars WHERE id = r.reported_id)
         WHEN r.report_type = 'motorcycle' THEN 
-            (SELECT CONCAT(brand, ' ', model) FROM motorcycles WHERE id = r.reported_id)
-
+            (SELECT CONCAT(brand, ' ', model, ' (', year, ')') FROM motorcycles WHERE id = r.reported_id)
         WHEN r.report_type = 'user' THEN 
             (SELECT fullname FROM users WHERE id = r.reported_id)
-
         WHEN r.report_type = 'booking' THEN 
             CONCAT('Booking #', r.reported_id)
-
         WHEN r.report_type = 'chat' THEN 
             CONCAT('Chat #', r.reported_id)
-
         ELSE 'Unknown'
-    END AS reported_item_name
+    END AS reported_item_name,
+    
+    CASE 
+        WHEN r.report_type = 'car' THEN 
+            (SELECT owner_id FROM cars WHERE id = r.reported_id)
+        WHEN r.report_type = 'motorcycle' THEN 
+            (SELECT owner_id FROM motorcycles WHERE id = r.reported_id)
+        WHEN r.report_type = 'user' THEN 
+            r.reported_id
+        ELSE NULL
+    END AS reported_user_id,
+    
+    TIMESTAMPDIFF(HOUR, r.created_at, NOW()) AS hours_pending
 
 FROM reports r
 LEFT JOIN users reporter ON r.reporter_id = reporter.id
@@ -70,18 +92,30 @@ if ($filterStatus !== 'all') {
     $query .= " AND r.status = '$filterStatus' ";
 }
 
+if ($filterPriority !== 'all') {
+    $query .= " AND r.priority = '$filterPriority' ";
+}
+
 if (!empty($searchEsc)) {
     $query .= "
         AND (
             reporter.fullname LIKE '%$searchEsc%' OR
+            reporter.email LIKE '%$searchEsc%' OR
             r.reason LIKE '%$searchEsc%' OR
-            r.details LIKE '%$searchEsc%'
+            r.details LIKE '%$searchEsc%' OR
+            r.id LIKE '%$searchEsc%'
         )
     ";
 }
 
-// ---------------------------
-$query .= " ORDER BY r.created_at DESC LIMIT 50";
+// Count total for pagination
+$countQuery = "SELECT COUNT(*) as total FROM ($query) as count_table";
+$countResult = mysqli_query($conn, $countQuery);
+$totalRecords = mysqli_fetch_assoc($countResult)['total'];
+$totalPages = ceil($totalRecords / $perPage);
+
+// Apply sorting and pagination
+$query .= " ORDER BY r.$sortBy $sortOrder LIMIT $perPage OFFSET $offset";
 
 $result = mysqli_query($conn, $query);
 
@@ -95,26 +129,28 @@ if (!$result) {
 $statsQuery = "
 SELECT 
     COUNT(*) AS total,
-
     SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
     SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) AS under_review,
     SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
     SUM(CASE WHEN status = 'dismissed' THEN 1 ELSE 0 END) AS dismissed,
-
+    
+    SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) AS high_priority,
+    SUM(CASE WHEN priority = 'medium' THEN 1 ELSE 0 END) AS medium_priority,
+    SUM(CASE WHEN priority = 'low' THEN 1 ELSE 0 END) AS low_priority,
+    
     SUM(CASE WHEN report_type = 'car' THEN 1 ELSE 0 END) AS car_reports,
     SUM(CASE WHEN report_type = 'motorcycle' THEN 1 ELSE 0 END) AS motorcycle_reports,
     SUM(CASE WHEN report_type = 'user' THEN 1 ELSE 0 END) AS user_reports,
     SUM(CASE WHEN report_type = 'booking' THEN 1 ELSE 0 END) AS booking_reports,
-    SUM(CASE WHEN report_type = 'chat' THEN 1 ELSE 0 END) AS chat_reports
-
+    SUM(CASE WHEN report_type = 'chat' THEN 1 ELSE 0 END) AS chat_reports,
+    
+    SUM(CASE WHEN status = 'pending' AND TIMESTAMPDIFF(HOUR, created_at, NOW()) > 48 THEN 1 ELSE 0 END) AS overdue
 FROM reports
 ";
 
 $statsResult = mysqli_query($conn, $statsQuery);
 $stats = mysqli_fetch_assoc($statsResult);
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -126,6 +162,28 @@ $stats = mysqli_fetch_assoc($statsResult);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="include/admin-styles.css" rel="stylesheet">
+    <style>
+        .priority-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .priority-high { background: #fee; color: #d00; }
+        .priority-medium { background: #ffeaa7; color: #d63031; }
+        .priority-low { background: #dfe6e9; color: #636e72; }
+        .overdue-badge { background: #ff6b6b; color: white; }
+        .bulk-actions { display: none; margin-bottom: 20px; }
+        .bulk-actions.active { display: block; }
+        .report-timeline { max-height: 200px; overflow-y: auto; }
+        .timeline-item { 
+            padding: 10px;
+            border-left: 3px solid #e9ecef;
+            margin-bottom: 10px;
+        }
+        .export-btn { margin-left: 10px; }
+    </style>
 </head>
 <body>
 
@@ -139,12 +197,18 @@ $stats = mysqli_fetch_assoc($statsResult);
                 Reports Management
             </h1>
             <div class="user-profile">
-                <button class="notification-btn">
+                <button class="notification-btn" onclick="window.location.href='?status=pending'">
                     <i class="bi bi-bell"></i>
                     <span class="notification-badge"><?php echo $stats['pending']; ?></span>
                 </button>
+                <?php if ($stats['overdue'] > 0): ?>
+                <button class="notification-btn" style="margin-right: 10px;" title="Overdue Reports">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span class="notification-badge overdue-badge"><?php echo $stats['overdue']; ?></span>
+                </button>
+                <?php endif; ?>
                 <div class="user-avatar">
-                    <img src="https://ui-avatars.com/api/?name=Admin&background=1a1a1a&color=fff" alt="Admin">
+                    <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($adminName); ?>&background=1a1a1a&color=fff" alt="Admin">
                 </div>
             </div>
         </div>
@@ -157,7 +221,7 @@ $stats = mysqli_fetch_assoc($statsResult);
                         <i class="bi bi-flag"></i>
                     </div>
                 </div>
-                <div class="stat-value"><?php echo $stats['total']; ?></div>
+                <div class="stat-value"><?php echo number_format($stats['total']); ?></div>
                 <div class="stat-label">Total Reports</div>
             </div>
 
@@ -169,6 +233,16 @@ $stats = mysqli_fetch_assoc($statsResult);
                 </div>
                 <div class="stat-value"><?php echo $stats['pending']; ?></div>
                 <div class="stat-label">Pending Review</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #fa8231 0%, #f5576c 100%); color: white;">
+                        <i class="bi bi-eye"></i>
+                    </div>
+                </div>
+                <div class="stat-value"><?php echo $stats['under_review']; ?></div>
+                <div class="stat-label">Under Review</div>
             </div>
 
             <div class="stat-card">
@@ -192,116 +266,192 @@ $stats = mysqli_fetch_assoc($statsResult);
             </div>
         </div>
 
+        <!-- Bulk Actions (Hidden by default) -->
+        <div class="bulk-actions" id="bulkActions">
+            <div class="alert alert-info d-flex justify-content-between align-items-center">
+                <span><strong id="selectedCount">0</strong> reports selected</span>
+                <div>
+                    <button class="btn btn-sm btn-success" onclick="bulkAction('under_review')">
+                        <i class="bi bi-eye"></i> Mark Under Review
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="bulkAction('resolved')">
+                        <i class="bi bi-check"></i> Resolve
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="bulkAction('dismissed')">
+                        <i class="bi bi-x"></i> Dismiss
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="clearSelection()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Filter Section -->
         <div class="search-section">
             <form method="GET" class="search-form">
                 <input type="text" name="search" class="search-input" placeholder="Search reports..." value="<?php echo htmlspecialchars($search); ?>">
+                
                 <select name="type" class="filter-select">
                     <option value="all" <?= $filterType === 'all' ? 'selected' : '' ?>>All Types</option>
-
                     <option value="car" <?= $filterType === 'car' ? 'selected' : '' ?>>
-                        Car Reports (<?= $stats['car_reports'] ?>)
+                        Car (<?= $stats['car_reports'] ?>)
                     </option>
-
                     <option value="motorcycle" <?= $filterType === 'motorcycle' ? 'selected' : '' ?>>
-                        Motorcycle Reports (<?= $stats['motorcycle_reports'] ?>)
+                        Motorcycle (<?= $stats['motorcycle_reports'] ?>)
                     </option>
-
                     <option value="user" <?= $filterType === 'user' ? 'selected' : '' ?>>
-                        User Reports (<?= $stats['user_reports'] ?>)
+                        User (<?= $stats['user_reports'] ?>)
                     </option>
-
                     <option value="booking" <?= $filterType === 'booking' ? 'selected' : '' ?>>
-                        Booking Reports (<?= $stats['booking_reports'] ?>)
+                        Booking (<?= $stats['booking_reports'] ?>)
                     </option>
-
                     <option value="chat" <?= $filterType === 'chat' ? 'selected' : '' ?>>
-                        Chat Reports (<?= $stats['chat_reports'] ?>)
+                        Chat (<?= $stats['chat_reports'] ?>)
                     </option>
                 </select>
 
                 <select name="status" class="filter-select">
-                    <option value="all" <?php echo $filterStatus === 'all' ? 'selected' : ''; ?>>All Status</option>
-                    <option value="pending" <?php echo $filterStatus === 'pending' ? 'selected' : ''; ?>>Pending</option>
-                    <option value="under_review" <?php echo $filterStatus === 'under_review' ? 'selected' : ''; ?>>Under Review</option>
-                    <option value="resolved" <?php echo $filterStatus === 'resolved' ? 'selected' : ''; ?>>Resolved</option>
-                    <option value="dismissed" <?php echo $filterStatus === 'dismissed' ? 'selected' : ''; ?>>Dismissed</option>
+                    <option value="all" <?= $filterStatus === 'all' ? 'selected' : '' ?>>All Status</option>
+                    <option value="pending" <?= $filterStatus === 'pending' ? 'selected' : '' ?>>Pending</option>
+                    <option value="under_review" <?= $filterStatus === 'under_review' ? 'selected' : '' ?>>Under Review</option>
+                    <option value="resolved" <?= $filterStatus === 'resolved' ? 'selected' : '' ?>>Resolved</option>
+                    <option value="dismissed" <?= $filterStatus === 'dismissed' ? 'selected' : '' ?>>Dismissed</option>
                 </select>
+
+                <select name="priority" class="filter-select">
+                    <option value="all" <?= $filterPriority === 'all' ? 'selected' : '' ?>>All Priority</option>
+                    <option value="high" <?= $filterPriority === 'high' ? 'selected' : '' ?>>High Priority</option>
+                    <option value="medium" <?= $filterPriority === 'medium' ? 'selected' : '' ?>>Medium Priority</option>
+                    <option value="low" <?= $filterPriority === 'low' ? 'selected' : '' ?>>Low Priority</option>
+                </select>
+
                 <button type="submit" class="search-btn">
-                    <i class="bi bi-search"></i>
-                    Filter
+                    <i class="bi bi-search"></i> Filter
                 </button>
                 <a href="manage_reports.php" class="reset-btn">
-                    <i class="bi bi-arrow-clockwise"></i>
-                    Reset
+                    <i class="bi bi-arrow-clockwise"></i> Reset
                 </a>
+                <button type="button" class="export-btn btn btn-secondary btn-sm" onclick="exportReports()">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
             </form>
         </div>
 
         <!-- Reports Table -->
         <div class="table-section">
-            <div class="section-header">
-                <h3 class="section-title">Reports List</h3>
+            <div class="section-header d-flex justify-content-between align-items-center">
+                <h3 class="section-title">
+                    Reports List 
+                    <small class="text-muted">(<?php echo number_format($totalRecords); ?> total)</small>
+                </h3>
+                <div>
+                    <label>
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()"> Select All
+                    </label>
+                </div>
             </div>
 
             <div class="table-responsive">
                 <table>
                     <thead>
                         <tr>
+                            <th><input type="checkbox" id="selectAllHeader" onchange="toggleSelectAll()"></th>
                             <th>ID</th>
+                            <th>Priority</th>
                             <th>Type</th>
                             <th>Reported Item</th>
                             <th>Reporter</th>
                             <th>Reason</th>
-                            <th>Details</th>
                             <th>Status</th>
-                            <th>Date</th>
+                            <th>Age</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if ($result && mysqli_num_rows($result) > 0): ?>
-
                             <?php while ($row = mysqli_fetch_assoc($result)): ?>
-
-                                <tr style="<?php echo $row['status'] === 'pending' ? 'background-color: #fff3cd;' : ''; ?>">
+                                <?php
+                                $isOverdue = $row['status'] === 'pending' && $row['hours_pending'] > 48;
+                                $rowClass = $isOverdue ? 'table-danger' : ($row['status'] === 'pending' ? 'table-warning' : '');
+                                ?>
+                                <tr class="<?= $rowClass ?>">
+                                    <td>
+                                        <input type="checkbox" class="report-checkbox" value="<?= $row['id'] ?>">
+                                    </td>
                                     <td><strong>#<?php echo $row['id']; ?></strong></td>
                                     <td>
+                                        <?php
+                                        $priority = $row['priority'] ?? 'medium';
+                                        $priorityClass = "priority-$priority";
+                                        ?>
+                                        <span class="priority-badge <?= $priorityClass ?>">
+                                            <?= ucfirst($priority) ?>
+                                        </span>
+                                    </td>
+                                    <td>
                                         <span class="role-badge" style="<?php
-                                            echo $row['report_type'] === 'car' ? 'background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);' : 
-                                                 ($row['report_type'] === 'user' ? 'background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);' : 
-                                                 ($row['report_type'] === 'booking' ? 'background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);' : 
-                                                 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'));
+                                            echo match($row['report_type']) {
+                                                'car' => 'background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);',
+                                                'motorcycle' => 'background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);',
+                                                'user' => 'background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);',
+                                                'booking' => 'background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);',
+                                                'chat' => 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);',
+                                                default => 'background: #6c757d;'
+                                            };
                                         ?>">
                                             <?php echo strtoupper($row['report_type']); ?>
                                         </span>
                                     </td>
-                                    <td><strong><?php echo htmlspecialchars($row['reported_item_name'] ?? 'N/A'); ?></strong></td>
+                                    <td>
+                                        <strong><?php echo htmlspecialchars($row['reported_item_name'] ?? 'N/A'); ?></strong>
+                                        <?php if ($isOverdue): ?>
+                                            <br><small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Overdue</small>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <div class="user-info">
                                             <span class="user-name"><?php echo htmlspecialchars($row['reporter_name']); ?></span>
                                             <span class="user-email"><?php echo htmlspecialchars($row['reporter_email']); ?></span>
                                         </div>
                                     </td>
-                                    <td><?php echo htmlspecialchars($row['reason']); ?></td>
                                     <td>
-                                        <small><?php echo substr(htmlspecialchars($row['details']), 0, 50); ?>...</small>
+                                        <strong><?php echo htmlspecialchars($row['reason']); ?></strong>
+                                        <br><small><?php echo substr(htmlspecialchars($row['details']), 0, 50); ?>...</small>
                                     </td>
                                     <td>
                                         <span class="status-badge <?php 
-                                            echo $row['status'] === 'resolved' ? 'approved' : 
-                                                 ($row['status'] === 'pending' ? 'pending' : 
-                                                 ($row['status'] === 'under_review' ? 'verified' : 'rejected')); 
+                                            echo match($row['status']) {
+                                                'resolved' => 'approved',
+                                                'pending' => 'pending',
+                                                'under_review' => 'verified',
+                                                'dismissed' => 'rejected',
+                                                default => 'pending'
+                                            };
                                         ?>">
                                             <?php echo ucwords(str_replace('_', ' ', $row['status'])); ?>
                                         </span>
                                     </td>
-                                    <td><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
+                                    <td>
+                                        <?php 
+                                        $hours = $row['hours_pending'];
+                                        if ($hours < 24) {
+                                            echo $hours . 'h ago';
+                                        } else {
+                                            echo floor($hours / 24) . 'd ago';
+                                        }
+                                        ?>
+                                    </td>
                                     <td>
                                         <div class="action-buttons">
                                             <button class="action-btn view" onclick="viewReport(<?php echo $row['id']; ?>)" title="View Details">
                                                 <i class="bi bi-eye"></i>
                                             </button>
+                                            <?php if ($row['status'] === 'pending'): ?>
+                                                <button class="action-btn" style="background: #ffc107;" onclick="updateStatus(<?php echo $row['id']; ?>, 'under_review')" title="Mark Under Review">
+                                                    <i class="bi bi-eye-fill"></i>
+                                                </button>
+                                            <?php endif; ?>
                                             <?php if ($row['status'] === 'pending' || $row['status'] === 'under_review'): ?>
                                                 <button class="action-btn approve" onclick="resolveReport(<?php echo $row['id']; ?>)" title="Resolve">
                                                     <i class="bi bi-check-lg"></i>
@@ -310,13 +460,16 @@ $stats = mysqli_fetch_assoc($statsResult);
                                                     <i class="bi bi-x-lg"></i>
                                                 </button>
                                             <?php endif; ?>
+                                            <button class="action-btn" style="background: #6c757d;" onclick="updatePriority(<?php echo $row['id']; ?>)" title="Change Priority">
+                                                <i class="bi bi-flag"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="9" class="text-center">
+                                <td colspan="10" class="text-center">
                                     <div class="empty-state">
                                         <i class="bi bi-inbox"></i>
                                         <h4>No Reports Found</h4>
@@ -328,20 +481,43 @@ $stats = mysqli_fetch_assoc($statsResult);
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination -->
+            <?php if ($totalPages > 1): ?>
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                        <a class="page-link" href="?page=<?= $page-1 ?>&<?= http_build_query(array_diff_key($_GET, ['page' => ''])) ?>">Previous</a>
+                    </li>
+                    <?php for ($i = max(1, $page-2); $i <= min($totalPages, $page+2); $i++): ?>
+                        <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                            <a class="page-link" href="?page=<?= $i ?>&<?= http_build_query(array_diff_key($_GET, ['page' => ''])) ?>"><?= $i ?></a>
+                        </li>
+                    <?php endfor; ?>
+                    <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                        <a class="page-link" href="?page=<?= $page+1 ?>&<?= http_build_query(array_diff_key($_GET, ['page' => ''])) ?>">Next</a>
+                    </li>
+                </ul>
+            </nav>
+            <?php endif; ?>
         </div>
     </main>
 </div>
 
-<!-- View Report Modal -->
+<!-- Enhanced View Report Modal -->
 <div class="modal fade" id="viewReportModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Report Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="reportDetailsContent">
-                <!-- Content loaded via AJAX -->
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -349,8 +525,66 @@ $stats = mysqli_fetch_assoc($statsResult);
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Checkbox selection
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('.report-checkbox');
+    const selectAll = document.getElementById('selectAll').checked || document.getElementById('selectAllHeader').checked;
+    checkboxes.forEach(cb => cb.checked = selectAll);
+    updateBulkActions();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const checkboxes = document.querySelectorAll('.report-checkbox');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateBulkActions);
+    });
+});
+
+function updateBulkActions() {
+    const selected = document.querySelectorAll('.report-checkbox:checked');
+    const bulkActions = document.getElementById('bulkActions');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    if (selected.length > 0) {
+        bulkActions.classList.add('active');
+        selectedCount.textContent = selected.length;
+    } else {
+        bulkActions.classList.remove('active');
+    }
+}
+
+function clearSelection() {
+    document.querySelectorAll('.report-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked = false;
+    document.getElementById('selectAllHeader').checked = false;
+    updateBulkActions();
+}
+
+function bulkAction(action) {
+    const selected = Array.from(document.querySelectorAll('.report-checkbox:checked')).map(cb => cb.value);
+    
+    if (selected.length === 0) return;
+    
+    const confirmMsg = `Are you sure you want to mark ${selected.length} reports as "${action.replace('_', ' ')}"?`;
+    if (!confirm(confirmMsg)) return;
+    
+    fetch('api/bulk_update_reports.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ report_ids: selected, status: action })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Successfully updated ${data.updated} reports`);
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+
 function viewReport(reportId) {
-    // Implement AJAX call to fetch report details
     const modal = new bootstrap.Modal(document.getElementById('viewReportModal'));
     
     fetch(`api/get_report_details.php?id=${reportId}`)
@@ -359,64 +593,174 @@ function viewReport(reportId) {
             if (data.success) {
                 document.getElementById('reportDetailsContent').innerHTML = formatReportDetails(data.report);
                 modal.show();
+            } else {
+                alert('Error loading report details');
             }
+        })
+        .catch(err => {
+            alert('Error: ' + err.message);
         });
 }
 
+function updateStatus(reportId, status) {
+    fetch('api/update_report_status.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `report_id=${reportId}&status=${status}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Report marked as ${status.replace('_', ' ')}`);
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+
 function resolveReport(reportId) {
-    if (confirm('Mark this report as resolved?')) {
-        fetch('api/update_report_status.php', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: `report_id=${reportId}&status=resolved`
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Report resolved successfully');
-                location.reload();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
-    }
+    const action = prompt('What action was taken to resolve this report?');
+    if (!action) return;
+    
+    fetch('api/update_report_status.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `report_id=${reportId}&status=resolved&notes=${encodeURIComponent(action)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Report resolved successfully');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
 }
 
 function dismissReport(reportId) {
     const reason = prompt('Reason for dismissing this report:');
-    if (reason) {
-        fetch('api/update_report_status.php', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: `report_id=${reportId}&status=dismissed&notes=${encodeURIComponent(reason)}`
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Report dismissed');
-                location.reload();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
+    if (!reason) return;
+    
+    fetch('api/update_report_status.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `report_id=${reportId}&status=dismissed&notes=${encodeURIComponent(reason)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Report dismissed');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+
+function updatePriority(reportId) {
+    const priority = prompt('Set priority (high/medium/low):');
+    if (!priority || !['high', 'medium', 'low'].includes(priority.toLowerCase())) {
+        alert('Invalid priority');
+        return;
     }
+    
+    fetch('api/update_report_priority.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `report_id=${reportId}&priority=${priority.toLowerCase()}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+
+function exportReports() {
+    const params = new URLSearchParams(window.location.search);
+    window.location.href = 'api/export_reports.php?' + params.toString();
 }
 
 function formatReportDetails(report) {
+    const statusClass = {
+        'pending': 'warning',
+        'under_review': 'info',
+        'resolved': 'success',
+        'dismissed': 'secondary'
+    }[report.status] || 'secondary';
+
+    const priorityClass = {
+        'high': 'danger',
+        'medium': 'warning',
+        'low': 'secondary'
+    }[report.priority] || 'secondary';
+
     return `
-        <div class="detail-section">
-            <h6><strong>Report Information</strong></h6>
-            <p><strong>Type:</strong> ${report.report_type}</p>
-            <p><strong>Reason:</strong> ${report.reason}</p>
-            <p><strong>Details:</strong> ${report.details}</p>
-            <p><strong>Status:</strong> <span class="status-badge">${report.status}</span></p>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header"><strong>Report Information</strong></div>
+                    <div class="card-body">
+                        <p><strong>Report ID:</strong> #${report.id}</p>
+                        <p><strong>Type:</strong> <span class="badge bg-primary">${report.report_type}</span></p>
+                        <p><strong>Priority:</strong> <span class="badge bg-${priorityClass}">${report.priority || 'medium'}</span></p>
+                        <p><strong>Status:</strong> <span class="badge bg-${statusClass}">${report.status}</span></p>
+                        <p><strong>Reason:</strong> ${report.reason}</p>
+                        <p><strong>Details:</strong><br>${report.details}</p>
+                        <p><strong>Created:</strong> ${report.created_at}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header"><strong>Reporter Information</strong></div>
+                    <div class="card-body">
+                        <p><strong>Name:</strong> ${report.reporter_name}</p>
+                        <p><strong>Email:</strong> ${report.reporter_email}</p>
+                        <p><strong>Phone:</strong> ${report.reporter_phone || 'N/A'}</p>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header"><strong>Reported Item</strong></div>
+                    <div class="card-body">
+                        <p><strong>Name:</strong> ${report.reported_item_name}</p>
+                        <p><strong>ID:</strong> ${report.reported_id}</p>
+                    </div>
+                </div>
+
+                ${report.reviewer_name ? `
+                <div class="card mb-3">
+                    <div class="card-header"><strong>Review Information</strong></div>
+                    <div class="card-body">
+                        <p><strong>Reviewed by:</strong> ${report.reviewer_name}</p>
+                        <p><strong>Review date:</strong> ${report.reviewed_at || 'N/A'}</p>
+                        <p><strong>Notes:</strong> ${report.admin_notes || 'None'}</p>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
         </div>
-        <div class="detail-section">
-            <h6><strong>Reporter Information</strong></h6>
-            <p><strong>Name:</strong> ${report.reporter_name}</p>
-            <p><strong>Email:</strong> ${report.reporter_email}</p>
-            <p><strong>Reported Date:</strong> ${report.created_at}</p>
+        
+        ${report.timeline ? `
+        <div class="card">
+            <div class="card-header"><strong>Activity Timeline</strong></div>
+            <div class="card-body report-timeline">
+                ${report.timeline.map(item => `
+                    <div class="timeline-item">
+                        <strong>${item.action}</strong> by ${item.performed_by} 
+                        <br><small class="text-muted">${item.created_at}</small>
+                        ${item.notes ? `<br><small>${item.notes}</small>` : ''}
+                    </div>
+                `).join('')}
+            </div>
         </div>
+        ` : ''}
     `;
 }
 </script>

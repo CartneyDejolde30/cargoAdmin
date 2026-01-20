@@ -41,11 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $refund_id = isset($_POST['refund_id']) ? intval($_POST['refund_id']) : 0;
 $action = isset($_POST['action']) ? $_POST['action'] : '';
-$admin_notes = isset($_POST['admin_notes']) ? mysqli_real_escape_string($conn, $_POST['admin_notes']) : '';
-$rejection_reason = isset($_POST['rejection_reason']) ? mysqli_real_escape_string($conn, $_POST['rejection_reason']) : '';
-$refund_reference = isset($_POST['refund_reference']) ? mysqli_real_escape_string($conn, $_POST['refund_reference']) : '';
-$deduction_amount = isset($_POST['deduction_amount']) ? floatval($_POST['deduction_amount']) : 0;
-$deduction_reason = isset($_POST['deduction_reason']) ? mysqli_real_escape_string($conn, $_POST['deduction_reason']) : '';
+$admin_notes = isset($_POST['admin_notes']) ? mysqli_real_escape_string($conn, trim($_POST['admin_notes'])) : '';
+$rejection_reason = isset($_POST['rejection_reason']) ? mysqli_real_escape_string($conn, trim($_POST['rejection_reason'])) : '';
+$refund_reference = isset($_POST['refund_reference']) ? mysqli_real_escape_string($conn, trim($_POST['refund_reference'])) : '';
 
 // ============================================================================
 // VALIDATION
@@ -79,11 +77,13 @@ $refund_query = "
         r.*,
         b.status AS booking_status,
         b.total_amount AS booking_amount,
-        p.payment_status,
-        p.id AS payment_id
+        b.owner_id,
+        u_owner.email AS owner_email,
+        u_renter.email AS renter_email
     FROM refunds r
     JOIN bookings b ON r.booking_id = b.id
-    JOIN payments p ON r.payment_id = p.id
+    LEFT JOIN users u_owner ON b.owner_id = u_owner.id
+    LEFT JOIN users u_renter ON r.user_id = u_renter.id
     WHERE r.id = ?
     LIMIT 1
 ";
@@ -120,39 +120,19 @@ try {
                 throw new Exception('Only pending refunds can be approved');
             }
 
-            // Calculate final refund amount after deductions
-            $final_refund_amount = $refund['refund_amount'] - $deduction_amount;
-
-            if ($final_refund_amount < 0) {
-                throw new Exception('Deduction amount cannot exceed refund amount');
-            }
-
             // Update refund record
             $update_refund = "
                 UPDATE refunds 
                 SET 
                     status = 'approved',
-                    deduction_amount = ?,
-                    deduction_reason = ?,
-                    admin_notes = ?,
-                    approved_at = NOW(),
-                    processed_by = ?
+                    processed_by = ?,
+                    processed_at = NOW()
                 WHERE id = ?
             ";
 
             $stmt = $conn->prepare($update_refund);
-            $stmt->bind_param(
-                "dssii",
-                $deduction_amount,
-                $deduction_reason,
-                $admin_notes,
-                $admin_id,
-                $refund_id
-            );
+            $stmt->bind_param("ii", $admin_id, $refund_id);
             $stmt->execute();
-
-            // Update booking
-            $conn->query("UPDATE bookings SET refund_status = 'approved' WHERE id = {$refund['booking_id']}");
 
             $message = 'Refund approved successfully';
             break;
@@ -175,18 +155,14 @@ try {
                 SET 
                     status = 'rejected',
                     rejection_reason = ?,
-                    admin_notes = ?,
                     processed_by = ?,
-                    updated_at = NOW()
+                    processed_at = NOW()
                 WHERE id = ?
             ";
 
             $stmt = $conn->prepare($update_refund);
-            $stmt->bind_param("ssii", $rejection_reason, $admin_notes, $admin_id, $refund_id);
+            $stmt->bind_param("sii", $rejection_reason, $admin_id, $refund_id);
             $stmt->execute();
-
-            // Update booking
-            $conn->query("UPDATE bookings SET refund_status = 'rejected' WHERE id = {$refund['booking_id']}");
 
             $message = 'Refund rejected';
             break;
@@ -208,38 +184,15 @@ try {
                 UPDATE refunds 
                 SET 
                     status = 'completed',
-                    refund_reference = ?,
-                    admin_notes = ?,
-                    completed_at = NOW(),
-                    processed_by = ?
+                    completion_reference = ?,
+                    processed_by = ?,
+                    processed_at = NOW()
                 WHERE id = ?
             ";
 
             $stmt = $conn->prepare($update_refund);
-            $stmt->bind_param("ssii", $refund_reference, $admin_notes, $admin_id, $refund_id);
+            $stmt->bind_param("sii", $refund_reference, $admin_id, $refund_id);
             $stmt->execute();
-
-            // Update booking
-            $conn->query("UPDATE bookings SET refund_status = 'completed' WHERE id = {$refund['booking_id']}");
-
-            // Mark payment as refunded
-            $conn->query("
-                UPDATE payments 
-                SET 
-                    is_refunded = 1,
-                    refund_id = {$refund_id},
-                    refunded_at = NOW()
-                WHERE id = {$refund['payment_id']}
-            ");
-
-            // If escrow is held, release it back to renter
-            if ($refund['payment_status'] === 'verified') {
-                $conn->query("
-                    UPDATE bookings 
-                    SET escrow_status = 'refunded'
-                    WHERE id = {$refund['booking_id']}
-                ");
-            }
 
             $message = 'Refund completed and funds transferred';
             break;

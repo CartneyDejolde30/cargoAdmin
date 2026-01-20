@@ -49,7 +49,7 @@ $processingCount = mysqli_fetch_assoc($processingResult)['count'];
 $completedQuery = "
     SELECT 
         COUNT(*) as count,
-        COALESCE(SUM(refund_amount - deduction_amount), 0) as total_refunded
+        COALESCE(SUM(refund_amount), 0) as total_refunded
     FROM refunds 
     WHERE status = 'completed'
 ";
@@ -78,7 +78,7 @@ if ($statusFilter !== 'all') {
 if (!empty($search)) {
     $searchEsc = mysqli_real_escape_string($conn, $search);
     $where .= " AND (
-        r.refund_id LIKE '%$searchEsc%' OR
+        r.id LIKE '%$searchEsc%' OR
         u_renter.fullname LIKE '%$searchEsc%' OR
         u_renter.email LIKE '%$searchEsc%' OR
         r.account_number LIKE '%$searchEsc%'
@@ -86,7 +86,7 @@ if (!empty($search)) {
 }
 
 // ============================================================================
-// MAIN QUERY - Get Refunds
+// MAIN QUERY - Get Refunds (FIXED)
 // ============================================================================
 
 $query = "
@@ -98,12 +98,13 @@ $query = "
         u_renter.email AS renter_email,
         u_renter.phone AS renter_phone,
         
-        -- Owner info
+        -- Owner info (get from booking)
         u_owner.fullname AS owner_name,
         u_owner.email AS owner_email,
         
         -- Booking info
         b.id AS booking_id,
+        b.owner_id,
         b.status AS booking_status,
         b.pickup_date,
         b.return_date,
@@ -133,8 +134,8 @@ $query = "
         
     FROM refunds r
     LEFT JOIN users u_renter ON r.user_id = u_renter.id
-    LEFT JOIN users u_owner ON r.owner_id = u_owner.id
     LEFT JOIN bookings b ON r.booking_id = b.id
+    LEFT JOIN users u_owner ON b.owner_id = u_owner.id
     LEFT JOIN payments p ON r.payment_id = p.id
     LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
     LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
@@ -341,13 +342,13 @@ $totalPages = max(1, ceil($totalRows / $limit));
                                 'rejected' => 'rejected'
                             ][$row['status']] ?? 'pending';
                             
-                            $finalAmount = $row['refund_amount'] - $row['deduction_amount'];
+                            $finalAmount = $row['refund_amount'];
                             $urgencyClass = $row['days_pending'] > 5 ? 'text-danger fw-bold' : '';
                         ?>
                         <tr>
                             <!-- Refund ID -->
                             <td>
-                                <strong><?= htmlspecialchars($row['refund_id']) ?></strong><br>
+                                <strong>#RF-<?= str_pad($row['id'], 4, '0', STR_PAD_LEFT) ?></strong><br>
                                 <small style="color:#999;"><?= date('M d, Y', strtotime($row['created_at'])) ?></small>
                             </td>
 
@@ -386,15 +387,6 @@ $totalPages = max(1, ceil($totalRows / $limit));
                                 <strong style="font-size: 15px; color: #dc3545;">
                                     ₱<?= number_format($finalAmount, 2) ?>
                                 </strong>
-                                <?php if ($row['deduction_amount'] > 0): ?>
-                                <br>
-                                <small style="color: #999; text-decoration: line-through;">
-                                    ₱<?= number_format($row['refund_amount'], 2) ?>
-                                </small>
-                                <small style="color: #f57c00; display: block;">
-                                    -₱<?= number_format($row['deduction_amount'], 2) ?> deducted
-                                </small>
-                                <?php endif; ?>
                             </td>
 
                             <!-- Method -->
@@ -557,22 +549,19 @@ $totalPages = max(1, ceil($totalRows / $limit));
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ============================================================================
 // VIEW REFUND DETAILS
-// ============================================================================
 function viewRefundDetails(refundId) {
     fetch(`api/refund/get_refund_details.php?id=${refundId}`)
         .then(r => r.json())
         .then(data => {
             if (data.success) {
                 const refund = data.refund;
-                const finalAmount = refund.refund_amount - refund.deduction_amount;
                 
                 document.getElementById('refundModalContent').innerHTML = `
                     <div class="modal-header">
                         <h5 class="modal-title">
                             <i class="bi bi-arrow-counterclockwise"></i>
-                            Refund Details - ${refund.refund_id}
+                            Refund Details - #RF-${String(refund.id).padStart(4, '0')}
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
@@ -601,24 +590,11 @@ function viewRefundDetails(refundId) {
                         </div>
 
                         <div class="mb-4">
-                            <h6 class="text-muted mb-3">Refund Breakdown</h6>
+                            <h6 class="text-muted mb-3">Refund Amount</h6>
                             <table class="table table-sm">
                                 <tr>
-                                    <td>Original Amount:</td>
-                                    <td class="text-end">₱${parseFloat(refund.original_amount).toLocaleString()}</td>
-                                </tr>
-                                <tr>
-                                    <td>Requested Refund:</td>
+                                    <td>Refund Amount:</td>
                                     <td class="text-end">₱${parseFloat(refund.refund_amount).toLocaleString()}</td>
-                                </tr>
-                                ${refund.deduction_amount > 0 ? `
-                                <tr class="text-warning">
-                                    <td>Deduction: <small>${refund.deduction_reason || 'Service fee'}</small></td>
-                                    <td class="text-end">-₱${parseFloat(refund.deduction_amount).toLocaleString()}</td>
-                                </tr>` : ''}
-                                <tr class="fw-bold border-top">
-                                    <td>Final Refund Amount:</td>
-                                    <td class="text-end text-success">₱${finalAmount.toLocaleString()}</td>
                                 </tr>
                             </table>
                         </div>
@@ -629,29 +605,22 @@ function viewRefundDetails(refundId) {
                             ${refund.reason_details ? `<p><strong>Details:</strong> ${refund.reason_details}</p>` : ''}
                         </div>
 
-                        ${refund.admin_notes ? `
-                        <div class="mb-3">
-                            <h6 class="text-muted mb-2">Admin Notes</h6>
-                            <div class="alert alert-info">${refund.admin_notes}</div>
-                        </div>` : ''}
-
                         ${refund.rejection_reason ? `
                         <div class="mb-3">
                             <h6 class="text-muted mb-2">Rejection Reason</h6>
                             <div class="alert alert-danger">${refund.rejection_reason}</div>
                         </div>` : ''}
 
-                        ${refund.refund_reference ? `
+                        ${refund.completion_reference ? `
                         <div class="mb-3">
-                            <h6 class="text-muted mb-2">Refund Reference</h6>
-                            <p class="font-monospace">${refund.refund_reference}</p>
+                            <h6 class="text-muted mb-2">Completion Reference</h6>
+                            <p class="font-monospace">${refund.completion_reference}</p>
                         </div>` : ''}
 
                         <div class="text-muted">
                             <small>
                                 <i class="bi bi-clock"></i> Created: ${refund.created_at}<br>
-                                ${refund.approved_at ? `<i class="bi bi-check"></i> Approved: ${refund.approved_at}<br>` : ''}
-                                ${refund.completed_at ? `<i class="bi bi-check-all"></i> Completed: ${refund.completed_at}` : ''}
+                                ${refund.processed_at ? `<i class="bi bi-check"></i> Processed: ${refund.processed_at}` : ''}
                             </small>
                         </div>
                     </div>
@@ -671,35 +640,17 @@ function viewRefundDetails(refundId) {
         });
 }
 
-// ============================================================================
 // APPROVE REFUND
-// ============================================================================
 function approveRefund(refundId) {
-    const deduction = prompt('Enter deduction amount (if any, e.g., service fee):', '0');
-    if (deduction === null) return;
-
-    const deductionAmount = parseFloat(deduction) || 0;
-    
-    let deductionReason = '';
-    if (deductionAmount > 0) {
-        deductionReason = prompt('Reason for deduction:', 'Service fee / Processing fee');
-        if (!deductionReason) {
-            alert('Deduction reason is required');
-            return;
-        }
-    }
-
     const notes = prompt('Admin notes (optional):', '');
 
-    if (!confirm(`Approve this refund request?\n\nDeduction: ₱${deductionAmount.toFixed(2)}\n${deductionReason ? 'Reason: ' + deductionReason : ''}`)) {
+    if (!confirm('Approve this refund request?')) {
         return;
     }
 
     const formData = new FormData();
     formData.append('refund_id', refundId);
     formData.append('action', 'approve');
-    formData.append('deduction_amount', deductionAmount);
-    formData.append('deduction_reason', deductionReason);
     formData.append('admin_notes', notes);
 
     fetch('api/refund/process_refund.php', {
@@ -721,9 +672,7 @@ function approveRefund(refundId) {
     });
 }
 
-// ============================================================================
 // REJECT REFUND
-// ============================================================================
 function rejectRefund(refundId) {
     const reason = prompt('Reason for rejection:', '');
     
@@ -736,13 +685,10 @@ function rejectRefund(refundId) {
         return;
     }
 
-    const notes = prompt('Additional admin notes (optional):', '');
-
     const formData = new FormData();
     formData.append('refund_id', refundId);
     formData.append('action', 'reject');
     formData.append('rejection_reason', reason);
-    formData.append('admin_notes', notes);
 
     fetch('api/refund/process_refund.php', {
         method: 'POST',
@@ -763,9 +709,7 @@ function rejectRefund(refundId) {
     });
 }
 
-// ============================================================================
-// COMPLETE REFUND - Open Modal
-// ============================================================================
+// COMPLETE REFUND
 function completeRefund(refundId) {
     document.getElementById('complete_refund_id').value = refundId;
     document.getElementById('refund_reference').value = '';
@@ -774,9 +718,7 @@ function completeRefund(refundId) {
     new bootstrap.Modal(document.getElementById('completeModal')).show();
 }
 
-// ============================================================================
 // SUBMIT COMPLETE
-// ============================================================================
 function submitComplete() {
     const refundId = document.getElementById('complete_refund_id').value;
     const reference = document.getElementById('refund_reference').value.trim();
@@ -818,17 +760,13 @@ function submitComplete() {
     });
 }
 
-// ============================================================================
 // EXPORT REFUNDS
-// ============================================================================
 function exportRefunds() {
     const params = new URLSearchParams(window.location.search);
     window.location.href = 'api/refund/export_refunds.php?' + params.toString();
 }
 
-// ============================================================================
-// LIVE SEARCH WITH DEBOUNCE
-// ============================================================================
+// LIVE SEARCH
 let searchTimeout;
 document.getElementById('searchInput').addEventListener('keyup', function() {
     clearTimeout(searchTimeout);

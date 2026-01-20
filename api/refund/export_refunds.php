@@ -30,19 +30,19 @@ if ($statusFilter !== 'all') {
 if (!empty($search)) {
     $searchEsc = mysqli_real_escape_string($conn, $search);
     $where .= " AND (
-        r.refund_id LIKE '%$searchEsc%' OR
+        r.id LIKE '%$searchEsc%' OR
         u_renter.fullname LIKE '%$searchEsc%' OR
         u_renter.email LIKE '%$searchEsc%'
     )";
 }
 
 // ============================================================================
-// FETCH REFUNDS
+// FETCH REFUNDS (FIXED)
 // ============================================================================
 
 $query = "
     SELECT 
-        r.refund_id AS 'Refund ID',
+        CONCAT('#RF-', LPAD(r.id, 4, '0')) AS 'Refund ID',
         r.status AS 'Status',
         u_renter.fullname AS 'Renter Name',
         u_renter.email AS 'Renter Email',
@@ -53,24 +53,20 @@ $query = "
             COALESCE(c.car_year, m.motorcycle_year)
         ) AS 'Car',
         u_owner.fullname AS 'Owner Name',
-        r.original_amount AS 'Original Amount',
         r.refund_amount AS 'Refund Amount',
-        r.deduction_amount AS 'Deduction',
-        (r.refund_amount - r.deduction_amount) AS 'Final Amount',
         r.refund_method AS 'Method',
         r.account_number AS 'Account Number',
         r.account_name AS 'Account Name',
         r.refund_reason AS 'Reason',
-        r.refund_reference AS 'Reference',
+        r.completion_reference AS 'Reference',
         DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i') AS 'Created',
-        DATE_FORMAT(r.approved_at, '%Y-%m-%d %H:%i') AS 'Approved',
-        DATE_FORMAT(r.completed_at, '%Y-%m-%d %H:%i') AS 'Completed',
+        DATE_FORMAT(r.processed_at, '%Y-%m-%d %H:%i') AS 'Processed',
         DATEDIFF(NOW(), r.created_at) AS 'Days Pending'
         
     FROM refunds r
     LEFT JOIN users u_renter ON r.user_id = u_renter.id
-    LEFT JOIN users u_owner ON r.owner_id = u_owner.id
     LEFT JOIN bookings b ON r.booking_id = b.id
+    LEFT JOIN users u_owner ON b.owner_id = u_owner.id
     LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
     LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
     $where
