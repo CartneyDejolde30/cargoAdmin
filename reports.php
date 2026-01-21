@@ -541,6 +541,10 @@ $stats = mysqli_fetch_assoc($statsResult);
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+const BASE_URL = window.location.origin + '/carGOAdmin/';
+
+
+
 // Checkbox selection
 function toggleSelectAll() {
     const checkboxes = document.querySelectorAll('.report-checkbox');
@@ -716,6 +720,33 @@ function formatReportDetails(report) {
         'low': 'secondary'
     }[report.priority] || 'secondary';
 
+   const imageSection = report.image_path
+    ? `
+    <div class="card mb-3">
+        <div class="card-header"><strong>Attached Image</strong></div>
+        <div class="card-body text-center">
+            <img 
+                src="${BASE_URL}${report.image_path}"
+                class="img-fluid rounded shadow"
+                style="max-height: 350px; cursor: zoom-in;"
+                onclick="openImageViewer('${BASE_URL}${report.image_path}')"
+                alt="Report Image"
+                onerror="this.onerror=null;this.src='https://via.placeholder.com/400x250?text=Image+Not+Found';"
+            >
+            <p class="mt-2 text-muted">Click image to view full size</p>
+        </div>
+    </div>
+    `
+    : `
+    <div class="card mb-3">
+        <div class="card-header"><strong>Attached Image</strong></div>
+        <div class="card-body text-center text-muted">
+            No image attached to this report
+        </div>
+    </div>
+    `;
+
+
     return `
         <div class="row">
             <div class="col-md-6">
@@ -732,6 +763,7 @@ function formatReportDetails(report) {
                     </div>
                 </div>
             </div>
+
             <div class="col-md-6">
                 <div class="card mb-3">
                     <div class="card-header"><strong>Reporter Information</strong></div>
@@ -741,7 +773,7 @@ function formatReportDetails(report) {
                         <p><strong>Phone:</strong> ${report.reporter_phone || 'N/A'}</p>
                     </div>
                 </div>
-                
+
                 <div class="card mb-3">
                     <div class="card-header"><strong>Reported Item</strong></div>
                     <div class="card-body">
@@ -749,6 +781,8 @@ function formatReportDetails(report) {
                         <p><strong>ID:</strong> ${report.reported_id}</p>
                     </div>
                 </div>
+
+                ${imageSection}
 
                 ${report.reviewer_name ? `
                 <div class="card mb-3">
@@ -762,8 +796,8 @@ function formatReportDetails(report) {
                 ` : ''}
             </div>
         </div>
-        
-        ${report.timeline ? `
+
+        ${report.timeline && report.timeline.length ? `
         <div class="card">
             <div class="card-header"><strong>Activity Timeline</strong></div>
             <div class="card-body report-timeline">
@@ -779,6 +813,35 @@ function formatReportDetails(report) {
         ` : ''}
     `;
 }
+
+
+function openImageViewer(src) {
+    const modalHtml = `
+        <div class="modal fade" id="imageViewerModal" tabindex="-1">
+            <div class="modal-dialog modal-fullscreen">
+                <div class="modal-content bg-dark">
+                    <div class="modal-header border-0">
+                        <button class="btn btn-light ms-auto" data-bs-dismiss="modal">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body d-flex justify-content-center align-items-center">
+                        <img src="${src}" class="img-fluid rounded shadow-lg">
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = new bootstrap.Modal(document.getElementById('imageViewerModal'));
+    modal.show();
+
+    document.getElementById('imageViewerModal').addEventListener('hidden.bs.modal', function () {
+        this.remove();
+    });
+}
+
 </script>
 
 </body>

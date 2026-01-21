@@ -47,6 +47,8 @@ if (isset($_GET['status']) && in_array($_GET['status'], $allowedStatuses, true))
 }
 
 $where = " WHERE 1 ";
+$where .= " AND p.payment_method = 'gcash' ";
+
 if ($statusFilter !== "" && $statusFilter !== "all") {
     $where .= " AND p.payment_status = '" . mysqli_real_escape_string($conn, $statusFilter) . "' ";
 }
@@ -1083,7 +1085,8 @@ $totalPages = max(1, ceil($totalRows / $limit));
             </div>
             <div class="detail-modern">
               <span class="detail-label-modern">Payment Method</span>
-              <span class="detail-value-modern"><?= strtoupper($row['payment_method']) ?></span>
+              <span class="detail-value-modern">GCASH</span>
+
             </div>
             <div class="detail-modern">
               <span class="detail-label-modern">Owner</span>

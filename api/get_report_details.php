@@ -1,4 +1,7 @@
 <?php
+error_reporting(0);
+ini_set('display_errors', 0);
+
 session_start();
 header("Content-Type: application/json");
 require_once "../include/db.php";
@@ -18,11 +21,25 @@ if ($reportId <= 0) {
 // Get report details
 $query = "
 SELECT 
-    r.*,
+    r.id,
+    r.report_type,
+    r.reported_id,
+    r.reason,
+    r.details,
+    r.status,
+    r.priority,
+    r.image_path,
+    r.created_at,
+    r.updated_at,
+    r.reviewed_at,
+    r.reviewed_by,
+    r.admin_notes,
+
     reporter.fullname AS reporter_name,
     reporter.email AS reporter_email,
     reporter.phone AS reporter_phone,
     admin.fullname AS reviewer_name,
+
     CASE 
         WHEN r.report_type = 'car' THEN 
             (SELECT CONCAT(brand, ' ', model) FROM cars WHERE id = r.reported_id)
@@ -34,11 +51,13 @@ SELECT
             CONCAT('Booking #', r.reported_id)
         ELSE 'Unknown'
     END AS reported_item_name
+
 FROM reports r
 LEFT JOIN users reporter ON r.reporter_id = reporter.id
 LEFT JOIN admin ON r.reviewed_by = admin.id
 WHERE r.id = ?
 ";
+
 
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $reportId);

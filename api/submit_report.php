@@ -18,6 +18,59 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+
+// ---------------------------
+// OPTIONAL IMAGE UPLOAD
+// ---------------------------
+$imagePath = null;
+
+if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    $fileType = mime_content_type($_FILES['image']['tmp_name']);
+
+    if (!in_array($fileType, $allowedTypes)) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => "error",
+            "message" => "Only JPG and PNG images are allowed"
+        ]);
+        exit;
+    }
+
+    if ($_FILES['image']['size'] > 5 * 1024 * 1024) {
+        http_response_code(400);
+        echo json_encode([
+            "status" => "error",
+            "message" => "Image must be under 5MB"
+        ]);
+        exit;
+    }
+
+    $uploadDir = __DIR__ . "/../uploads/reports/";
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $ext = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
+    $fileName = uniqid("report_") . "." . strtolower($ext);
+
+    $targetPath = $uploadDir . $fileName;
+
+    if (!move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
+        http_response_code(500);
+        echo json_encode([
+            "status" => "error",
+            "message" => "Failed to upload image"
+        ]);
+        exit;
+    }
+
+    // Store relative path for DB
+    $imagePath = "uploads/reports/" . $fileName;
+}
+
+
 // ---------------------------
 // GET INPUTS
 // ---------------------------
@@ -226,19 +279,21 @@ try {
     // INSERT REPORT
     // ---------------------------
     $stmt = $conn->prepare("
-        INSERT INTO reports 
-        (reporter_id, report_type, reported_id, reason, details, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'pending', NOW(), NOW())
+       INSERT INTO reports 
+(reporter_id, report_type, reported_id, reason, details, image_path, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
+
     ");
 
     $stmt->bind_param(
-        "issss",
-        $reporterId,
-        $reportType,
-        $reportedId,
-        $reason,
-        $details
-    );
+    "isssss",
+    $reporterId,
+    $reportType,
+    $reportedId,
+    $reason,
+    $details,
+    $imagePath
+);
 
     if (!$stmt->execute()) {
         throw new Exception("Failed to insert report: " . $stmt->error);
