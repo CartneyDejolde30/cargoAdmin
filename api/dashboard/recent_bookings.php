@@ -17,7 +17,6 @@ try {
     $stmt = $conn->prepare("
         SELECT 
             b.id,
-            b.car_name,
             c.image as car_image,
             c.brand,
             c.model,
