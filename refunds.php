@@ -177,6 +177,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="include/admin-styles.css" rel="stylesheet">
+    <link href="include/notifications.css" rel="stylesheet">
 </head>
 <body>
 
@@ -191,16 +192,16 @@ $totalPages = max(1, ceil($totalRows / $limit));
                 Refunds Management
             </h1>
             <div class="user-profile">
-                <button class="notification-btn">
-                    <i class="bi bi-bell"></i>
-                    <?php if ($pendingCount > 0): ?>
-                    <span class="notification-badge"><?= $pendingCount ?></span>
-                    <?php endif; ?>
-                </button>
-                <div class="user-avatar">
-                    <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
-                </div>
-            </div>
+    <div class="notification-dropdown">
+        <button class="notification-btn" title="Notifications">
+            <i class="bi bi-bell"></i>
+            <span class="notification-badge" style="display: none;">0</span>
+        </button>
+    </div>
+    <div class="user-avatar">
+        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+    </div>
+</div>
         </div>
 
         <!-- Stats Grid -->
@@ -775,5 +776,6 @@ document.getElementById('searchInput').addEventListener('keyup', function() {
     }, 500);
 });
 </script>
+<script src="include/notifications.js"></script>
 </body>
 </html>
