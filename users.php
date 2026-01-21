@@ -377,6 +377,7 @@ function buildFilterUrl($baseParams = []) {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
+  <link href="include/notifications.css" rel="stylesheet">
   
   <style>
     /* Additional inline enhancements for smooth animations */
@@ -469,25 +470,16 @@ function buildFilterUrl($baseParams = []) {
         <?= $viewMode === 'overview' ? 'User Status Overview' : 'Users Management' ?>
       </h1>
       <div class="user-profile">
-        <?php if ($viewMode === 'management'): ?>
-          <a href="<?= buildFilterUrl(['view' => 'overview']) ?>" class="btn btn-sm btn-outline-primary me-2" title="Switch to Overview">
-            <i class="bi bi-clipboard-data me-1"></i> Overview
-          </a>
-        <?php else: ?>
-          <a href="<?= buildFilterUrl(['view' => 'management']) ?>" class="btn btn-sm btn-outline-primary me-2" title="Switch to Management">
-            <i class="bi bi-gear-fill me-1"></i> Management
-          </a>
-        <?php endif; ?>
+    <div class="notification-dropdown">
         <button class="notification-btn" title="Notifications">
-          <i class="bi bi-bell"></i>
-          <?php if ($stats['pending'] > 0): ?>
-            <span class="notification-badge"><?= $stats['pending'] ?></span>
-          <?php endif; ?>
+            <i class="bi bi-bell"></i>
+            <span class="notification-badge" style="display: none;">0</span>
         </button>
-        <div class="user-avatar">
-          <img src="https://ui-avatars.com/api/?name=Admin+User&background=667eea&color=fff" alt="Admin">
-        </div>
-      </div>
+    </div>
+    <div class="user-avatar">
+        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+    </div>
+</div>
     </div>
 
     <!-- Search Section (Now appears in BOTH views) -->
@@ -1299,7 +1291,7 @@ window.addEventListener('load', function() {
   }
 });
 </script>
-
+<script src="include/notifications.js"></script>
 </body>
 </html>
 

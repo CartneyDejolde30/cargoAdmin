@@ -178,6 +178,7 @@ $stats = mysqli_fetch_assoc($statsResult);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="include/admin-styles.css" rel="stylesheet">
+    <link href="include/notifications.css" rel="stylesheet">
     <style>
         .priority-badge {
             padding: 4px 12px;
@@ -213,20 +214,16 @@ $stats = mysqli_fetch_assoc($statsResult);
                 Reports Management
             </h1>
             <div class="user-profile">
-                <button class="notification-btn" onclick="window.location.href='?status=pending'">
-                    <i class="bi bi-bell"></i>
-                    <span class="notification-badge"><?php echo $stats['pending']; ?></span>
-                </button>
-                <?php if ($stats['overdue'] > 0): ?>
-                <button class="notification-btn" style="margin-right: 10px;" title="Overdue Reports">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span class="notification-badge overdue-badge"><?php echo $stats['overdue']; ?></span>
-                </button>
-                <?php endif; ?>
-                <div class="user-avatar">
-                    <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($adminName); ?>&background=1a1a1a&color=fff" alt="Admin">
-                </div>
-            </div>
+    <div class="notification-dropdown">
+        <button class="notification-btn" title="Notifications">
+            <i class="bi bi-bell"></i>
+            <span class="notification-badge" style="display: none;">0</span>
+        </button>
+    </div>
+    <div class="user-avatar">
+        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+    </div>
+</div>
         </div>
 
         <!-- Statistics Cards -->
@@ -843,7 +840,7 @@ function openImageViewer(src) {
 }
 
 </script>
-
+<script src="include/notifications.js"></script>
 </body>
 </html>
 
