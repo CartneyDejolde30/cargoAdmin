@@ -39,9 +39,17 @@ if ($result->num_rows === 0) {
 
 $row = $result->fetch_assoc();
 
+
+
 // Compare password
 // ⚠️ If you are storing hashed passwords, use password_verify($password, $row['password'])
 if ($password === $row["password"]) {
+// CREATE TOKEN
+$token = base64_encode($row['id'] . '|' . time());
+$update = $conn->prepare("UPDATE users SET api_token = ? WHERE id = ?");
+$update->bind_param("si", $token, $row['id']);
+$update->execute();
+
     echo json_encode([
         "status" => "success",
         "message" => "Login successful",
@@ -51,6 +59,7 @@ if ($password === $row["password"]) {
         "phone" => $row["phone"] ?? "",
         "address" => $row["address"] ?? "",
         "role" => $row["role"],
+        "token" => $token,
         "profile_image" => !empty($row["profile_image"])
     ? "http://10.139.150.2/carGOAdmin/uploads/profile_images/" . $row["profile_image"]
     : ""

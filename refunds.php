@@ -551,94 +551,94 @@ $totalPages = max(1, ceil($totalRows / $limit));
 <script>
 // VIEW REFUND DETAILS
 function viewRefundDetails(refundId) {
+    console.log("VIEW REFUND:", refundId);
+
     fetch(`api/refund/get_refund_details.php?id=${refundId}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                const refund = data.refund;
-                
-                document.getElementById('refundModalContent').innerHTML = `
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="bi bi-arrow-counterclockwise"></i>
-                            Refund Details - #RF-${String(refund.id).padStart(4, '0')}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row mb-4">
-                            <div class="col-md-6">
-                                <h6 class="text-muted mb-3">Renter Information</h6>
-                                <p><strong>Name:</strong> ${refund.renter_name}</p>
-                                <p><strong>Email:</strong> ${refund.renter_email}</p>
-                                <p><strong>Phone:</strong> ${refund.renter_phone || 'N/A'}</p>
-                            </div>
-                            <div class="col-md-6">
-                                <h6 class="text-muted mb-3">Refund Account</h6>
-                                <p><strong>Method:</strong> ${refund.refund_method.toUpperCase()}</p>
-                                <p><strong>Account Number:</strong> ${refund.account_number}</p>
-                                <p><strong>Account Name:</strong> ${refund.account_name}</p>
-                            </div>
-                        </div>
-
-                        <div class="mb-4">
-                            <h6 class="text-muted mb-3">Booking & Car Details</h6>
-                            <p><strong>Booking ID:</strong> #BK-${String(refund.booking_id).padStart(4, '0')}</p>
-                            <p><strong>Car:</strong> ${refund.car_full_name}</p>
-                            <p><strong>Owner:</strong> ${refund.owner_name}</p>
-                            <p><strong>Rental Period:</strong> ${refund.pickup_date} - ${refund.return_date}</p>
-                        </div>
-
-                        <div class="mb-4">
-                            <h6 class="text-muted mb-3">Refund Amount</h6>
-                            <table class="table table-sm">
-                                <tr>
-                                    <td>Refund Amount:</td>
-                                    <td class="text-end">₱${parseFloat(refund.refund_amount).toLocaleString()}</td>
-                                </tr>
-                            </table>
-                        </div>
-
-                        <div class="mb-4">
-                            <h6 class="text-muted mb-3">Refund Reason</h6>
-                            <p><strong>Category:</strong> ${refund.refund_reason.replace(/_/g, ' ').toUpperCase()}</p>
-                            ${refund.reason_details ? `<p><strong>Details:</strong> ${refund.reason_details}</p>` : ''}
-                        </div>
-
-                        ${refund.rejection_reason ? `
-                        <div class="mb-3">
-                            <h6 class="text-muted mb-2">Rejection Reason</h6>
-                            <div class="alert alert-danger">${refund.rejection_reason}</div>
-                        </div>` : ''}
-
-                        ${refund.completion_reference ? `
-                        <div class="mb-3">
-                            <h6 class="text-muted mb-2">Completion Reference</h6>
-                            <p class="font-monospace">${refund.completion_reference}</p>
-                        </div>` : ''}
-
-                        <div class="text-muted">
-                            <small>
-                                <i class="bi bi-clock"></i> Created: ${refund.created_at}<br>
-                                ${refund.processed_at ? `<i class="bi bi-check"></i> Processed: ${refund.processed_at}` : ''}
-                            </small>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    </div>
-                `;
-                
-                new bootstrap.Modal(document.getElementById('refundModal')).show();
-            } else {
-                alert(data.message || 'Failed to load refund details');
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("HTTP " + response.status);
             }
+            return response.json();
+        })
+        .then(data => {
+            console.log("REFUND DATA:", data);
+
+            if (!data.success) {
+                alert(data.message || "Failed to load refund details");
+                return;
+            }
+
+            const refund = data.refund;
+
+            document.getElementById('refundModalContent').innerHTML = `
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Refund Details - #RF-${String(refund.id).padStart(4, '0')}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h6>Renter</h6>
+                            <p><strong>${refund.renter_name}</strong></p>
+                            <p>${refund.renter_email}</p>
+                            <p>${refund.renter_phone || 'N/A'}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Refund Account</h6>
+                            <p><strong>${refund.refund_method.toUpperCase()}</strong></p>
+                            <p>${refund.account_number}</p>
+                            <p>${refund.account_name}</p>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <h6>Booking</h6>
+                    <p><strong>Car:</strong> ${refund.car_full_name}</p>
+                    <p><strong>Owner:</strong> ${refund.owner_name}</p>
+                    <p><strong>Rental:</strong> ${refund.pickup_date} → ${refund.return_date}</p>
+
+                    <hr>
+
+                    <h6>Refund</h6>
+                    <p><strong>Amount:</strong> ₱${parseFloat(refund.refund_amount).toLocaleString()}</p>
+                    <p><strong>Reason:</strong> ${refund.refund_reason.replace(/_/g, ' ')}</p>
+                    ${refund.reason_details ? `<p><strong>Details:</strong> ${refund.reason_details}</p>` : ''}
+
+                    ${refund.rejection_reason ? `
+                        <div class="alert alert-danger mt-2">
+                            <strong>Rejected:</strong> ${refund.rejection_reason}
+                        </div>
+                    ` : ''}
+
+                    ${refund.completion_reference ? `
+                        <div class="alert alert-success mt-2">
+                            <strong>Completion Ref:</strong> ${refund.completion_reference}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            `;
+
+            new bootstrap.Modal(
+                document.getElementById('refundModal')
+            ).show();
         })
         .catch(err => {
-            console.error(err);
-            alert('Error loading refund details');
+            console.error("VIEW ERROR:", err);
+            alert("Error loading refund details");
         });
 }
+
 
 // APPROVE REFUND
 function approveRefund(refundId) {

@@ -1,233 +1,269 @@
 <?php
+declare(strict_types=1);
+
 session_start();
-header("Content-Type: application/json");
 
-require_once __DIR__ . "/../../include/db.php";  // ✅ FIXED PATH
-require_once __DIR__ . "/transaction_logger.php";
+header('Content-Type: application/json');
 
-$response = ["success" => false, "message" => ""];
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// AUTH CHECK
-if (!isset($_SESSION['admin_id'])) {
-    $response["message"] = "Unauthorized access";
-    echo json_encode($response);
+require_once __DIR__ . '/../../include/db.php';
+require_once __DIR__ . '/transaction_logger.php';
+
+/* =========================================================
+   HELPER
+========================================================= */
+function jsonError(string $message, int $code = 400): void {
+    http_response_code($code);
+    echo json_encode(['success' => false, 'message' => $message]);
     exit;
 }
 
-$adminId = intval($_SESSION['admin_id']);
-
-// INPUT VALIDATION
-if (empty($_POST['payment_id']) || empty($_POST['action'])) {
-    $response["message"] = "Missing required fields";
-    echo json_encode($response);
-    exit;
+/* =========================================================
+   AUTH CHECK
+========================================================= */
+if (empty($_SESSION['admin_id'])) {
+    jsonError('Unauthorized access', 401);
 }
 
-$paymentId = intval($_POST['payment_id']);
-$action = $_POST['action']; // verify | reject
+$adminId = (int)$_SESSION['admin_id'];
 
-mysqli_begin_transaction($conn);
+/* =========================================================
+   METHOD CHECK
+========================================================= */
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    jsonError('Use POST method', 405);
+}
+
+/* =========================================================
+   INPUT VALIDATION
+========================================================= */
+$paymentId = (int)($_POST['payment_id'] ?? 0);
+$action    = trim($_POST['action'] ?? '');
+
+if ($paymentId <= 0 || !in_array($action, ['verify', 'reject'], true)) {
+    jsonError('Missing or invalid fields');
+}
+
+/* =========================================================
+   TRANSACTION
+========================================================= */
+$conn->begin_transaction();
 
 try {
     $logger = new TransactionLogger($conn);
-    
-    // GET PAYMENT + BOOKING
+
+    /* =====================================================
+       LOCK PAYMENT + BOOKING
+    ===================================================== */
     $sql = "
-        SELECT 
-            p.id AS payment_id,
-            p.payment_status,
-            p.amount,
-            p.payment_method,
-            p.payment_reference,
-            b.id AS booking_id,
-            b.total_amount,
-            b.user_id,
-            b.owner_id
-        FROM payments p
-        INNER JOIN bookings b ON p.booking_id = b.id
-        WHERE p.id = ? FOR UPDATE
+    SELECT 
+        p.id                AS payment_id,
+        p.payment_status  AS pay_status,
+        p.amount,
+        p.payment_method,
+        p.payment_reference,
+        b.id               AS booking_id,
+        b.user_id,
+        b.owner_id
+    FROM payments p
+    INNER JOIN bookings b ON p.booking_id = b.id
+    WHERE p.id = ?
+    FOR UPDATE
     ";
 
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $paymentId);
     $stmt->execute();
-    $res = $stmt->get_result();
 
+    $res = $stmt->get_result();
     if ($res->num_rows === 0) {
-        throw new Exception("Payment not found");
+        throw new Exception('Payment not found');
     }
 
     $row = $res->fetch_assoc();
 
-    if ($row['payment_status'] !== 'pending') {
-        throw new Exception("Payment already processed");
+    if ($row['pay_status'] !== 'pending') {
+        throw new Exception('Payment already processed');
     }
 
-    $bookingId = $row['booking_id'];
-    $amount = $row['amount'];
+    $bookingId = (int)$row['booking_id'];
+    $amount    = (float)$row['amount'];
 
-    // VERIFY PAYMENT
+    /* =====================================================
+       VERIFY PAYMENT
+    ===================================================== */
     if ($action === 'verify') {
-        
-        // Calculate fees
-        $platformFee = $amount * 0.10; // 10% commission
-        $ownerPayout = $amount - $platformFee;
+
+        $platformFee = round($amount * 0.10, 2);
+        $ownerPayout = round($amount - $platformFee, 2);
 
         // Update payment
         $sql = "
-            UPDATE payments SET
-                payment_status = 'verified',
-                verified_by = ?,
-                verified_at = NOW()
-            WHERE id = ?
+        UPDATE payments
+        SET payment_status = 'verified',
+            verified_by = ?,
+            verified_at = NOW()
+        WHERE id = ?
         ";
+
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ii", $adminId, $paymentId);
         $stmt->execute();
-        
-        // Log payment verification
+
+        // Insert escrow
+        $sql = "
+        INSERT INTO escrow (
+            booking_id,
+            payment_id,
+            amount,
+            status,
+            held_at,
+            processed_by
+        ) VALUES (?, ?, ?, 'held', NOW(), ?)
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iidi", $bookingId, $paymentId, $amount, $adminId);
+        $stmt->execute();
+
+        $escrowId = $stmt->insert_id;
+
+        // Update booking
+        $sql = "
+        UPDATE bookings
+        SET payment_status = 'paid',
+            escrow_status = 'held',
+            platform_fee = ?,
+            owner_payout = ?,
+            escrow_held_at = NOW(),
+            payment_verified_at = NOW(),
+            payment_verified_by = ?
+        WHERE id = ?
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ddii", $platformFee, $ownerPayout, $adminId, $bookingId);
+        $stmt->execute();
+
+        // Notify renter
+        $sql = "
+        INSERT INTO notifications (user_id, title, message)
+        VALUES (?, 'Payment Verified ✓', 'Your payment has been verified. Booking approved!')
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $row['user_id']);
+        $stmt->execute();
+
+        // Notify owner
+        $sql = "
+        INSERT INTO notifications (user_id, title, message)
+        VALUES (?, 'New Booking 🚗', CONCAT('Booking #', ?, ' has been confirmed. Payment received.'))
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ii", $row['owner_id'], $bookingId);
+        $stmt->execute();
+
+        // Log actions
         $logger->log(
             $bookingId,
             'payment',
             $amount,
-            "Payment verified via " . $row['payment_method'],
+            "Payment verified via {$row['payment_method']}",
             $adminId,
             [
                 'payment_id' => $paymentId,
-                'payment_reference' => $row['payment_reference'],
-                'payment_method' => $row['payment_method']
-            ]
-        );
-
-        // Insert into escrow
-        $stmt = $conn->prepare("
-            INSERT INTO escrow (booking_id, payment_id, amount, status, held_at, processed_by)
-            VALUES (?, ?, ?, 'held', NOW(), ?)
-        ");
-        $stmt->bind_param("iidi", $bookingId, $paymentId, $amount, $adminId);
-        $stmt->execute();
-        
-        $escrowId = $stmt->insert_id;
-        
-        // Log escrow hold
-        $logger->log(
-            $bookingId,
-            'escrow_hold',
-            $amount,
-            "Funds held in escrow (ID: $escrowId)",
-            $adminId,
-            [
                 'escrow_id' => $escrowId,
                 'platform_fee' => $platformFee,
                 'owner_payout' => $ownerPayout
             ]
         );
 
-        // Update booking
-        $sql = "
-            UPDATE bookings SET
-                payment_status = 'paid',
-                status = 'approved',
-                escrow_status = 'held',
-                platform_fee = ?,
-                owner_payout = ?,
-                escrow_held_at = NOW(),
-                payment_verified_at = NOW(),
-                payment_verified_by = ?
-            WHERE id = ?
-        ";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ddii", $platformFee, $ownerPayout, $adminId, $bookingId);
-        $stmt->execute();
-        
-        // Notify renter
-        $stmt = $conn->prepare("
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'Payment Verified ✓', 'Your payment has been verified. Booking approved!')
-        ");
-        $stmt->bind_param("i", $row['user_id']);
-        $stmt->execute();
-        
-        // Notify owner
-        $stmt = $conn->prepare("
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'New Booking 🚗', CONCAT('Booking #', ?, ' has been confirmed. Payment received.'))
-        ");
-        $stmt->bind_param("ii", $row['owner_id'], $bookingId);
-        $stmt->execute();
+        $conn->commit();
 
-        $response["success"] = true;
-        $response["message"] = "Payment verified successfully";
-        $response["data"] = [
-            'platform_fee' => $platformFee,
-            'owner_payout' => $ownerPayout
-        ];
+        echo json_encode([
+            'success' => true,
+            'message' => 'Payment verified successfully',
+            'data' => [
+                'platform_fee' => $platformFee,
+                'owner_payout' => $ownerPayout
+            ]
+        ]);
+        exit;
     }
 
-    // REJECT PAYMENT
-    elseif ($action === 'reject') {
-        
-        $rejectionReason = $_POST['reason'] ?? 'Payment verification failed';
+    /* =====================================================
+       REJECT PAYMENT
+    ===================================================== */
+    if ($action === 'reject') {
+
+        $reason = trim($_POST['reason'] ?? 'Payment verification failed');
 
         // Update payment
         $sql = "
-            UPDATE payments SET
-                payment_status = 'rejected',
-                verified_by = ?,
-                verified_at = NOW(),
-                verification_notes = ?
-            WHERE id = ?
+        UPDATE payments
+        SET payment_status = 'rejected',
+            verified_by = ?,
+            verified_at = NOW(),
+            verification_notes = ?
+        WHERE id = ?
         ";
+
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("isi", $adminId, $rejectionReason, $paymentId);
+        $stmt->bind_param("isi", $adminId, $reason, $paymentId);
         $stmt->execute();
-        
+
+        // Update booking
+        $sql = "
+        UPDATE bookings
+        SET payment_status = 'rejected',
+            status = 'rejected',
+            rejected_at = NOW(),
+            rejection_reason = ?
+        WHERE id = ?
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("si", $reason, $bookingId);
+        $stmt->execute();
+
+        // Notify renter
+        $sql = "
+        INSERT INTO notifications (user_id, title, message)
+        VALUES (?, 'Payment Rejected ✗', CONCAT('Your payment was rejected. Reason: ', ?))
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("is", $row['user_id'], $reason);
+        $stmt->execute();
+
         // Log rejection
         $logger->log(
             $bookingId,
             'payment',
             $amount,
-            "Payment rejected: $rejectionReason",
+            "Payment rejected: $reason",
             $adminId,
             [
                 'payment_id' => $paymentId,
-                'reason' => $rejectionReason
+                'reason' => $reason
             ]
         );
 
-        // Update booking
-        $sql = "
-            UPDATE bookings SET
-                payment_status = 'rejected',
-                status = 'rejected',
-                rejected_at = NOW(),
-                rejection_reason = ?
-            WHERE id = ?
-        ";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("si", $rejectionReason, $bookingId);
-        $stmt->execute();
-        
-        // Notify renter
-        $stmt = $conn->prepare("
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'Payment Rejected ✗', CONCAT('Your payment was rejected. Reason: ', ?))
-        ");
-        $stmt->bind_param("is", $row['user_id'], $rejectionReason);
-        $stmt->execute();
+        $conn->commit();
 
-        $response["success"] = true;
-        $response["message"] = "Payment rejected";
-    } else {
-        throw new Exception("Invalid action");
+        echo json_encode([
+            'success' => true,
+            'message' => 'Payment rejected successfully'
+        ]);
+        exit;
     }
 
-    mysqli_commit($conn);
+    throw new Exception('Invalid action');
 
-} catch (Exception $e) {
-    mysqli_rollback($conn);
-    $response["message"] = $e->getMessage();
+} catch (Throwable $e) {
+    $conn->rollback();
+    jsonError('SQL ERROR: ' . $e->getMessage(), 500);
 }
-
-echo json_encode($response);
-$conn->close();

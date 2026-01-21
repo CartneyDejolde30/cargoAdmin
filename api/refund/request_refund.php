@@ -1,191 +1,177 @@
 <?php
-/**
- * ============================================================================
- * REQUEST REFUND API - CarGo Refund System
- * Allows renters to request a refund for cancelled bookings
- * ============================================================================
- */
+declare(strict_types=1);
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 require_once '../../include/db.php';
 
-// ============================================================================
-// VALIDATE REQUEST METHOD
-// ============================================================================
+/* =========================================================
+   HELPER
+========================================================= */
+function jsonError(string $message, int $code = 400): void {
+    http_response_code($code);
+    echo json_encode(['success' => false, 'message' => $message]);
+    exit;
+}
 
+/* =========================================================
+   AUTH - TOKEN
+========================================================= */
+$token = null;
+
+if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+    $token = str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION']);
+} elseif (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $token = str_replace('Bearer ', '', $_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+} elseif (!empty($_POST['token'])) {
+    $token = $_POST['token'];
+}
+
+if (!$token) {
+    jsonError('Missing token', 401);
+}
+
+$stmt = $conn->prepare("SELECT id FROM users WHERE api_token = ? LIMIT 1");
+$stmt->bind_param("s", $token);
+$stmt->execute();
+$res = $stmt->get_result();
+
+if ($res->num_rows === 0) {
+    jsonError('Invalid token', 401);
+}
+
+$user = $res->fetch_assoc();
+$userId = (int)$user['id'];
+
+if ($userId <= 0) {
+    jsonError('Unauthorized', 401);
+}
+
+/* =========================================================
+   METHOD CHECK
+========================================================= */
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Method not allowed. Use POST.'
-    ]);
-    exit;
+    jsonError('Use POST method', 405);
 }
 
-// ============================================================================
-// GET POST DATA
-// ============================================================================
+/* =========================================================
+   INPUT
+========================================================= */
+$bookingId               = (int)($_POST['booking_id'] ?? 0);
+$refundMethod           = trim($_POST['refund_method'] ?? '');
+$accountNumber         = trim($_POST['account_number'] ?? '');
+$accountName           = trim($_POST['account_name'] ?? '');
+$bankName              = trim($_POST['bank_name'] ?? '');
+$refundReason          = trim($_POST['refund_reason'] ?? '');
+$reasonDetails         = trim($_POST['reason_details'] ?? '');
+$originalPayMethod    = trim($_POST['original_payment_method'] ?? '');
+$originalPayReference = trim($_POST['original_payment_reference'] ?? '');
 
-$booking_id = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
-$refund_amount = isset($_POST['refund_amount']) ? floatval($_POST['refund_amount']) : 0;
-$refund_method = isset($_POST['refund_method']) ? mysqli_real_escape_string($conn, $_POST['refund_method']) : '';
-$account_number = isset($_POST['account_number']) ? mysqli_real_escape_string($conn, $_POST['account_number']) : '';
-$account_name = isset($_POST['account_name']) ? mysqli_real_escape_string($conn, $_POST['account_name']) : '';
-$bank_name = isset($_POST['bank_name']) ? mysqli_real_escape_string($conn, $_POST['bank_name']) : null;
-$refund_reason = isset($_POST['refund_reason']) ? mysqli_real_escape_string($conn, $_POST['refund_reason']) : '';
-$reason_details = isset($_POST['reason_details']) ? mysqli_real_escape_string($conn, $_POST['reason_details']) : '';
-$original_payment_method = isset($_POST['original_payment_method']) ? mysqli_real_escape_string($conn, $_POST['original_payment_method']) : '';
-$original_payment_reference = isset($_POST['original_payment_reference']) ? mysqli_real_escape_string($conn, $_POST['original_payment_reference']) : '';
-
-// ============================================================================
-// VALIDATION
-// ============================================================================
-
-$errors = [];
-
-if ($booking_id <= 0) {
-    $errors[] = 'Invalid booking ID';
+/* =========================================================
+   VALIDATION
+========================================================= */
+if ($bookingId <= 0) jsonError('Invalid booking ID');
+if (!in_array($refundMethod, ['gcash', 'bank', 'original_method'], true)) {
+    jsonError('Invalid refund method');
 }
-
-if ($refund_amount <= 0) {
-    $errors[] = 'Invalid refund amount';
+if ($accountNumber === '') jsonError('Account number is required');
+if ($accountName === '') jsonError('Account name is required');
+if ($refundMethod === 'gcash' && !preg_match('/^09\d{9}$/', $accountNumber)) {
+    jsonError('Invalid GCash number');
 }
+if ($refundReason === '') jsonError('Refund reason is required');
 
-if (empty($refund_method) || !in_array($refund_method, ['gcash', 'bank', 'original_method'])) {
-    $errors[] = 'Invalid refund method';
-}
-
-if (empty($account_number)) {
-    $errors[] = 'Account number is required';
-}
-
-if (empty($account_name)) {
-    $errors[] = 'Account name is required';
-}
-
-if ($refund_method === 'gcash' && !preg_match('/^09\d{9}$/', $account_number)) {
-    $errors[] = 'Invalid GCash number format';
-}
-
-if (empty($refund_reason)) {
-    $errors[] = 'Refund reason is required';
-}
-
-if (!empty($errors)) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Validation failed',
-        'errors' => $errors
-    ]);
-    exit;
-}
-
-// ============================================================================
-// CHECK BOOKING EXISTS AND GET DETAILS
-// ============================================================================
-
-$booking_query = "
-    SELECT 
-        b.*,
-        p.id AS payment_id,
-        p.amount AS payment_amount,
-        p.payment_status,
-        p.is_refunded
-    FROM bookings b
-    LEFT JOIN payments p ON b.id = p.booking_id
-    WHERE b.id = ?
+/* =========================================================
+   GET BOOKING + LATEST PAYMENT
+========================================================= */
+$sql = "
+SELECT 
+    b.*,
+    p.id     AS payment_id,
+    p.amount AS payment_amount,
+    p.payment_status
+FROM bookings b
+LEFT JOIN payments p 
+  ON p.id = (
+    SELECT id 
+    FROM payments 
+    WHERE booking_id = b.id 
+    ORDER BY created_at DESC 
     LIMIT 1
+  )
+WHERE b.id = ?
+LIMIT 1
 ";
 
-$stmt = $conn->prepare($booking_query);
-$stmt->bind_param("i", $booking_id);
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $bookingId);
 $stmt->execute();
-$booking_result = $stmt->get_result();
+$res = $stmt->get_result();
 
-if ($booking_result->num_rows === 0) {
-    http_response_code(404);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Booking not found'
-    ]);
-    exit;
+if ($res->num_rows === 0) {
+    jsonError('Booking not found', 404);
 }
 
-$booking = $booking_result->fetch_assoc();
+$booking = $res->fetch_assoc();
 
-// ============================================================================
-// VALIDATE REFUND ELIGIBILITY
-// ============================================================================
-
-// Check if already refunded
-if ($booking['is_refunded'] == 1) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => 'This booking has already been refunded'
-    ]);
-    exit;
+/* =========================================================
+   SECURITY CHECK
+========================================================= */
+if ((int)$booking['user_id'] !== $userId) {
+    jsonError('Not your booking', 403);
 }
 
-// Check if refund already requested
-if ($booking['refund_requested'] == 1) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => 'A refund has already been requested for this booking'
-    ]);
-    exit;
+/* =========================================================
+   REFUND ELIGIBILITY
+========================================================= */
+if ($booking['refund_status'] === 'completed') {
+    jsonError('This booking has already been refunded');
 }
-
-// Check if booking is cancelled or rejected
-$allowed_statuses = ['cancelled', 'rejected'];
-if (!in_array($booking['status'], $allowed_statuses)) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Only cancelled or rejected bookings are eligible for refund',
-        'current_status' => $booking['status']
-    ]);
-    exit;
+if ((int)$booking['refund_requested'] === 1) {
+    jsonError('Refund already requested');
 }
-
-// Check if payment was verified
+if (!in_array($booking['status'], ['cancelled', 'rejected'], true)) {
+    jsonError('Only cancelled or rejected bookings can be refunded');
+}
 if ($booking['payment_status'] !== 'verified') {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Payment must be verified before requesting refund',
-        'payment_status' => $booking['payment_status']
-    ]);
-    exit;
+    jsonError('Payment not verified');
 }
 
-// ============================================================================
-// GENERATE REFUND ID
-// ============================================================================
+/* =========================================================
+   TRANSACTION
+========================================================= */
+$conn->begin_transaction();
 
-$refund_id = 'REF-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+try {
+    // Generate Refund ID
+    $refundId = 'REF-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
 
-// Make sure it's unique
-$check_query = "SELECT id FROM refunds WHERE refund_id = ?";
-$check_stmt = $conn->prepare($check_query);
-$check_stmt->bind_param("s", $refund_id);
-$check_stmt->execute();
+    $stmt = $conn->prepare("SELECT id FROM refunds WHERE refund_id = ?");
+    $stmt->bind_param("s", $refundId);
+    $stmt->execute();
 
-if ($check_stmt->get_result()->num_rows > 0) {
-    $refund_id = 'REF-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4)) . rand(10, 99);
-}
+    if ($stmt->get_result()->num_rows > 0) {
+        $refundId .= rand(10, 99);
+    }
 
-// ============================================================================
-// INSERT REFUND REQUEST
-// ============================================================================
+    // Normalize nullable values
+    $ownerId        = $booking['owner_id'] ?? null;
+    $refundAmount  = (float)$booking['payment_amount'];
+    $originalAmt   = $booking['payment_amount'] ?? null;
+    $bankName      = $bankName ?: null;
+    $reasonDetails = $reasonDetails ?: null;
+    $origMethod   = $originalPayMethod ?: null;
+    $origRef      = $originalPayReference ?: null;
 
-$insert_query = "
+    /* =====================================================
+       INSERT REFUND
+    ===================================================== */
+    $insert = "
     INSERT INTO refunds (
         refund_id,
         booking_id,
@@ -206,83 +192,60 @@ $insert_query = "
         original_payment_reference,
         created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NOW())
-";
+    ";
 
-$stmt = $conn->prepare($insert_query);
-$stmt->bind_param(
-    "siiidddssssssss",
-    $refund_id,
-    $booking_id,
-    $booking['payment_id'],
-    $booking['user_id'],
-    $booking['owner_id'],
-    $refund_amount,
-    $booking['payment_amount'],
-    $refund_method,
-    $account_number,
-    $account_name,
-    $bank_name,
-    $refund_reason,
-    $reason_details,
-    $original_payment_method,
-    $original_payment_reference
-);
+    $stmt = $conn->prepare($insert);
+    $stmt->bind_param(
+        "siiiiddssssssss",
+        $refundId,
+        $bookingId,
+        $booking['payment_id'],
+        $booking['user_id'],
+        $ownerId,
+        $refundAmount,
+        $originalAmt,
+        $refundMethod,
+        $accountNumber,
+        $accountName,
+        $bankName,
+        $refundReason,
+        $reasonDetails,
+        $origMethod,
+        $origRef
+    );
+    $stmt->execute();
 
-if (!$stmt->execute()) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Failed to create refund request',
-        'error' => $stmt->error
-    ]);
-    exit;
-}
-
-$refund_record_id = $stmt->insert_id;
-
-// ============================================================================
-// UPDATE BOOKING STATUS
-// ============================================================================
-
-$update_booking = "
-    UPDATE bookings 
-    SET 
-        refund_requested = 1,
+    /* =====================================================
+       UPDATE BOOKING
+    ===================================================== */
+    $update = "
+    UPDATE bookings
+    SET refund_requested = 1,
         refund_status = 'requested',
         refund_amount = ?
     WHERE id = ?
-";
+    ";
 
-$stmt = $conn->prepare($update_booking);
-$stmt->bind_param("di", $refund_amount, $booking_id);
-$stmt->execute();
+    $stmt = $conn->prepare($update);
+    $stmt->bind_param("di", $refundAmount, $bookingId);
+    $stmt->execute();
 
-// ============================================================================
-// SEND NOTIFICATION TO ADMIN (Optional)
-// ============================================================================
+    $conn->commit();
 
-// You can add notification logic here
-// For example, send email to admin or create in-app notification
+} catch (Throwable $e) {
+    $conn->rollback();
+    jsonError("SQL ERROR: " . $e->getMessage(), 500);
+}
 
-// ============================================================================
-// SUCCESS RESPONSE
-// ============================================================================
-
-http_response_code(201);
+/* =========================================================
+   SUCCESS
+========================================================= */
 echo json_encode([
-    'success' => true,
-    'message' => 'Refund request submitted successfully',
-    'refund_id' => $refund_id,
-    'data' => [
-        'id' => $refund_record_id,
-        'refund_id' => $refund_id,
-        'booking_id' => $booking_id,
-        'amount' => $refund_amount,
-        'status' => 'pending',
-        'estimated_processing_days' => '3-5 business days',
-        'refund_method' => $refund_method,
-        'created_at' => date('Y-m-d H:i:s')
-    ]
+    'success'   => true,
+    'refund_id'=> $refundId,
+    'amount'   => $refundAmount,
+    'status'   => 'pending',
+    'message'  => 'Refund request submitted successfully'
 ]);
 
 $conn->close();
