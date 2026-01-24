@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================================
- * REFUND ESCROW API
+ * REFUND ESCROW API - FIXED
  * Refund escrow funds back to renter
  * ============================================================================
  */
@@ -70,9 +70,9 @@ try {
         throw new Exception('Booking not found');
     }
     
-    // Validate escrow can be refunded
-    if (!in_array($booking['escrow_status'], ['held', 'on_hold'])) {
-        throw new Exception('Can only refund escrow from "held" or "on_hold" status. Current: ' . $booking['escrow_status']);
+    // Validate escrow can be refunded - check for held status (regardless of hold reason)
+    if ($booking['escrow_status'] !== 'held') {
+        throw new Exception('Can only refund escrow from "held" status. Current: ' . $booking['escrow_status']);
     }
     
     // Calculate refund amount (full amount back to renter)
@@ -83,8 +83,10 @@ try {
         UPDATE bookings 
         SET 
             escrow_status = 'refunded',
-            booking_status = 'cancelled',
-            escrow_refunded_at = NOW()
+            status = 'cancelled',
+            escrow_refunded_at = NOW(),
+            escrow_hold_reason = NULL,
+            escrow_hold_details = NULL
         WHERE id = ?
     ";
     
@@ -95,9 +97,13 @@ try {
         throw new Exception('Failed to update escrow status: ' . mysqli_error($conn));
     }
     
+    // Generate unique refund ID
+    $refundId = 'REF-' . date('Ymd') . '-' . strtoupper(substr(md5(uniqid()), 0, 4));
+    
     // Create refund record
     $createRefund = "
         INSERT INTO refunds (
+            refund_id,
             user_id,
             booking_id,
             payment_id,
@@ -107,19 +113,23 @@ try {
             account_name,
             refund_reason,
             reason_details,
+            original_payment_method,
+            original_payment_reference,
             status,
             processed_by,
-            approved_at,
+            processed_at,
             created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, NOW(), NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, NOW(), NOW())
     ";
     
     $refundMethod = $booking['payment_method'] ?? 'gcash';
     $accountNumber = $booking['renter_gcash'] ?? 'N/A';
     $accountName = $booking['renter_name'];
+    $originalPaymentRef = $booking['payment_id'] ?? null;
     
     $stmt = mysqli_prepare($conn, $createRefund);
-    mysqli_stmt_bind_param($stmt, "iiidsssssi",
+    mysqli_stmt_bind_param($stmt, "siiidssssssi",
+        $refundId,
         $booking['user_id'],
         $bookingId,
         $booking['payment_id'],
@@ -129,6 +139,8 @@ try {
         $accountName,
         $reason,
         $details,
+        $refundMethod,
+        $originalPaymentRef,
         $adminId
     );
     
@@ -136,7 +148,7 @@ try {
         throw new Exception('Failed to create refund record: ' . mysqli_error($conn));
     }
     
-    $refundId = mysqli_insert_id($conn);
+    $newRefundId = mysqli_insert_id($conn);
     
     // Update payment status
     if ($booking['payment_id']) {
@@ -151,28 +163,32 @@ try {
         mysqli_stmt_execute($stmt);
     }
     
-    // Log escrow refund
-    $logQuery = "
-        INSERT INTO escrow_logs (
-            booking_id,
-            action,
-            previous_status,
-            new_status,
-            admin_id,
-            notes,
-            created_at
-        ) VALUES (?, 'refund', ?, 'refunded', ?, ?, NOW())
-    ";
-    
-    $logNotes = "Refunded to renter - Reason: $reason - $details";
-    $stmt = mysqli_prepare($conn, $logQuery);
-    mysqli_stmt_bind_param($stmt, "isis", 
-        $bookingId, 
-        $booking['escrow_status'], 
-        $adminId, 
-        $logNotes
-    );
-    mysqli_stmt_execute($stmt);
+    // Log escrow refund if escrow_logs table exists
+    $checkTable = mysqli_query($conn, "SHOW TABLES LIKE 'escrow_logs'");
+    if (mysqli_num_rows($checkTable) > 0) {
+        $logQuery = "
+            INSERT INTO escrow_logs (
+                booking_id,
+                action,
+                previous_status,
+                new_status,
+                admin_id,
+                notes,
+                created_at
+            ) VALUES (?, 'refund', ?, 'refunded', ?, ?, NOW())
+        ";
+        
+        $logNotes = "Refunded to renter - Reason: $reason - $details";
+        $prevStatus = !empty($booking['escrow_hold_reason']) ? 'on_hold' : 'held';
+        $stmt = mysqli_prepare($conn, $logQuery);
+        mysqli_stmt_bind_param($stmt, "isis", 
+            $bookingId, 
+            $prevStatus, 
+            $adminId, 
+            $logNotes
+        );
+        mysqli_stmt_execute($stmt);
+    }
     
     // Commit transaction
     mysqli_commit($conn);
@@ -184,7 +200,8 @@ try {
         'success' => true,
         'message' => 'Escrow refunded successfully! Refund record created.',
         'booking_id' => $bookingId,
-        'refund_id' => $refundId,
+        'refund_id' => $newRefundId,
+        'refund_reference' => $refundId,
         'refund_amount' => $refundAmount
     ]);
     

@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================================
- * RESUME ESCROW API
+ * RESUME ESCROW API - FIXED
  * Resume escrow from on_hold status back to held
  * ============================================================================
  */
@@ -55,16 +55,19 @@ try {
         throw new Exception('Booking not found');
     }
     
-    // Validate current escrow status
-    if ($booking['escrow_status'] !== 'on_hold') {
-        throw new Exception('Can only resume escrow from "on_hold" status. Current: ' . $booking['escrow_status']);
+    // Validate current escrow status - check if it has hold reason
+    if (empty($booking['escrow_hold_reason'])) {
+        throw new Exception('This escrow is not on hold');
     }
     
-    // Update escrow status back to held
+    if ($booking['escrow_status'] !== 'held') {
+        throw new Exception('Can only resume escrow with "held" status. Current: ' . $booking['escrow_status']);
+    }
+    
+    // Update escrow status - clear hold reason
     $updateQuery = "
         UPDATE bookings 
         SET 
-            escrow_status = 'held',
             escrow_hold_reason = NULL,
             escrow_hold_details = NULL
         WHERE id = ?
@@ -77,22 +80,25 @@ try {
         throw new Exception('Failed to update escrow status: ' . mysqli_error($conn));
     }
     
-    // Log the resume action
-    $logQuery = "
-        INSERT INTO escrow_logs (
-            booking_id,
-            action,
-            previous_status,
-            new_status,
-            admin_id,
-            notes,
-            created_at
-        ) VALUES (?, 'resume', 'on_hold', 'held', ?, ?, NOW())
-    ";
-    
-    $stmt = mysqli_prepare($conn, $logQuery);
-    mysqli_stmt_bind_param($stmt, "iis", $bookingId, $adminId, $notes);
-    mysqli_stmt_execute($stmt);
+    // Log the resume action if escrow_logs table exists
+    $checkTable = mysqli_query($conn, "SHOW TABLES LIKE 'escrow_logs'");
+    if (mysqli_num_rows($checkTable) > 0) {
+        $logQuery = "
+            INSERT INTO escrow_logs (
+                booking_id,
+                action,
+                previous_status,
+                new_status,
+                admin_id,
+                notes,
+                created_at
+            ) VALUES (?, 'resume', 'on_hold', 'held', ?, ?, NOW())
+        ";
+        
+        $stmt = mysqli_prepare($conn, $logQuery);
+        mysqli_stmt_bind_param($stmt, "iis", $bookingId, $adminId, $notes);
+        mysqli_stmt_execute($stmt);
+    }
     
     // Commit transaction
     mysqli_commit($conn);

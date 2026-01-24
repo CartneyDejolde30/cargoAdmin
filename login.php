@@ -61,7 +61,7 @@ $update->execute();
         "role" => $row["role"],
         "token" => $token,
         "profile_image" => !empty($row["profile_image"])
-    ? "http://192.168.1.11/carGOAdmin/uploads/profile_images/" . $row["profile_image"]
+    ? "http://10.77.127.141/carGOAdmin/uploads/profile_images/" . $row["profile_image"]
     : ""
 
     ]);

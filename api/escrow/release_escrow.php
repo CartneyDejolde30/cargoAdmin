@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================================
- * RELEASE ESCROW API
+ * RELEASE ESCROW API - FIXED
  * Release funds from escrow to owner (schedule payout)
  * ============================================================================
  */
@@ -36,7 +36,8 @@ try {
             b.*,
             p.payment_status,
             u.fullname AS owner_name,
-            u.email AS owner_email
+            u.email AS owner_email,
+            u.gcash_number AS owner_gcash
         FROM bookings b
         LEFT JOIN payments p ON b.id = p.booking_id
         LEFT JOIN users u ON b.owner_id = u.id
@@ -58,15 +59,19 @@ try {
         throw new Exception('Escrow is not in held status. Current status: ' . $booking['escrow_status']);
     }
     
+    // Check if it's on hold
+    if (!empty($booking['escrow_hold_reason'])) {
+        throw new Exception('Cannot release escrow that is on hold. Please resolve the hold first.');
+    }
+    
     // Check if payment is verified
-    if ($booking['payment_status'] !== 'verified') {
+    if ($booking['payment_status'] !== 'verified' && $booking['payment_status'] !== 'paid') {
         throw new Exception('Payment must be verified before releasing escrow');
     }
     
     // Ideally, booking should be completed before releasing
-    // But we'll allow release for approved/active bookings with admin discretion
-    if (!in_array($booking['booking_status'], ['completed', 'active', 'approved'])) {
-        throw new Exception('Booking status must be completed, active, or approved. Current: ' . $booking['booking_status']);
+    if (!in_array($booking['status'], ['completed', 'ongoing', 'approved'])) {
+        throw new Exception('Booking status must be completed, ongoing, or approved. Current: ' . $booking['status']);
     }
     
     // Update escrow status
@@ -103,7 +108,7 @@ try {
     ";
     
     $stmt = mysqli_prepare($conn, $createPayout);
-    $gcashAccount = $booking['owner_id']; // This will be used to fetch owner's gcash from users table
+    $gcashAccount = $booking['owner_gcash'] ?? 'Not Set';
     
     mysqli_stmt_bind_param($stmt, "iiddds", 
         $bookingId,
@@ -118,22 +123,25 @@ try {
         throw new Exception('Failed to create payout record: ' . mysqli_error($conn));
     }
     
-    // Log escrow release
-    $logQuery = "
-        INSERT INTO escrow_logs (
-            booking_id,
-            action,
-            previous_status,
-            new_status,
-            admin_id,
-            notes,
-            created_at
-        ) VALUES (?, 'release', 'held', 'released_to_owner', ?, 'Escrow released to owner', NOW())
-    ";
-    
-    $stmt = mysqli_prepare($conn, $logQuery);
-    mysqli_stmt_bind_param($stmt, "ii", $bookingId, $adminId);
-    mysqli_stmt_execute($stmt); // Non-critical, so we don't throw on failure
+    // Log escrow release if escrow_logs table exists
+    $checkTable = mysqli_query($conn, "SHOW TABLES LIKE 'escrow_logs'");
+    if (mysqli_num_rows($checkTable) > 0) {
+        $logQuery = "
+            INSERT INTO escrow_logs (
+                booking_id,
+                action,
+                previous_status,
+                new_status,
+                admin_id,
+                notes,
+                created_at
+            ) VALUES (?, 'release', 'held', 'released_to_owner', ?, 'Escrow released to owner', NOW())
+        ";
+        
+        $stmt = mysqli_prepare($conn, $logQuery);
+        mysqli_stmt_bind_param($stmt, "ii", $bookingId, $adminId);
+        mysqli_stmt_execute($stmt);
+    }
     
     // Commit transaction
     mysqli_commit($conn);
@@ -144,7 +152,8 @@ try {
         'success' => true,
         'message' => 'Escrow released successfully! Payout scheduled for owner.',
         'booking_id' => $bookingId,
-        'owner_payout' => $booking['owner_payout']
+        'owner_payout' => $booking['owner_payout'],
+        'owner_name' => $booking['owner_name']
     ]);
     
 } catch (Exception $e) {

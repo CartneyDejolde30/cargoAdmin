@@ -38,7 +38,7 @@ while ($row = $result->fetch_assoc()) {
 
     // avatar fallback
     if ($row['avatar'] !== '') {
-        $row['avatar'] = "http://192.168.1.11/carGOAdmin/uploads/" . $row['avatar'];
+        $row['avatar'] = "http://10.77.127.141/carGOAdmin/uploads/" . $row['avatar'];
     } else {
         $row['avatar'] = "https://ui-avatars.com/api/?name=" . urlencode($row['name']);
     }

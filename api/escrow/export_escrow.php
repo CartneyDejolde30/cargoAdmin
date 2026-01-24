@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================================
- * EXPORT ESCROW DATA
+ * EXPORT ESCROW DATA - FIXED
  * Export escrow transactions to CSV
  * ============================================================================
  */
@@ -20,27 +20,28 @@ require_once '../../include/db.php';
 $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : 'all';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
-// Build WHERE clause
+// Build WHERE clause - FIXED FOR ACTUAL ENUM VALUES
 $where = " WHERE 1 ";
 
 switch($statusFilter) {
     case 'held':
-        $where .= " AND b.escrow_status = 'held' ";
+        $where .= " AND b.escrow_status = 'held' AND (b.escrow_hold_reason IS NULL OR b.escrow_hold_reason = '') ";
         break;
     case 'released':
-        $where .= " AND b.escrow_status = 'released_to_owner' ";
+        $where .= " AND b.escrow_status IN ('released_to_owner', 'released') ";
         break;
     case 'on_hold':
-        $where .= " AND b.escrow_status = 'on_hold' ";
+        // Check for hold reason instead of enum value
+        $where .= " AND b.escrow_status = 'held' AND b.escrow_hold_reason IS NOT NULL AND b.escrow_hold_reason != '' ";
         break;
     case 'refunded':
         $where .= " AND b.escrow_status = 'refunded' ";
         break;
     case 'pending_release':
-        $where .= " AND b.escrow_status = 'held' AND b.booking_status = 'completed' ";
+        $where .= " AND b.escrow_status = 'held' AND b.status = 'completed' ";
         break;
     case 'all':
-        $where .= " AND b.escrow_status IN ('held', 'released_to_owner', 'on_hold', 'refunded') ";
+        $where .= " AND b.escrow_status IN ('held', 'released_to_owner', 'released', 'refunded', 'pending') ";
         break;
 }
 
@@ -61,15 +62,21 @@ $query = "
         b.total_amount,
         b.platform_fee,
         b.owner_payout,
-        b.booking_status,
+        b.status AS booking_status,
         b.escrow_status,
+        b.escrow_hold_reason,
+        b.escrow_hold_details,
         b.created_at,
+        b.escrow_held_at,
         b.escrow_released_at,
         b.escrow_refunded_at,
+        b.payment_verified_at,
         
         CASE 
-            WHEN b.escrow_status = 'held' THEN DATEDIFF(NOW(), b.created_at)
-            WHEN b.escrow_status = 'released_to_owner' THEN DATEDIFF(b.escrow_released_at, b.created_at)
+            WHEN b.escrow_status = 'held' THEN 
+                DATEDIFF(NOW(), COALESCE(b.escrow_held_at, b.payment_verified_at, b.created_at))
+            WHEN b.escrow_status IN ('released_to_owner', 'released') THEN 
+                DATEDIFF(b.escrow_released_at, COALESCE(b.escrow_held_at, b.payment_verified_at, b.created_at))
             ELSE 0
         END AS days_in_escrow,
         
@@ -123,6 +130,8 @@ fputcsv($output, [
     'Platform Fee',
     'Owner Payout',
     'Escrow Status',
+    'On Hold',
+    'Hold Reason',
     'Booking Status',
     'Days in Escrow',
     'Payment Method',
@@ -137,6 +146,10 @@ while ($row = mysqli_fetch_assoc($result)) {
     $bookingId = '#BK-' . str_pad($row['booking_id'], 4, '0', STR_PAD_LEFT);
     $vehicleName = $row['brand'] . ' ' . $row['model'] . ' ' . $row['vehicle_year'];
     
+    // Determine actual escrow status
+    $isOnHold = !empty($row['escrow_hold_reason']);
+    $escrowStatusDisplay = $isOnHold ? 'On Hold' : ucfirst(str_replace('_', ' ', $row['escrow_status']));
+    
     fputcsv($output, [
         $bookingId,
         $row['renter_name'],
@@ -148,7 +161,9 @@ while ($row = mysqli_fetch_assoc($result)) {
         number_format($row['total_amount'], 2),
         number_format($row['platform_fee'], 2),
         number_format($row['owner_payout'], 2),
-        ucfirst(str_replace('_', ' ', $row['escrow_status'])),
+        $escrowStatusDisplay,
+        $isOnHold ? 'Yes' : 'No',
+        $row['escrow_hold_reason'] ?? 'N/A',
         ucfirst($row['booking_status']),
         $row['days_in_escrow'],
         strtoupper($row['payment_method'] ?? 'N/A'),

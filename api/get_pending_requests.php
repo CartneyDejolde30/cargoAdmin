@@ -10,7 +10,7 @@ if ($owner_id <= 0) {
     exit;
 }
 
-$baseURL = "http://192.168.1.11/carGOAdmin/uploads/";
+$baseURL = "http://10.77.127.141/carGOAdmin/uploads/";
 
 // SQL query
 $sql = "SELECT 
