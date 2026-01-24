@@ -294,12 +294,18 @@ function getBookingsStats($conn) {
  * @return array Top performing cars with booking counts and revenue
  */
 function getTopPerformingCars($conn, $limit = 5) {
-    $tableExists = $conn->query("SHOW TABLES LIKE 'bookings'");
-    
-    if (!$tableExists || $tableExists->num_rows == 0) {
+    // Check required tables
+    $bookingsExists = $conn->query("SHOW TABLES LIKE 'bookings'");
+    $reviewsExists  = $conn->query("SHOW TABLES LIKE 'reviews'");
+
+    if (!$bookingsExists || $bookingsExists->num_rows == 0) {
         return [];
     }
-    
+
+    if (!$reviewsExists || $reviewsExists->num_rows == 0) {
+        return []; // No reviews = no top-rated cars
+    }
+
     $query = "
         SELECT 
             c.id,
@@ -307,35 +313,54 @@ function getTopPerformingCars($conn, $limit = 5) {
             c.model,
             c.plate_number,
             c.image,
-            u.fullname as owner_name,
-            COUNT(b.id) as total_bookings,
-            COALESCE(SUM(b.total_amount), 0) as total_revenue,
-            AVG(CASE WHEN b.rating IS NOT NULL THEN b.rating ELSE 0 END) as avg_rating
+            u.fullname AS owner_name,
+
+            COUNT(DISTINCT b.id) AS total_bookings,
+            COALESCE(SUM(b.total_amount), 0) AS total_revenue,
+
+            ROUND(AVG(r.rating), 1) AS avg_rating,
+            COUNT(r.id) AS total_reviews
+
         FROM cars c
-        LEFT JOIN bookings b ON b.car_id = c.id AND b.status = 'completed'
-        LEFT JOIN users u ON u.id = c.owner_id
+
+        LEFT JOIN bookings b 
+            ON b.car_id = c.id 
+            AND b.status = 'completed'
+
+        INNER JOIN reviews r 
+            ON r.car_id = c.id   -- INNER JOIN ensures only rated cars show
+
+        LEFT JOIN users u 
+            ON u.id = c.owner_id
+
         WHERE c.status = 'approved'
+
         GROUP BY c.id
-        ORDER BY total_bookings DESC, total_revenue DESC
+
+        HAVING total_reviews > 0
+
+        ORDER BY avg_rating DESC, total_reviews DESC
+
         LIMIT ?
     ";
-    
+
     $stmt = $conn->prepare($query);
     if ($stmt === false) {
         return [];
     }
-    
+
     $stmt->bind_param("i", $limit);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     $topCars = [];
     while ($row = $result->fetch_assoc()) {
         $topCars[] = $row;
     }
-    
+
     return $topCars;
 }
+
 
 /**
  * Get revenue by time period

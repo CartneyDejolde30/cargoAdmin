@@ -43,17 +43,17 @@ function detectType($title) {
 
 function iconForType($type) {
     return match($type) {
-        "booking_approved"      => "✅",
-        "booking_declined"      => "❌",
-        "car_returned"          => "🚗",
-        "new_message"           => "💬",
-        "payment_success"       => "💳",
-        "payment_failed"        => "⚠️",
-        "refund_processed"      => "🔄",
-        "system_announcement"   => "📣",
-        "verification_pending"  => "🔔",
-        "booking_reminder"      => "🕒",
-        default                 => "ℹ️"
+      "booking_approved"      => "✓",   
+    "booking_declined"      => "✕",   
+    "car_returned"          => "⚐",   
+    "new_message"           => "✉",  
+    "payment_success"       => "✓",   
+    "payment_failed"        => "!",  
+    "refund_processed"      => "↻",   
+    "system_announcement"   => "⚑",  
+    "verification_pending"  => "⏱",  
+    "booking_reminder"      => "⏰",  
+    default                 => "•"   
     };
 }
 

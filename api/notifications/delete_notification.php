@@ -1,33 +1,37 @@
 <?php
-session_start();
-header('Content-Type: application/json');
-require_once '../../include/db.php';
+header("Content-Type: application/json");
+require_once __DIR__ . "/../../include/db.php";
 
-// Check if admin is logged in
-if (!isset($_SESSION['admin_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+
+if (!isset($_POST['notification_id']) || !isset($_POST['user_id'])) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Missing notification_id or user_id"
+    ]);
     exit;
 }
 
-$notification_id = $_POST['notification_id'] ?? null;
+$notification_id = intval($_POST['notification_id']);
+$user_id = intval($_POST['user_id']);
 
-if (!$notification_id) {
-    echo json_encode(['success' => false, 'message' => 'Missing notification_id']);
-    exit;
-}
+$stmt = $conn->prepare("
+    DELETE FROM notifications
+    WHERE id = ? AND user_id = ?
+");
 
-$stmt = $conn->prepare("DELETE FROM admin_notifications WHERE id = ?");
-$stmt->bind_param('i', $notification_id);
+$stmt->bind_param("ii", $notification_id, $user_id);
 
 if ($stmt->execute()) {
     echo json_encode([
-        'success' => true,
-        'message' => 'Notification deleted'
+        "success" => true,
+        "message" => "Notification deleted"
     ]);
 } else {
-    echo json_encode(['success' => false, 'message' => 'Failed to delete notification']);
+    echo json_encode([
+        "success" => false,
+        "message" => "Failed to delete notification"
+    ]);
 }
 
 $stmt->close();
 $conn->close();
-?>
