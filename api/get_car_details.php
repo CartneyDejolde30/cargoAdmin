@@ -17,7 +17,7 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 }
 
 $carId = intval($_GET['id']);
-$baseUrl = "http://10.139.150.2/carGOAdmin/";
+$baseUrl = "http://192.168.1.11/carGOAdmin/";
 
 /* --------------------------------------------
    Fetch Car + Owner Information

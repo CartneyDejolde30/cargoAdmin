@@ -56,7 +56,7 @@ while ($row = $result->fetch_assoc()) {
 
         'carName'     => trim($row['brand'].' '.$row['model']),
         'carImage'    => $row['carImage']
-            ? 'http://10.139.150.2/carGOAdmin/'.$row['carImage']
+            ? 'http://192.168.1.11/carGOAdmin/'.$row['carImage']
             : '',
 
         'location'    => $row['location'] ?? 'Location not set',

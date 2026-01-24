@@ -133,7 +133,7 @@ function generateReceipt($bookingId, $conn = null) {
             $filename = "receipt_{$bookingId}_" . time() . ".pdf";
             $receiptPath = "receipts/" . $filename;
             $filepath = $receiptDir . "/" . $filename;
-            $receiptUrl = "http://10.139.150.2/carGOAdmin/" . $receiptPath;
+            $receiptUrl = "http://192.168.1.11/carGOAdmin/" . $receiptPath;
 
             $pdf->Output($filepath, 'F');
 
