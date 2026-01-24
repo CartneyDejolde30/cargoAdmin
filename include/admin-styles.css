@@ -2544,3 +2544,17 @@ html {
         justify-content: center;
       }
     }
+
+    .sidebar-link {
+    position: relative;
+}
+
+.sidebar-link .badge {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    padding: 3px 6px;
+    min-width: 20px;
+}

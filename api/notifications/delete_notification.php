@@ -3,7 +3,6 @@ session_start();
 header('Content-Type: application/json');
 require_once '../../include/db.php';
 
-// Check if admin is logged in
 if (!isset($_SESSION['admin_id'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
