@@ -3,17 +3,14 @@ session_start();
 header('Content-Type: application/json');
 require_once '../../include/db.php';
 
-// Check if admin is logged in
 if (!isset($_SESSION['admin_id'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
 }
 
-$admin_id = $_SESSION['admin_id'];
-$status = $_GET['status'] ?? 'unread'; // 'all', 'unread', 'read'
+$status = $_GET['status'] ?? 'unread';
 $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
 
-// Build WHERE clause
 $where = "WHERE 1=1";
 if ($status === 'unread') {
     $where .= " AND read_status = 'unread'";
@@ -21,7 +18,6 @@ if ($status === 'unread') {
     $where .= " AND read_status = 'read'";
 }
 
-// Get notifications
 $query = "
     SELECT 
         id,
@@ -53,7 +49,6 @@ $result = $stmt->get_result();
 
 $notifications = [];
 while ($row = $result->fetch_assoc()) {
-    // Calculate time ago
     $time = strtotime($row['created_at']);
     $diff = time() - $time;
     
@@ -74,7 +69,6 @@ while ($row = $result->fetch_assoc()) {
     $notifications[] = $row;
 }
 
-// Get unread count
 $countQuery = "SELECT COUNT(*) as count FROM admin_notifications WHERE read_status = 'unread'";
 $countResult = $conn->query($countQuery);
 $unreadCount = $countResult->fetch_assoc()['count'];
