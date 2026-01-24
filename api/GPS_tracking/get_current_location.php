@@ -6,7 +6,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
-require_once 'db_connection.php';
+require_once '../../include/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $booking_id = isset($_GET['booking_id']) ? intval($_GET['booking_id']) : 0;
