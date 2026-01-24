@@ -1,82 +1,109 @@
 <?php
-// ============================================
-// FILE 3: api/bookings/rejected_bookings.php
-// ============================================
-?>
-<?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
+header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET");
 
-require_once '../include/db.php';
+require_once __DIR__ . "/../../include/db.php";
 
+$response = [
+    "success" => false,
+    "bookings" => [],
+    "count" => 0,
+    "message" => ""
+];
+
+// Validate request
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    echo json_encode(['success' => false, 'message' => 'Invalid request method']);
+    $response["message"] = "Invalid request method";
+    echo json_encode($response);
     exit;
 }
 
-$owner_id = $_GET['owner_id'] ?? null;
-
-if (!$owner_id) {
-    echo json_encode(['success' => false, 'message' => 'Owner ID is required']);
+if (!isset($_GET['owner_id'])) {
+    $response["message"] = "Owner ID is required";
+    echo json_encode($response);
     exit;
 }
 
-$query = "SELECT 
-            b.id as booking_id,
-            b.total_amount,
-            b.pickup_date,
-            b.return_date,
-            b.status,
-            b.rejection_reason,
-            b.rejected_at,
-            u.full_name as renter_name,
-            u.contact_number as renter_contact,
-            u.email as renter_email,
-            c.brand,
-            c.model,
-            c.images as car_image,
-            CONCAT(c.brand, ' ', c.model) as car_full_name
-          FROM bookings b
-          INNER JOIN users u ON b.user_id = u.id
-          INNER JOIN cars c ON b.car_id = c.id
-          WHERE c.owner_id = ? 
-          AND b.status = 'rejected'
-          ORDER BY b.rejected_at DESC";
+$owner_id = intval($_GET['owner_id']);
 
-$stmt = $conn->prepare($query);
-$stmt->bind_param("s", $owner_id);
+// SQL Query (IMPORTANT: filter by c.owner_id, not b.owner_id)
+$sql = "
+SELECT 
+    b.id AS booking_id,
+    b.total_amount,
+    b.pickup_date,
+    b.return_date,
+    b.status,
+    b.rejection_reason,
+    b.rejected_at,
+    u.fullname AS renter_name,
+    u.phone AS renter_contact,
+    c.brand,
+    c.model,
+    c.image AS car_image,
+    CONCAT(c.brand, ' ', c.model) AS car_full_name
+FROM bookings b
+INNER JOIN users u ON b.user_id = u.id
+INNER JOIN cars c ON b.car_id = c.id
+WHERE c.owner_id = ?
+AND b.status = 'rejected'
+ORDER BY b.rejected_at DESC
+";
+
+// Prepare
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $owner_id);
 $stmt->execute();
-$result = $stmt->get_result();
+
+// Bind results
+$stmt->bind_result(
+    $booking_id,
+    $total_amount,
+    $pickup_date,
+    $return_date,
+    $status,
+    $rejection_reason,
+    $rejected_at,
+    $renter_name,
+    $renter_contact,
+    $brand,
+    $model,
+    $car_image,
+    $car_full_name
+);
 
 $bookings = [];
-while ($row = $result->fetch_assoc()) {
-    // Parse car images
-    $images = json_decode($row['car_image'], true);
-    $carImage = !empty($images) && isset($images[0]) ? $images[0] : 'default_car.png';
+
+// Fetch rows
+while ($stmt->fetch()) {
+    // DB stores path like "uploads/car_xxx.jpg"
+    $imagePath = !empty($car_image)
+        ? $car_image
+        : "uploads/default_car.png";
 
     $bookings[] = [
-        'booking_id' => $row['booking_id'],
-        'total_amount' => $row['total_amount'],
-        'pickup_date' => $row['pickup_date'],
-        'return_date' => $row['return_date'],
-        'status' => $row['status'],
-        'rejection_reason' => $row['rejection_reason'],
-        'rejected_at' => $row['rejected_at'],
-        'renter_name' => $row['renter_name'],
-        'renter_contact' => $row['renter_contact'],
-        'renter_email' => $row['renter_email'],
-        'car_image' => $carImage,
-        'car_full_name' => $row['car_full_name']
+        "booking_id" => $booking_id,
+        "total_amount" => $total_amount,
+        "pickup_date" => $pickup_date,
+        "return_date" => $return_date,
+        "status" => $status,
+        "rejection_reason" => $rejection_reason,
+        "rejected_at" => $rejected_at,
+        "renter_name" => $renter_name,
+        "renter_contact" => $renter_contact,
+        "car_image" => $imagePath,
+        "car_full_name" => $car_full_name
     ];
 }
 
-echo json_encode([
-    'success' => true,
-    'bookings' => $bookings,
-    'count' => count($bookings)
-]);
+// Response
+$response["success"] = true;
+$response["bookings"] = $bookings;
+$response["count"] = count($bookings);
+
+echo json_encode($response);
 
 $stmt->close();
 $conn->close();
-?>
+exit;
