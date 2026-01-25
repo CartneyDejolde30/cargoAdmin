@@ -133,7 +133,7 @@ while ($row = mysqli_fetch_assoc($result)) {
     // Build car image URL
     $car_image = $row['car_image'] ?? '';
     if ($car_image && strpos($car_image, 'http') !== 0) {
-        $car_image = 'http://10.77.127.141/carGOAdmin/' . $car_image;
+        $car_image = 'http://10.244.29.49/carGOAdmin/' . $car_image;
     }
     
     $refunds[] = [
