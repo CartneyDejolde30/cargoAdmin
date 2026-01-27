@@ -30,4 +30,3 @@ try {
 } catch (PDOException $e) {
     die("PDO Error: " . $e->getMessage());
 }
-?>

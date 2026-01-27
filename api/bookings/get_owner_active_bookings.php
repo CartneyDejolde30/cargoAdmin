@@ -1,11 +1,17 @@
 <?php
 // ========================================
-// api/bookings/get_owner_active_bookings.php
+// OPTION 1: Show ALL approved bookings (active + upcoming)
+// Replace api/bookings/get_owner_active_bookings.php
 // ========================================
-header('Content-Type: application/json');
+error_reporting(0);
+ini_set('display_errors', 0);
+
+if (ob_get_level()) ob_end_clean();
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
-require_once '../../include/db.php'; // FIXED: Go up TWO levels to reach carGOAdmin/include/db.php
+require_once '../../include/db.php';
 
 $owner_id = $_GET['owner_id'] ?? null;
 
@@ -14,7 +20,7 @@ if (!$owner_id) {
     exit;
 }
 
-// Active = approved bookings that have started (pickup date <= today AND return date >= today)
+// Show ALL approved bookings (both in-progress AND upcoming)
 $sql = "
 SELECT 
     b.id AS booking_id,
@@ -28,12 +34,12 @@ SELECT
     b.created_at,
     
     -- Car Details
-    c.brand,
-    c.model,
-    c.car_year,
-    c.image AS car_image,
-    c.location,
-    c.price_per_day,
+    COALESCE(c.brand, m.brand) AS brand,
+    COALESCE(c.model, m.model) AS model,
+    COALESCE(c.car_year, m.motorcycle_year) AS car_year,
+    COALESCE(c.image, m.image) AS car_image,
+    COALESCE(c.location, m.location) AS location,
+    COALESCE(c.price_per_day, m.price_per_day) AS price_per_day,
     
     -- Renter Details
     u.fullname AS renter_name,
@@ -42,16 +48,28 @@ SELECT
     
     -- Calculate days remaining
     DATEDIFF(b.return_date, CURDATE()) AS days_remaining,
-    DATEDIFF(CURDATE(), b.pickup_date) AS days_elapsed
+    DATEDIFF(CURDATE(), b.pickup_date) AS days_elapsed,
+    
+    -- Determine if currently active or upcoming
+    CASE 
+        WHEN b.pickup_date <= CURDATE() AND b.return_date >= CURDATE() THEN 'in_progress'
+        WHEN b.pickup_date > CURDATE() THEN 'upcoming'
+        ELSE 'past'
+    END AS trip_status
     
 FROM bookings b
-LEFT JOIN cars c ON b.car_id = c.id
+LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
+LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
 LEFT JOIN users u ON b.user_id = u.id
 WHERE b.owner_id = ?
 AND b.status = 'approved'
-AND b.pickup_date <= CURDATE()
 AND b.return_date >= CURDATE()
-ORDER BY b.return_date ASC
+ORDER BY 
+    CASE 
+        WHEN b.pickup_date <= CURDATE() THEN 0
+        ELSE 1
+    END,
+    b.pickup_date ASC
 ";
 
 $stmt = $conn->prepare($sql);
@@ -63,13 +81,11 @@ $bookings = [];
 while ($row = $result->fetch_assoc()) {
     $carName = trim(($row['brand'] ?? '') . ' ' . ($row['model'] ?? ''));
     
-    // Format image URL
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
         $carImage = 'http://10.244.29.49/carGOAdmin/' . $carImage;
     }
     
-    // Calculate trip progress
     $totalDays = max(1, (strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400);
     $daysElapsed = max(0, intval($row['days_elapsed']));
     $progress = min(100, ($daysElapsed / $totalDays) * 100);
@@ -93,6 +109,7 @@ while ($row = $result->fetch_assoc()) {
         'days_remaining' => max(0, intval($row['days_remaining'])),
         'days_elapsed' => $daysElapsed,
         'trip_progress' => round($progress, 1),
+        'trip_status' => $row['trip_status'],
         'status' => 'active'
     ];
 }
@@ -104,4 +121,3 @@ echo json_encode([
 
 $stmt->close();
 $conn->close();
-?>

@@ -1,9 +1,10 @@
 <?php
-// ========================================
-// 1. UPDATE RENTER LOCATION (Renter app sends GPS data)
-// File: update_location.php
-// ========================================
-header('Content-Type: application/json');
+error_reporting(0);
+ini_set('display_errors', 0);
+
+if (ob_get_level()) ob_end_clean();
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -28,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
-        // Insert location update
         $stmt = $pdo->prepare("
             INSERT INTO gps_locations 
             (booking_id, latitude, longitude, speed, accuracy, timestamp) 
@@ -66,4 +66,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'message' => 'Invalid request method'
     ]);
 }
-?>

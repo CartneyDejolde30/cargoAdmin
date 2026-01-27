@@ -1,9 +1,10 @@
 <?php
-// ========================================
-// 2. GET CURRENT LOCATION (Owner app fetches latest GPS)
-// File: get_current_location.php
-// ========================================
-header('Content-Type: application/json');
+error_reporting(0);
+ini_set('display_errors', 0);
+
+if (ob_get_level()) ob_end_clean();
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 require_once '../../include/db.php';
@@ -20,14 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     try {
-        // Get the most recent location for this booking
         $stmt = $pdo->prepare("
-            SELECT 
-                latitude,
-                longitude,
-                speed,
-                accuracy,
-                timestamp
+            SELECT latitude, longitude, speed, accuracy, timestamp
             FROM gps_locations
             WHERE booking_id = ?
             ORDER BY timestamp DESC
@@ -60,6 +55,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'message' => 'Invalid request method'
     ]);
 }
-?>
-
-<?php

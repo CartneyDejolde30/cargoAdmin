@@ -1,10 +1,10 @@
 <?php
-// ========================================
-// FIXED VERSION: get_location_history.php
-// Replace your existing file with this
-// Location: carGOAdmin/api/GPS_tracking/get_location_history.php
-// ========================================
-header('Content-Type: application/json');
+error_reporting(0);
+ini_set('display_errors', 0);
+
+if (ob_get_level()) ob_end_clean();
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 require_once '../../include/db.php';
@@ -13,7 +13,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $booking_id = isset($_GET['booking_id']) ? intval($_GET['booking_id']) : 0;
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 50;
 
-    // Validate booking ID
     if ($booking_id <= 0) {
         echo json_encode([
             'success' => false,
@@ -24,27 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     try {
-        // FIXED: Removed 24-hour restriction to get ALL data
-        // The original version only showed data from the last 24 hours
-        $sql = "
-            SELECT 
-                latitude,
-                longitude,
-                speed,
-                accuracy,
-                timestamp
-            FROM gps_locations
-            WHERE booking_id = ?
-            ORDER BY timestamp ASC
-            LIMIT $limit
-        ";
+        $sql = "SELECT latitude, longitude, speed, accuracy, timestamp 
+                FROM gps_locations 
+                WHERE booking_id = ? 
+                ORDER BY timestamp ASC 
+                LIMIT ?";
         
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$booking_id]);
+        $stmt->bindValue(1, $booking_id, PDO::PARAM_INT);
+        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+        $stmt->execute();
         
         $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Return response
         echo json_encode([
             'success' => true,
             'history' => $history,
@@ -66,4 +57,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'history' => []
     ]);
 }
-?>

@@ -1,25 +1,14 @@
 <?php
-// ========================================
-// FIXED: get_location_history_debug.php
-// NO WHITESPACE before <?php tag!
-// ========================================
-
-// Turn off all error display and warnings
 error_reporting(0);
 ini_set('display_errors', 0);
 
-// Clear any output buffer
-if (ob_get_level()) {
-    ob_end_clean();
-}
+if (ob_get_level()) ob_end_clean();
 
-// Set headers FIRST - before any output
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
@@ -38,12 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'message' => 'Invalid booking ID',
             'history' => [],
             'count' => 0
-        ], JSON_PRETTY_PRINT);
+        ]);
         exit;
     }
 
     try {
-        // Build time filter
         $time_filter = '';
         $time_desc = 'All Time';
         
@@ -60,25 +48,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 $time_filter = 'AND timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
                 $time_desc = 'Last 30 Days';
                 break;
-            default:
-                $time_filter = '';
-                $time_desc = 'All Time';
         }
 
-        // Get location history
-        $sql = "
-            SELECT 
-                latitude,
-                longitude,
-                speed,
-                accuracy,
-                timestamp
-            FROM gps_locations
-            WHERE booking_id = ?
-            $time_filter
-            ORDER BY timestamp ASC
-            LIMIT ?
-        ";
+        $sql = "SELECT latitude, longitude, speed, accuracy, timestamp 
+                FROM gps_locations 
+                WHERE booking_id = ? $time_filter 
+                ORDER BY timestamp ASC 
+                LIMIT ?";
         
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(1, $booking_id, PDO::PARAM_INT);
@@ -87,19 +63,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         
         $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Get total count without limit
-        $count_sql = "
-            SELECT COUNT(*) as total
-            FROM gps_locations
-            WHERE booking_id = ?
-            $time_filter
-        ";
-        
+        $count_sql = "SELECT COUNT(*) as total FROM gps_locations WHERE booking_id = ? $time_filter";
         $count_stmt = $pdo->prepare($count_sql);
         $count_stmt->execute([$booking_id]);
         $total_count = $count_stmt->fetch()['total'];
 
-        // Prepare response
         $response = [
             'success' => true,
             'history' => $history,
@@ -118,8 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             ]
         ];
 
-        // Output clean JSON
-        echo json_encode($response, JSON_PRETTY_PRINT);
+        echo json_encode($response);
         
     } catch (PDOException $e) {
         echo json_encode([
@@ -127,12 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'message' => 'Database error',
             'error' => $e->getMessage(),
             'history' => [],
-            'count' => 0,
-            'debug' => [
-                'booking_id' => $booking_id,
-                'time_range' => $time_range
-            ]
-        ], JSON_PRETTY_PRINT);
+            'count' => 0
+        ]);
     }
 } else {
     echo json_encode([
@@ -140,7 +103,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'message' => 'Invalid request method (use GET)',
         'history' => [],
         'count' => 0
-    ], JSON_PRETTY_PRINT);
+    ]);
 }
-
-// NO CLOSING ?> TAG to prevent whitespace after
