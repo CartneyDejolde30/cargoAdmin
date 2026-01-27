@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================================
- * ESCROW MANAGEMENT - CarGo Admin
+ * ESCROW MANAGEMENT - CarGo Admin (FIXED)
  * Manage funds held in escrow between payment and payout
  * ============================================================================
  */
@@ -16,45 +16,81 @@ if (!isset($_SESSION['admin_id'])) {
 }
 
 /* =========================================================
-   ESCROW STATISTICS
+   FIRST: CHECK IF escrow_logs TABLE EXISTS
+   ========================================================= */
+$checkLogsTable = mysqli_query($conn, "SHOW TABLES LIKE 'escrow_logs'");
+$logsTableExists = mysqli_num_rows($checkLogsTable) > 0;
+
+/* =========================================================
+   ESCROW STATISTICS WITH ERROR HANDLING
    ========================================================= */
 
 // Total funds currently held in escrow
-$fundsInEscrow = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COALESCE(SUM(owner_payout), 0) AS total 
-     FROM bookings 
-     WHERE escrow_status = 'held'"
-))['total'];
+$fundsQuery = "SELECT COALESCE(SUM(owner_payout), 0) AS total 
+               FROM bookings 
+               WHERE escrow_status = 'held' AND owner_payout > 0";
+$fundsResult = mysqli_query($conn, $fundsQuery);
+if (!$fundsResult) {
+    error_log("Funds query error: " . mysqli_error($conn));
+    $fundsInEscrow = 0;
+} else {
+    $fundsInEscrow = mysqli_fetch_assoc($fundsResult)['total'];
+}
 
 // Pending releases (completed bookings ready for release)
-$pendingReleases = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COUNT(*) AS c FROM bookings 
-     WHERE booking_status = 'completed' 
-     AND escrow_status = 'held'"
-))['c'];
+$pendingQuery = "SELECT COUNT(*) AS c FROM bookings 
+                 WHERE status = 'completed' 
+                 AND escrow_status = 'held'";
+$pendingResult = mysqli_query($conn, $pendingQuery);
+if (!$pendingResult) {
+    error_log("Pending releases query error: " . mysqli_error($conn));
+    $pendingReleases = 0;
+} else {
+    $pendingReleases = mysqli_fetch_assoc($pendingResult)['c'];
+}
 
 // Released this month
-$releasedThisMonth = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COALESCE(SUM(owner_payout), 0) AS total 
-     FROM bookings 
-     WHERE escrow_status = 'released_to_owner'
-     AND MONTH(escrow_released_at) = MONTH(NOW())
-     AND YEAR(escrow_released_at) = YEAR(NOW())"
-))['total'];
+$releasedQuery = "SELECT COALESCE(SUM(owner_payout), 0) AS total 
+                  FROM bookings 
+                  WHERE escrow_status IN ('released_to_owner', 'released')
+                  AND escrow_released_at IS NOT NULL
+                  AND MONTH(escrow_released_at) = MONTH(NOW())
+                  AND YEAR(escrow_released_at) = YEAR(NOW())";
+$releasedResult = mysqli_query($conn, $releasedQuery);
+if (!$releasedResult) {
+    error_log("Released query error: " . mysqli_error($conn));
+    $releasedThisMonth = 0;
+} else {
+    $releasedThisMonth = mysqli_fetch_assoc($releasedResult)['total'];
+}
 
-// Disputed/On Hold
-$disputedCount = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COUNT(*) AS c FROM bookings 
-     WHERE escrow_status = 'on_hold'"
-))['c'];
+// Disputed/On Hold - Since 'on_hold' doesn't exist in enum, check escrow_hold_reason instead
+$disputedQuery = "SELECT COUNT(*) AS c FROM bookings 
+                  WHERE escrow_hold_reason IS NOT NULL 
+                  AND escrow_hold_reason != ''
+                  AND escrow_status = 'held'";
+$disputedResult = mysqli_query($conn, $disputedQuery);
+if (!$disputedResult) {
+    error_log("Disputed query error: " . mysqli_error($conn));
+    $disputedCount = 0;
+} else {
+    $disputedCount = mysqli_fetch_assoc($disputedResult)['c'];
+}
 
 // Average escrow duration (days between payment verification and release)
-$avgDuration = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT AVG(DATEDIFF(escrow_released_at, created_at)) AS avg_days
-     FROM bookings
-     WHERE escrow_status = 'released_to_owner'
-     AND escrow_released_at IS NOT NULL"
-))['avg_days'] ?? 0;
+$avgQuery = "SELECT AVG(DATEDIFF(COALESCE(escrow_released_at, NOW()), 
+                                  COALESCE(payment_verified_at, created_at))) AS avg_days
+             FROM bookings
+             WHERE escrow_status IN ('released_to_owner', 'released')
+             AND escrow_released_at IS NOT NULL";
+$avgResult = mysqli_query($conn, $avgQuery);
+if (!$avgResult) {
+    error_log("Average duration query error: " . mysqli_error($conn));
+    $avgDuration = 0;
+} else {
+    $avgRow = mysqli_fetch_assoc($avgResult);
+    $avgDuration = $avgRow['avg_days'] ?? 0;
+}
 
 /* =========================================================
    FILTERS & PAGINATION
@@ -67,29 +103,30 @@ $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : 'held';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
 /* =========================================================
-   BUILD WHERE CLAUSE
+   BUILD WHERE CLAUSE - FIXED FOR ACTUAL ENUM VALUES
    ========================================================= */
 $where = " WHERE 1 ";
 
-// Status filter
+// Status filter - using actual enum values from database
 switch($statusFilter) {
     case 'held':
-        $where .= " AND b.escrow_status = 'held' ";
+        $where .= " AND b.escrow_status = 'held' AND (b.escrow_hold_reason IS NULL OR b.escrow_hold_reason = '') ";
         break;
     case 'released':
-        $where .= " AND b.escrow_status = 'released_to_owner' ";
+        $where .= " AND b.escrow_status IN ('released_to_owner', 'released') ";
         break;
     case 'on_hold':
-        $where .= " AND b.escrow_status = 'on_hold' ";
+        // Since 'on_hold' is not in enum, we check for hold reason
+        $where .= " AND b.escrow_status = 'held' AND b.escrow_hold_reason IS NOT NULL AND b.escrow_hold_reason != '' ";
         break;
     case 'refunded':
         $where .= " AND b.escrow_status = 'refunded' ";
         break;
     case 'pending_release':
-        $where .= " AND b.escrow_status = 'held' AND b.booking_status = 'completed' ";
+        $where .= " AND b.escrow_status = 'held' AND b.status = 'completed' ";
         break;
     case 'all':
-        $where .= " AND b.escrow_status IN ('held', 'released_to_owner', 'on_hold', 'refunded') ";
+        $where .= " AND b.escrow_status IN ('held', 'released_to_owner', 'released', 'refunded', 'pending') ";
         break;
 }
 
@@ -116,18 +153,24 @@ $sql = "
         b.total_amount,
         b.platform_fee,
         b.owner_payout,
-        b.booking_status,
+        b.status AS booking_status,
         b.escrow_status,
         b.pickup_date,
         b.return_date,
         b.created_at,
         b.escrow_released_at,
+        b.escrow_held_at,
+        b.payment_verified_at,
         b.vehicle_type,
+        b.escrow_hold_reason,
+        b.escrow_hold_details,
         
         -- Calculate days in escrow
         CASE 
-            WHEN b.escrow_status = 'held' THEN DATEDIFF(NOW(), b.created_at)
-            WHEN b.escrow_status = 'released_to_owner' THEN DATEDIFF(b.escrow_released_at, b.created_at)
+            WHEN b.escrow_status = 'held' THEN 
+                DATEDIFF(NOW(), COALESCE(b.escrow_held_at, b.payment_verified_at, b.created_at))
+            WHEN b.escrow_status IN ('released_to_owner', 'released') THEN 
+                DATEDIFF(b.escrow_released_at, COALESCE(b.escrow_held_at, b.payment_verified_at, b.created_at))
             ELSE 0
         END AS days_in_escrow,
         
@@ -167,9 +210,13 @@ $sql = "
     $where
     ORDER BY 
         CASE 
-            WHEN b.escrow_status = 'on_hold' THEN 1
-            WHEN b.escrow_status = 'held' AND b.booking_status = 'completed' THEN 2
+            -- Priority 1: Items on hold (have hold reason)
+            WHEN b.escrow_hold_reason IS NOT NULL AND b.escrow_hold_reason != '' THEN 1
+            -- Priority 2: Completed bookings ready to release
+            WHEN b.escrow_status = 'held' AND b.status = 'completed' THEN 2
+            -- Priority 3: Other held escrow
             WHEN b.escrow_status = 'held' THEN 3
+            -- Everything else
             ELSE 4
         END,
         b.created_at DESC
@@ -179,7 +226,7 @@ $sql = "
 $result = mysqli_query($conn, $sql);
 
 if (!$result) {
-    die("SQL ERROR: " . mysqli_error($conn));
+    die("Main query SQL ERROR: " . mysqli_error($conn) . "<br><br>Query: " . $sql);
 }
 
 /* =========================================================
@@ -193,6 +240,9 @@ LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
 $where";
 
 $countRes = mysqli_query($conn, $countSql);
+if (!$countRes) {
+    die("Count query error: " . mysqli_error($conn));
+}
 $totalRows = mysqli_fetch_assoc($countRes)['total'];
 $totalPages = max(1, ceil($totalRows / $limit));
 
@@ -462,9 +512,13 @@ $totalPages = max(1, ceil($totalRows / $limit));
               $vehicleName = htmlspecialchars($row['brand'] . ' ' . $row['model'] . ' ' . $row['vehicle_year']);
               $daysInEscrow = intval($row['days_in_escrow']);
               
+              // Determine if this is "on hold" (has hold reason)
+              $isOnHold = !empty($row['escrow_hold_reason']);
+              $actualEscrowStatus = $isOnHold ? 'on_hold' : $row['escrow_status'];
+              
               // Determine urgency class
               $urgencyClass = '';
-              if ($row['escrow_status'] === 'held' && $row['booking_status'] === 'completed') {
+              if ($actualEscrowStatus === 'held' && $row['booking_status'] === 'completed') {
                 if ($daysInEscrow > 7) {
                   $urgencyClass = 'urgency-high';
                 } elseif ($daysInEscrow > 3) {
@@ -472,18 +526,20 @@ $totalPages = max(1, ceil($totalRows / $limit));
                 }
               }
               
-              // Status badge mapping
+              // Status badge mapping - FIXED
               $escrowStatusMap = [
                 'held' => 'held',
                 'released_to_owner' => 'released',
+                'released' => 'released',
                 'on_hold' => 'on-hold',
-                'refunded' => 'refunded'
+                'refunded' => 'refunded',
+                'pending' => 'held'
               ];
-              $escrowBadgeClass = $escrowStatusMap[$row['escrow_status']] ?? 'held';
+              $escrowBadgeClass = $escrowStatusMap[$actualEscrowStatus] ?? 'held';
               
               $bookingStatusClass = [
                 'completed' => 'verified',
-                'active' => 'pending',
+                'ongoing' => 'pending',
                 'approved' => 'pending',
                 'cancelled' => 'rejected'
               ][$row['booking_status']] ?? 'pending';
@@ -537,7 +593,7 @@ $totalPages = max(1, ceil($totalRows / $limit));
                 <span class="status-badge <?= $bookingStatusClass ?>">
                   <?= ucfirst($row['booking_status']) ?>
                 </span>
-                <?php if ($row['booking_status'] === 'completed' && $row['escrow_status'] === 'held'): ?>
+                <?php if ($row['booking_status'] === 'completed' && $actualEscrowStatus === 'held'): ?>
                 <br><small style="color: #28a745;">✓ Ready for release</small>
                 <?php endif; ?>
               </td>
@@ -548,13 +604,18 @@ $totalPages = max(1, ceil($totalRows / $limit));
                   $statusIcons = [
                     'held' => '🔒',
                     'released_to_owner' => '✅',
+                    'released' => '✅',
                     'on_hold' => '⚠️',
-                    'refunded' => '↩️'
+                    'refunded' => '↩️',
+                    'pending' => '⏳'
                   ];
-                  echo $statusIcons[$row['escrow_status']] ?? '';
+                  echo $statusIcons[$actualEscrowStatus] ?? '🔒';
                   ?>
-                  <?= ucfirst(str_replace('_', ' ', $row['escrow_status'])) ?>
+                  <?= ucfirst(str_replace('_', ' ', $actualEscrowStatus)) ?>
                 </span>
+                <?php if ($isOnHold): ?>
+                <br><small style="color: #dc3545;">Reason: <?= htmlspecialchars($row['escrow_hold_reason']) ?></small>
+                <?php endif; ?>
               </td>
 
               <td>
@@ -569,13 +630,13 @@ $totalPages = max(1, ceil($totalRows / $limit));
                     <i class="bi bi-eye"></i>
                   </button>
 
-                  <?php if ($row['escrow_status'] === 'held' && $row['booking_status'] === 'completed'): ?>
+                  <?php if ($actualEscrowStatus === 'held' && $row['booking_status'] === 'completed'): ?>
                   <button class="action-btn approve" onclick="releaseEscrow(<?= $row['booking_id'] ?>)" title="Release to Owner">
                     <i class="bi bi-unlock"></i>
                   </button>
                   <?php endif; ?>
 
-                  <?php if ($row['escrow_status'] === 'held'): ?>
+                  <?php if ($actualEscrowStatus === 'held' && !$isOnHold): ?>
                   <button class="action-btn edit" onclick="holdEscrow(<?= $row['booking_id'] ?>)" title="Put On Hold">
                     <i class="bi bi-pause-circle"></i>
                   </button>
@@ -584,9 +645,12 @@ $totalPages = max(1, ceil($totalRows / $limit));
                   </button>
                   <?php endif; ?>
 
-                  <?php if ($row['escrow_status'] === 'on_hold'): ?>
+                  <?php if ($isOnHold): ?>
                   <button class="action-btn approve" onclick="resumeEscrow(<?= $row['booking_id'] ?>)" title="Resume Escrow">
                     <i class="bi bi-play-circle"></i>
+                  </button>
+                  <button class="action-btn reject" onclick="refundEscrow(<?= $row['booking_id'] ?>)" title="Refund to Renter">
+                    <i class="bi bi-arrow-counterclockwise"></i>
                   </button>
                   <?php endif; ?>
                 </div>
@@ -740,14 +804,19 @@ function viewEscrowDetails(escrow) {
   const vehicleName = `${escrow.brand} ${escrow.model} ${escrow.vehicle_year}`;
   const bookingId = '#BK-' + String(escrow.booking_id).padStart(4, '0');
   
+  // Determine actual escrow status
+  const isOnHold = escrow.escrow_hold_reason && escrow.escrow_hold_reason.trim() !== '';
+  const actualEscrowStatus = isOnHold ? 'on_hold' : escrow.escrow_status;
+  
   const escrowStatusMap = {
     'held': { icon: '🔒', label: 'Held in Escrow', class: 'warning' },
     'released_to_owner': { icon: '✅', label: 'Released to Owner', class: 'success' },
+    'released': { icon: '✅', label: 'Released to Owner', class: 'success' },
     'on_hold': { icon: '⚠️', label: 'On Hold', class: 'danger' },
     'refunded': { icon: '↩️', label: 'Refunded to Renter', class: 'info' }
   };
   
-  const status = escrowStatusMap[escrow.escrow_status] || { icon: '❓', label: 'Unknown', class: 'secondary' };
+  const status = escrowStatusMap[actualEscrowStatus] || { icon: '❓', label: 'Unknown', class: 'secondary' };
   
   document.getElementById('escrowModalContent').innerHTML = `
     <div class="modal-header">
@@ -763,6 +832,7 @@ function viewEscrowDetails(escrow) {
       <div class="alert alert-${status.class}">
         <h6 style="margin: 0;">${status.icon} ${status.label}</h6>
         <small>Days in escrow: <strong>${escrow.days_in_escrow}</strong></small>
+        ${isOnHold ? `<br><small><strong>Hold Reason:</strong> ${escrow.escrow_hold_reason}</small>` : ''}
       </div>
 
       <!-- Escrow Amount Breakdown -->
@@ -835,11 +905,11 @@ function viewEscrowDetails(escrow) {
           </div>
           <div class="timeline-content">
             <div class="timeline-title">Funds Held in Escrow</div>
-            <div class="timeline-date">${new Date(escrow.created_at).toLocaleString()}</div>
+            <div class="timeline-date">${escrow.escrow_held_at ? new Date(escrow.escrow_held_at).toLocaleString() : new Date(escrow.created_at).toLocaleString()}</div>
           </div>
         </div>
 
-        ${escrow.escrow_status === 'released_to_owner' ? `
+        ${actualEscrowStatus === 'released_to_owner' || actualEscrowStatus === 'released' ? `
         <div class="timeline-item">
           <div class="timeline-icon">
             <i class="bi bi-unlock"></i>
@@ -851,7 +921,7 @@ function viewEscrowDetails(escrow) {
         </div>
         ` : ''}
 
-        ${escrow.escrow_status === 'on_hold' ? `
+        ${isOnHold ? `
         <div class="timeline-item">
           <div class="timeline-icon" style="background: #dc3545;">
             <i class="bi bi-pause-circle"></i>
@@ -859,6 +929,7 @@ function viewEscrowDetails(escrow) {
           <div class="timeline-content">
             <div class="timeline-title">Put On Hold</div>
             <div class="timeline-date">Currently under review</div>
+            ${escrow.escrow_hold_details ? `<div style="margin-top: 8px; font-size: 13px;">${escrow.escrow_hold_details}</div>` : ''}
           </div>
         </div>
         ` : ''}

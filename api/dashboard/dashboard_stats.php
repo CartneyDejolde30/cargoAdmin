@@ -60,13 +60,14 @@ try {
     
     // Active Bookings (approved and currently ongoing)
     $activeBookingsStmt = $conn->prepare("
-        SELECT COUNT(*) as total 
-        FROM bookings 
-        WHERE owner_id = ? 
-        AND status = 'approved'
-        AND pickup_date <= CURDATE()
-        AND return_date >= CURDATE()
-    ");
+    SELECT COUNT(*) as total 
+    FROM bookings 
+    WHERE owner_id = ? 
+    AND status IN ('approved', 'ongoing')
+    AND pickup_date <= CURDATE()
+    AND return_date >= CURDATE()
+");
+
     $activeBookingsStmt->bind_param("s", $owner_id);
     $activeBookingsStmt->execute();
     $activeBookings = $activeBookingsStmt->get_result()->fetch_assoc()['total'];
@@ -92,7 +93,7 @@ try {
         SELECT COALESCE(SUM(total_amount), 0) as total 
         FROM bookings 
         WHERE owner_id = ? 
-        AND status IN ('completed', 'approved')
+        AND status IN ('ongoing', 'approved')
     ");
     $totalIncomeStmt->bind_param("s", $owner_id);
     $totalIncomeStmt->execute();
@@ -103,7 +104,7 @@ try {
         SELECT COALESCE(SUM(total_amount), 0) as total 
         FROM bookings 
         WHERE owner_id = ? 
-        AND status IN ('completed', 'approved')
+        AND status IN ('ongoing', 'approved')
         AND YEAR(created_at) = YEAR(CURDATE())
         AND MONTH(created_at) = MONTH(CURDATE())
     ");
@@ -116,7 +117,7 @@ try {
         SELECT COALESCE(SUM(total_amount), 0) as total 
         FROM bookings 
         WHERE owner_id = ? 
-        AND status IN ('completed', 'approved')
+        AND status IN ('ongoing', 'approved')
         AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
     ");
     $weeklyIncomeStmt->bind_param("s", $owner_id);
@@ -128,7 +129,7 @@ try {
         SELECT COALESCE(SUM(total_amount), 0) as total 
         FROM bookings 
         WHERE owner_id = ? 
-        AND status IN ('completed', 'approved')
+        AND status IN ('ongoing', 'approved')
         AND DATE(created_at) = CURDATE()
     ");
     $todayIncomeStmt->bind_param("s", $owner_id);

@@ -116,7 +116,7 @@ try {
         // Format vehicle image
         $vehicleImage = $row['vehicle_image'];
         if (!empty($vehicleImage) && strpos($vehicleImage, 'http') !== 0) {
-            $vehicleImage = 'http://10.139.150.2/carGOAdmin/' . $vehicleImage;
+            $vehicleImage = 'http://10.77.127.2/carGOAdmin/' . $vehicleImage;
         }
         
         // Determine status and badge
