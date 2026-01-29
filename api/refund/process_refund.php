@@ -3,6 +3,7 @@
  * ============================================================================
  * PROCESS REFUND API - Admin processes refund requests
  * Actions: approve, reject, complete
+ * FIXED: Proper timestamp updates and status tracking
  * ============================================================================
  */
 
@@ -40,10 +41,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $refund_id = isset($_POST['refund_id']) ? intval($_POST['refund_id']) : 0;
-$action = isset($_POST['action']) ? $_POST['action'] : '';
-$admin_notes = isset($_POST['admin_notes']) ? mysqli_real_escape_string($conn, trim($_POST['admin_notes'])) : '';
-$rejection_reason = isset($_POST['rejection_reason']) ? mysqli_real_escape_string($conn, trim($_POST['rejection_reason'])) : '';
-$refund_reference = isset($_POST['refund_reference']) ? mysqli_real_escape_string($conn, trim($_POST['refund_reference'])) : '';
+$action = isset($_POST['action']) ? trim($_POST['action']) : '';
+$rejection_reason = isset($_POST['rejection_reason']) ? trim($_POST['rejection_reason']) : '';
+$completion_reference = isset($_POST['completion_reference']) ? trim($_POST['completion_reference']) : '';
+$refund_reference = isset($_POST['refund_reference']) ? trim($_POST['refund_reference']) : '';
+$deduction_amount = isset($_POST['deduction_amount']) ? floatval($_POST['deduction_amount']) : 0;
+$deduction_reason = isset($_POST['deduction_reason']) ? trim($_POST['deduction_reason']) : '';
 
 // ============================================================================
 // VALIDATION
@@ -78,10 +81,12 @@ $refund_query = "
         b.status AS booking_status,
         b.total_amount AS booking_amount,
         b.owner_id,
+        b.user_id AS renter_id,
         u_owner.email AS owner_email,
-        u_renter.email AS renter_email
+        u_renter.email AS renter_email,
+        u_renter.fullname AS renter_name
     FROM refunds r
-    JOIN bookings b ON r.booking_id = b.id
+    INNER JOIN bookings b ON r.booking_id = b.id
     LEFT JOIN users u_owner ON b.owner_id = u_owner.id
     LEFT JOIN users u_renter ON r.user_id = u_renter.id
     WHERE r.id = ?
@@ -111,6 +116,9 @@ $refund = $result->fetch_assoc();
 $conn->begin_transaction();
 
 try {
+    $message = '';
+    $new_status = '';
+    
     switch ($action) {
         // ========================================
         // APPROVE REFUND
@@ -120,21 +128,42 @@ try {
                 throw new Exception('Only pending refunds can be approved');
             }
 
-            // Update refund record
+            // Apply deductions if any
+            $final_deduction = max(0, $deduction_amount);
+            $deduction_reason_text = $final_deduction > 0 ? $deduction_reason : null;
+
+            // Update refund record with approved timestamp
             $update_refund = "
                 UPDATE refunds 
                 SET 
                     status = 'approved',
+                    deduction_amount = ?,
+                    deduction_reason = ?,
                     processed_by = ?,
-                    processed_at = NOW()
+                    processed_at = NOW(),
+                    approved_at = NOW()
                 WHERE id = ?
             ";
 
             $stmt = $conn->prepare($update_refund);
-            $stmt->bind_param("ii", $admin_id, $refund_id);
+            $stmt->bind_param("dsii", $final_deduction, $deduction_reason_text, $admin_id, $refund_id);
             $stmt->execute();
 
+            // Update booking refund status
+            $update_booking = "
+                UPDATE bookings 
+                SET refund_status = 'approved'
+                WHERE id = ?
+            ";
+            $stmt = $conn->prepare($update_booking);
+            $stmt->bind_param("i", $refund['booking_id']);
+            $stmt->execute();
+
+            $new_status = 'approved';
             $message = 'Refund approved successfully';
+            
+            // TODO: Send notification to renter
+            
             break;
 
         // ========================================
@@ -164,7 +193,23 @@ try {
             $stmt->bind_param("sii", $rejection_reason, $admin_id, $refund_id);
             $stmt->execute();
 
+            // Update booking refund status
+            $update_booking = "
+                UPDATE bookings 
+                SET 
+                    refund_status = 'rejected',
+                    refund_requested = 0
+                WHERE id = ?
+            ";
+            $stmt = $conn->prepare($update_booking);
+            $stmt->bind_param("i", $refund['booking_id']);
+            $stmt->execute();
+
+            $new_status = 'rejected';
             $message = 'Refund rejected';
+            
+            // TODO: Send notification to renter
+            
             break;
 
         // ========================================
@@ -172,29 +217,67 @@ try {
         // ========================================
         case 'complete':
             if (!in_array($refund['status'], ['approved', 'processing'])) {
-                throw new Exception('Only approved refunds can be completed');
+                throw new Exception('Only approved or processing refunds can be completed');
             }
 
-            if (empty($refund_reference)) {
-                throw new Exception('Refund reference number is required');
+            // Require either completion_reference or refund_reference
+            if (empty($completion_reference) && empty($refund_reference)) {
+                throw new Exception('Transaction reference number is required');
             }
 
-            // Update refund record
+            $reference = !empty($completion_reference) ? $completion_reference : $refund_reference;
+
+            // Update refund record with completed timestamp
             $update_refund = "
                 UPDATE refunds 
                 SET 
                     status = 'completed',
                     completion_reference = ?,
+                    refund_reference = ?,
                     processed_by = ?,
-                    processed_at = NOW()
+                    processed_at = NOW(),
+                    completed_at = NOW()
                 WHERE id = ?
             ";
 
             $stmt = $conn->prepare($update_refund);
-            $stmt->bind_param("sii", $refund_reference, $admin_id, $refund_id);
+            $stmt->bind_param("ssii", $reference, $reference, $admin_id, $refund_id);
             $stmt->execute();
 
+            // Update booking refund status
+            $update_booking = "
+                UPDATE bookings 
+                SET refund_status = 'completed'
+                WHERE id = ?
+            ";
+            $stmt = $conn->prepare($update_booking);
+            $stmt->bind_param("i", $refund['booking_id']);
+            $stmt->execute();
+
+            // Log transaction
+            $final_amount = floatval($refund['refund_amount']) - floatval($refund['deduction_amount']);
+            
+            $log_transaction = "
+                INSERT INTO payment_transactions 
+                (booking_id, transaction_type, amount, description, created_by, created_at)
+                VALUES (?, 'refund', ?, ?, ?, NOW())
+            ";
+            
+            $description = "Refund completed - Reference: " . $reference;
+            $stmt = $conn->prepare($log_transaction);
+            $stmt->bind_param("idsi", 
+                $refund['booking_id'], 
+                $final_amount, 
+                $description, 
+                $admin_id
+            );
+            $stmt->execute();
+
+            $new_status = 'completed';
             $message = 'Refund completed and funds transferred';
+            
+            // TODO: Send notification to renter
+            
             break;
     }
 
@@ -210,9 +293,11 @@ try {
         'data' => [
             'refund_id' => $refund_id,
             'action' => $action,
-            'new_status' => $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'completed'),
+            'new_status' => $new_status,
             'processed_at' => date('Y-m-d H:i:s'),
-            'processed_by' => $admin_id
+            'processed_by' => $admin_id,
+            'final_amount' => isset($final_amount) ? $final_amount : null,
+            'reference' => isset($reference) ? $reference : null
         ]
     ]);
 

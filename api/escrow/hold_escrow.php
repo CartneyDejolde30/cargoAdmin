@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================================
- * HOLD ESCROW API
+ * HOLD ESCROW API - FIXED
  * Put escrow on hold for disputes or investigation
  * ============================================================================
  */
@@ -71,11 +71,15 @@ try {
         throw new Exception('Can only put escrow on hold from "held" status. Current: ' . $booking['escrow_status']);
     }
     
-    // Update escrow status to on_hold
+    // Check if already on hold
+    if (!empty($booking['escrow_hold_reason'])) {
+        throw new Exception('This escrow is already on hold');
+    }
+    
+    // Update escrow - use escrow_hold_reason instead of changing status
     $updateQuery = "
         UPDATE bookings 
         SET 
-            escrow_status = 'on_hold',
             escrow_hold_reason = ?,
             escrow_hold_details = ?
         WHERE id = ?
@@ -88,23 +92,26 @@ try {
         throw new Exception('Failed to update escrow status: ' . mysqli_error($conn));
     }
     
-    // Log the hold action
-    $logQuery = "
-        INSERT INTO escrow_logs (
-            booking_id,
-            action,
-            previous_status,
-            new_status,
-            admin_id,
-            notes,
-            created_at
-        ) VALUES (?, 'hold', 'held', 'on_hold', ?, ?, NOW())
-    ";
-    
-    $logNotes = "Reason: $reason - $details";
-    $stmt = mysqli_prepare($conn, $logQuery);
-    mysqli_stmt_bind_param($stmt, "iis", $bookingId, $adminId, $logNotes);
-    mysqli_stmt_execute($stmt);
+    // Log the hold action if escrow_logs table exists
+    $checkTable = mysqli_query($conn, "SHOW TABLES LIKE 'escrow_logs'");
+    if (mysqli_num_rows($checkTable) > 0) {
+        $logQuery = "
+            INSERT INTO escrow_logs (
+                booking_id,
+                action,
+                previous_status,
+                new_status,
+                admin_id,
+                notes,
+                created_at
+            ) VALUES (?, 'hold', 'held', 'on_hold', ?, ?, NOW())
+        ";
+        
+        $logNotes = "Reason: $reason - $details";
+        $stmt = mysqli_prepare($conn, $logQuery);
+        mysqli_stmt_bind_param($stmt, "iis", $bookingId, $adminId, $logNotes);
+        mysqli_stmt_execute($stmt);
+    }
     
     // Commit transaction
     mysqli_commit($conn);
