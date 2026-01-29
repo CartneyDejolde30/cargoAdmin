@@ -33,6 +33,11 @@ SELECT
     b.rental_period,
     b.created_at,
     
+    -- Refund fields
+    b.refund_status,
+    b.refund_requested,
+    b.refund_amount,
+    
     -- Car Details
     COALESCE(c.brand, m.brand) AS brand,
     COALESCE(c.model, m.model) AS model,
@@ -83,7 +88,7 @@ while ($row = $result->fetch_assoc()) {
     
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
+        $carImage = 'http://10.218.197.49/carGOAdmin/' . $carImage;
     }
     
     $totalDays = max(1, (strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400);
@@ -110,7 +115,12 @@ while ($row = $result->fetch_assoc()) {
         'days_elapsed' => $daysElapsed,
         'trip_progress' => round($progress, 1),
         'trip_status' => $row['trip_status'],
-        'status' => 'active'
+        'status' => 'active',
+        
+        // Refund status fields
+        'refund_status' => $row['refund_status'] ?? 'not_requested',
+        'refund_requested' => (int)($row['refund_requested'] ?? 0),
+        'refund_amount' => (float)($row['refund_amount'] ?? 0),
     ];
 }
 

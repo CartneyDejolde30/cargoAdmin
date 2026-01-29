@@ -132,9 +132,25 @@ if ((int)$booking['user_id'] !== $userId) {
 if ($booking['refund_status'] === 'completed') {
     jsonError('This booking has already been refunded');
 }
-if ((int)$booking['refund_requested'] === 1) {
-    jsonError('Refund already requested');
+
+// Check if there's an existing refund request
+$checkRefund = $conn->prepare("SELECT id, status FROM refunds WHERE booking_id = ? LIMIT 1");
+$checkRefund->bind_param("i", $bookingId);
+$checkRefund->execute();
+$existingRefund = $checkRefund->get_result()->fetch_assoc();
+
+// If there's an existing refund that's not rejected, block the request
+if ($existingRefund) {
+    if ($existingRefund['status'] === 'rejected') {
+        // Delete the rejected refund to allow a new request
+        $deleteRefund = $conn->prepare("DELETE FROM refunds WHERE id = ?");
+        $deleteRefund->bind_param("i", $existingRefund['id']);
+        $deleteRefund->execute();
+    } else if (in_array($existingRefund['status'], ['pending', 'approved', 'processing'])) {
+        jsonError('Refund already requested and is being processed');
+    }
 }
+
 if (!in_array($booking['status'], ['cancelled', 'rejected'], true)) {
     jsonError('Only cancelled or rejected bookings can be refunded');
 }

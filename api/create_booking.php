@@ -6,7 +6,6 @@ header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
 require_once __DIR__ . "/../include/db.php";
-require_once __DIR__ . "/payment/paymongo/config.php";
 
 $response = ["success" => false, "message" => ""];
 
@@ -162,52 +161,28 @@ try {
     $bookingId = $stmt->insert_id;
 
     /* =========================================================
-       7️⃣ PAYMONGO PAYMENT INTENT
-    ========================================================= */
-    $paymentIntent = paymongoRequest('/payment_intents', 'POST', [
-        'data' => [
-            'attributes' => [
-                'amount' => (int)($totalAmount * 100),
-                'currency' => 'PHP',
-                'payment_method_allowed' => ['gcash','paymaya','card'],
-                'description' => "CarGo Booking #{$bookingId}",
-                'metadata' => [
-                    'booking_id' => (string)$bookingId,
-                    'user_id' => (string)$userId,
-                    'vehicle_type' => $vehicleType
-                ]
-            ]
-        ]
-    ]);
-
-    if (isset($paymentIntent['error'])) {
-        throw new Exception("Payment error");
-    }
-
-    $paymentIntentId = $paymentIntent['data']['id'];
-    $clientKey = $paymentIntent['data']['attributes']['client_key'];
-
-    /* =========================================================
-       8️⃣ STORE PAYMENT
+       7️⃣ STORE PAYMENT RECORD (Manual GCash Payment)
     ========================================================= */
     $stmt = $conn->prepare("
         INSERT INTO payments
         (booking_id, user_id, amount, payment_method, payment_reference, payment_status, created_at)
-        VALUES (?, ?, ?, 'paymongo', ?, 'pending', NOW())
+        VALUES (?, ?, ?, 'gcash', NULL, 'pending', NOW())
     ");
-    $stmt->bind_param("iids", $bookingId, $userId, $totalAmount, $paymentIntentId);
+    $stmt->bind_param("iid", $bookingId, $userId, $totalAmount);
     $stmt->execute();
+    
+    $paymentId = $stmt->insert_id;
 
     mysqli_commit($conn);
 
     echo json_encode([
         "success" => true,
-        "message" => "Booking created",
+        "message" => "Booking created successfully. Please proceed to payment.",
         "data" => [
             "booking_id" => $bookingId,
+            "payment_id" => $paymentId,
             "total_amount" => $totalAmount,
-            "payment_intent_id" => $paymentIntentId,
-            "client_key" => $clientKey
+            "payment_method" => "gcash"
         ]
     ]);
 

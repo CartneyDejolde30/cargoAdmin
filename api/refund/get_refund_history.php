@@ -210,7 +210,7 @@ $stats_query = "
         SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing_count,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
-        COALESCE(SUM(CASE WHEN status = 'completed' THEN (refund_amount - COALESCE(deduction_amount, 0)) ELSE 0 END), 0) AS total_refunded
+        COALESCE(SUM(CASE WHEN status IN ('approved', 'processing', 'completed') THEN (refund_amount - COALESCE(deduction_amount, 0)) ELSE 0 END), 0) AS total_refunded
     FROM refunds
     WHERE user_id = ?
 ";

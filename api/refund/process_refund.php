@@ -178,37 +178,48 @@ try {
                 throw new Exception('Rejection reason is required');
             }
 
-            // Update refund record
-            $update_refund = "
-                UPDATE refunds 
-                SET 
-                    status = 'rejected',
-                    rejection_reason = ?,
-                    processed_by = ?,
-                    processed_at = NOW()
-                WHERE id = ?
-            ";
-
-            $stmt = $conn->prepare($update_refund);
-            $stmt->bind_param("sii", $rejection_reason, $admin_id, $refund_id);
+            // DELETE the refund record instead of updating it
+            // This allows the user to submit a new refund request
+            $delete_refund = "DELETE FROM refunds WHERE id = ?";
+            $stmt = $conn->prepare($delete_refund);
+            $stmt->bind_param("i", $refund_id);
             $stmt->execute();
 
-            // Update booking refund status
+            // Update booking to reset refund status
             $update_booking = "
                 UPDATE bookings 
                 SET 
-                    refund_status = 'rejected',
-                    refund_requested = 0
+                    refund_status = 'not_requested',
+                    refund_requested = 0,
+                    refund_amount = 0
                 WHERE id = ?
             ";
             $stmt = $conn->prepare($update_booking);
             $stmt->bind_param("i", $refund['booking_id']);
             $stmt->execute();
 
-            $new_status = 'rejected';
-            $message = 'Refund rejected';
+            // Log the rejection for admin records
+            $log_rejection = "
+                INSERT INTO payment_transactions 
+                (booking_id, transaction_type, amount, description, created_by, created_at)
+                VALUES (?, 'refund_rejected', ?, ?, ?, NOW())
+            ";
             
-            // TODO: Send notification to renter
+            $refund_amount = floatval($refund['refund_amount']);
+            $description = "Refund rejected - Reason: " . $rejection_reason;
+            $stmt = $conn->prepare($log_rejection);
+            $stmt->bind_param("idsi", 
+                $refund['booking_id'], 
+                $refund_amount, 
+                $description, 
+                $admin_id
+            );
+            $stmt->execute();
+
+            $new_status = 'rejected';
+            $message = 'Refund rejected - User can submit a new request';
+            
+            // TODO: Send notification to renter with rejection reason
             
             break;
 

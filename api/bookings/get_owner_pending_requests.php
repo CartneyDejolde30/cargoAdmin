@@ -29,6 +29,11 @@ SELECT
     b.email AS renter_email,
     b.contact AS renter_contact,
     
+    -- Refund fields
+    b.refund_status,
+    b.refund_requested,
+    b.refund_amount,
+    
     -- Car Details
     c.brand,
     c.model,
@@ -56,7 +61,7 @@ while ($row = $result->fetch_assoc()) {
     
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
+        $carImage = 'http://10.218.197.49/carGOAdmin/' . $carImage;
     }
     
     // Calculate rental days
@@ -80,7 +85,12 @@ while ($row = $result->fetch_assoc()) {
         'total_amount' => number_format($row['total_amount'], 0),
         'rental_period' => $days . ' day' . ($days > 1 ? 's' : ''),
         'status' => 'pending',
-        'created_at' => date('M d, Y - h:i A', strtotime($row['created_at']))
+        'created_at' => date('M d, Y - h:i A', strtotime($row['created_at'])),
+        
+        // Refund status fields
+        'refund_status' => $row['refund_status'] ?? 'not_requested',
+        'refund_requested' => (int)($row['refund_requested'] ?? 0),
+        'refund_amount' => (float)($row['refund_amount'] ?? 0),
     ];
 }
 

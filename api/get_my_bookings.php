@@ -26,6 +26,11 @@ SELECT
     b.total_amount,
     b.status,
     b.created_at,
+    
+    -- Refund fields
+    b.refund_status,
+    b.refund_requested,
+    b.refund_amount,
 
     c.brand,
     c.model,
@@ -56,7 +61,7 @@ while ($row = $result->fetch_assoc()) {
 
         'carName'     => trim($row['brand'].' '.$row['model']),
         'carImage'    => $row['carImage']
-            ? 'http://10.77.127.2/carGOAdmin/'.$row['carImage']
+            ? 'http://10.218.197.49/carGOAdmin/'.$row['carImage']
             : '',
 
         'location'    => $row['location'] ?? 'Location not set',
@@ -70,6 +75,11 @@ while ($row = $result->fetch_assoc()) {
         'totalPrice'  => (float)$row['total_amount'],
         'status'      => $row['status'],
         'ownerName'   => $row['ownerName'] ?? 'Unknown',
+        
+        // Refund status fields
+        'refundStatus'    => $row['refund_status'] ?? 'not_requested',
+        'refundRequested' => (int)($row['refund_requested'] ?? 0),
+        'refundAmount'    => (float)($row['refund_amount'] ?? 0),
     ];
 }
 

@@ -37,6 +37,9 @@ SELECT
     b.status,
     b.rejection_reason,
     b.rejected_at,
+    b.refund_status,
+    b.refund_requested,
+    b.refund_amount,
     u.fullname AS renter_name,
     u.phone AS renter_contact,
     c.brand,
@@ -65,6 +68,9 @@ $stmt->bind_result(
     $status,
     $rejection_reason,
     $rejected_at,
+    $refund_status,
+    $refund_requested,
+    $refund_amount,
     $renter_name,
     $renter_contact,
     $brand,
@@ -93,7 +99,10 @@ while ($stmt->fetch()) {
         "renter_name" => $renter_name,
         "renter_contact" => $renter_contact,
         "car_image" => $imagePath,
-        "car_full_name" => $car_full_name
+        "car_full_name" => $car_full_name,
+        "refund_status" => $refund_status ?? 'not_requested',
+        "refund_requested" => (int)($refund_requested ?? 0),
+        "refund_amount" => (float)($refund_amount ?? 0)
     ];
 }
 
