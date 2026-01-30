@@ -172,6 +172,27 @@
   <!-- FINANCIAL MANAGEMENT -->
   <div class="menu-section">
     <div class="menu-label">Financial</div>
+    
+    <a href="overdue_management.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'overdue_management.php' ? 'active' : ''; ?>">
+      <i class="bi bi-exclamation-triangle"></i>
+      <span>Overdue Rentals</span>
+      <?php
+      // Get overdue count
+      if (isset($conn)) {
+        $overdue_query = "SELECT COUNT(*) as count FROM bookings 
+                         WHERE status = 'approved' 
+                         AND CONCAT(return_date, ' ', return_time) < NOW()";
+        $overdue_result = mysqli_query($conn, $overdue_query);
+        if ($overdue_result) {
+          $overdue_data = mysqli_fetch_assoc($overdue_result);
+          if ($overdue_data['count'] > 0) {
+            echo '<span class="menu-badge" style="background: #dc3545;">' . $overdue_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
+    
     <a href="refunds.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'refunds.php' ? 'active' : ''; ?>">
       <i class="bi bi-arrow-counterclockwise"></i>
       <span>Refunds</span>

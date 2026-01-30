@@ -74,8 +74,66 @@ try {
         throw new Exception('Booking status must be completed, ongoing, or approved. Current: ' . $booking['status']);
     }
     
-    // Update escrow status
-    $updateEscrow = "
+    // Check if escrow table exists and get/create escrow record
+    $escrowId = null;
+    $checkEscrowTable = mysqli_query($conn, "SHOW TABLES LIKE 'escrow'");
+    
+    if (mysqli_num_rows($checkEscrowTable) > 0) {
+        // Check if escrow record exists
+        $escrowQuery = "SELECT id, status FROM escrow WHERE booking_id = ?";
+        $stmt = mysqli_prepare($conn, $escrowQuery);
+        mysqli_stmt_bind_param($stmt, "i", $bookingId);
+        mysqli_stmt_execute($stmt);
+        $escrowResult = mysqli_stmt_get_result($stmt);
+        
+        if ($escrowRow = mysqli_fetch_assoc($escrowResult)) {
+            $escrowId = $escrowRow['id'];
+            
+            // Update escrow table status
+            $updateEscrowTable = "
+                UPDATE escrow 
+                SET 
+                    status = 'released',
+                    released_at = NOW(),
+                    release_reason = 'Normal release - rental completed'
+                WHERE id = ?
+            ";
+            $stmt = mysqli_prepare($conn, $updateEscrowTable);
+            mysqli_stmt_bind_param($stmt, "i", $escrowId);
+            mysqli_stmt_execute($stmt);
+        } else {
+            // Create escrow record if it doesn't exist
+            $getPaymentId = "SELECT id FROM payments WHERE booking_id = ? LIMIT 1";
+            $stmt = mysqli_prepare($conn, $getPaymentId);
+            mysqli_stmt_bind_param($stmt, "i", $bookingId);
+            mysqli_stmt_execute($stmt);
+            $paymentResult = mysqli_stmt_get_result($stmt);
+            $paymentRow = mysqli_fetch_assoc($paymentResult);
+            $paymentId = $paymentRow['id'] ?? null;
+            
+            $createEscrow = "
+                INSERT INTO escrow (
+                    booking_id, 
+                    payment_id, 
+                    amount, 
+                    status, 
+                    held_at,
+                    released_at, 
+                    release_reason,
+                    created_at
+                ) VALUES (?, ?, ?, 'released', NOW(), NOW(), 'Normal release - rental completed', NOW())
+            ";
+            $stmt = mysqli_prepare($conn, $createEscrow);
+            mysqli_stmt_bind_param($stmt, "iid", $bookingId, $paymentId, $booking['total_amount']);
+            
+            if (mysqli_stmt_execute($stmt)) {
+                $escrowId = mysqli_insert_id($conn);
+            }
+        }
+    }
+    
+    // Update booking escrow status
+    $updateBooking = "
         UPDATE bookings 
         SET 
             escrow_status = 'released_to_owner',
@@ -84,40 +142,46 @@ try {
         WHERE id = ?
     ";
     
-    $stmt = mysqli_prepare($conn, $updateEscrow);
+    $stmt = mysqli_prepare($conn, $updateBooking);
     mysqli_stmt_bind_param($stmt, "i", $bookingId);
     
     if (!mysqli_stmt_execute($stmt)) {
-        throw new Exception('Failed to update escrow status: ' . mysqli_error($conn));
+        throw new Exception('Failed to update booking escrow status: ' . mysqli_error($conn));
     }
     
-    // Create payout record
-    $createPayout = "
-        INSERT INTO payouts (
-            booking_id,
-            owner_id,
-            amount,
-            platform_fee,
-            net_amount,
-            payout_method,
-            payout_account,
-            status,
-            scheduled_at,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, 'gcash', ?, 'pending', NOW(), NOW())
-    ";
-    
-    $stmt = mysqli_prepare($conn, $createPayout);
-    $gcashAccount = $booking['owner_gcash'] ?? 'Not Set';
-    
-    mysqli_stmt_bind_param($stmt, "iiddds", 
-        $bookingId,
-        $booking['owner_id'],
-        $booking['total_amount'],
-        $booking['platform_fee'],
-        $booking['owner_payout'],
-        $gcashAccount
-    );
+    // Create payout record with escrow_id
+    if ($escrowId) {
+        $createPayout = "
+            INSERT INTO payouts (
+                booking_id,
+                owner_id,
+                escrow_id,
+                amount,
+                platform_fee,
+                net_amount,
+                payout_method,
+                payout_account,
+                status,
+                scheduled_at,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'gcash', ?, 'pending', NOW(), NOW())
+        ";
+        
+        $stmt = mysqli_prepare($conn, $createPayout);
+        $gcashAccount = $booking['owner_gcash'] ?? 'Not Set';
+        
+        mysqli_stmt_bind_param($stmt, "iiiddds", 
+            $bookingId,
+            $booking['owner_id'],
+            $escrowId,
+            $booking['total_amount'],
+            $booking['platform_fee'],
+            $booking['owner_payout'],
+            $gcashAccount
+        );
+    } else {
+        throw new Exception('Failed to get or create escrow record');
+    }
     
     if (!mysqli_stmt_execute($stmt)) {
         throw new Exception('Failed to create payout record: ' . mysqli_error($conn));

@@ -16,13 +16,12 @@ if (!$owner_id) {
 try {
     $stmt = $conn->prepare("
         SELECT 
-            b.id,
+            b.id as booking_id,
             c.image as car_image,
-            c.brand,
-            c.model,
+            CONCAT(c.brand, ' ', c.model) as car_full_name,
             b.full_name as renter_name,
-            b.pickup_date as start_date,
-            b.return_date as end_date,
+            b.pickup_date,
+            b.return_date,
             b.status,
             b.total_amount,
             b.rental_period
@@ -38,6 +37,19 @@ try {
     
     $bookings = [];
     while ($row = $result->fetch_assoc()) {
+        // Process car_image to remove 'uploads/' prefix if present
+        // Flutter's getCarImageUrl() will add it back
+        $carImage = $row['car_image'] ?? '';
+        if (!empty($carImage)) {
+            // Remove 'uploads/' prefix if present
+            if (strpos($carImage, 'uploads/') === 0) {
+                $carImage = substr($carImage, 8); // Remove 'uploads/'
+            }
+        } else {
+            $carImage = 'default_car.png';
+        }
+        
+        $row['car_image'] = $carImage;
         $bookings[] = $row;
     }
 

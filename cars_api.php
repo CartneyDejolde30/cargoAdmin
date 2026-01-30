@@ -1,21 +1,29 @@
 <?php
+// Enable error logging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+error_log("=== Cars API Started ===");
+
+// DON'T use output buffering yet - let's see the actual error
 include "include/db.php";
+
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json");
 
-
-
-
 $action = $_POST['action'] ?? $_GET['action'] ?? 'fetch';
+error_log("Action: $action");
 
 
 // ========== FETCH ALL VEHICLES (CARS + MOTORCYCLES) ==========
 if ($action === "fetch") {
 
     $owner_id = $_POST['owner_id'] ?? $_GET['owner_id'] ?? 0;
+    error_log("Fetching for owner_id: $owner_id");
     $vehicles = [];
 
     /* -------- FETCH CARS -------- */
+    error_log("Preparing car query...");
     $carStmt = $conn->prepare("
         SELECT 
             id,
@@ -34,16 +42,26 @@ if ($action === "fetch") {
         FROM cars
         WHERE owner_id = ?
     ");
+    
+    if (!$carStmt) {
+        error_log("Car prepare failed: " . $conn->error);
+        die(json_encode(["error" => "Car query prepare failed: " . $conn->error]));
+    }
+    
     $carStmt->bind_param("i", $owner_id);
     $carStmt->execute();
     $carResult = $carStmt->get_result();
+    
+    error_log("Car query executed, rows: " . $carResult->num_rows);
 
     while ($row = $carResult->fetch_assoc()) {
         $vehicles[] = $row;
     }
     $carStmt->close();
+    error_log("Cars fetched: " . count($vehicles));
 
     /* -------- FETCH MOTORCYCLES -------- */
+    error_log("Preparing motorcycle query...");
     $motorStmt = $conn->prepare("
         SELECT 
             id,
@@ -62,21 +80,55 @@ if ($action === "fetch") {
         FROM motorcycles
         WHERE owner_id = ?
     ");
+    
+    if (!$motorStmt) {
+        error_log("Motorcycle prepare failed: " . $conn->error);
+        die(json_encode(["error" => "Motorcycle query prepare failed: " . $conn->error]));
+    }
+    
     $motorStmt->bind_param("i", $owner_id);
     $motorStmt->execute();
     $motorResult = $motorStmt->get_result();
+    
+    error_log("Motorcycle query executed, rows: " . $motorResult->num_rows);
 
     while ($row = $motorResult->fetch_assoc()) {
         $vehicles[] = $row;
     }
     $motorStmt->close();
+    error_log("Motorcycles fetched: " . count($vehicles) . " total vehicles");
 
     /* -------- SORT BY DATE -------- */
+    error_log("Sorting vehicles...");
     usort($vehicles, function ($a, $b) {
         return strtotime($b['created_at']) - strtotime($a['created_at']);
     });
 
-    echo json_encode($vehicles);
+    // Log for debugging
+    error_log("Cars API: owner_id=$owner_id, found " . count($vehicles) . " vehicles");
+    error_log("About to output JSON...");
+    
+    // Clean up data to ensure valid UTF-8
+    foreach ($vehicles as &$vehicle) {
+        foreach ($vehicle as $key => &$value) {
+            if (is_string($value)) {
+                $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+            }
+        }
+    }
+    unset($vehicle, $value); // Break references
+    
+    $json = json_encode($vehicles, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    
+    if ($json === false) {
+        error_log("JSON ENCODE FAILED: " . json_last_error_msg());
+        echo json_encode(["error" => "JSON encoding failed: " . json_last_error_msg()]);
+    } else {
+        error_log("JSON length: " . strlen($json));
+        error_log("JSON first 200 chars: " . substr($json, 0, 200));
+        echo $json;
+    }
+    
     $conn->close();
     exit;
 }
@@ -204,5 +256,6 @@ if ($action === "insert") {
     exit;
 }
 
+error_log("Invalid action reached");
 echo json_encode(["success" => false, "message" => "Invalid action"]);
 ?>

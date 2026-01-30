@@ -68,7 +68,10 @@ LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
 LEFT JOIN users u ON b.user_id = u.id
 WHERE b.owner_id = ?
 AND b.status = 'approved'
-AND b.return_date >= CURDATE()
+AND (
+    b.return_date >= CURDATE() 
+    OR DATEDIFF(CURDATE(), b.return_date) <= 7  -- Show expired bookings up to 7 days past due
+)
 ORDER BY 
     CASE 
         WHEN b.pickup_date <= CURDATE() THEN 0

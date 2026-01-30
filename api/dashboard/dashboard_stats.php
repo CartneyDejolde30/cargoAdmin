@@ -85,56 +85,174 @@ try {
     $rejectedBookings = $rejectedStmt->get_result()->fetch_assoc()['total'];
 
     // ========================================
-    // INCOME STATISTICS (FIXED)
+    // INCOME STATISTICS (CORRECTED - INCLUDES COMPLETED, ESCROW, LATE FEES, REFUNDS)
     // ========================================
     
-    // Total Income (completed + active bookings only)
+    // Total Income (all secured and completed payments)
     $totalIncomeStmt = $conn->prepare("
-        SELECT COALESCE(SUM(total_amount), 0) as total 
-        FROM bookings 
-        WHERE owner_id = ? 
-        AND status IN ('ongoing', 'approved')
+        SELECT 
+            COALESCE(SUM(
+                b.owner_payout + 
+                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+            ), 0) as total
+        FROM bookings b
+        WHERE b.owner_id = ? 
+        AND (
+            -- Money in escrow (secured for owner)
+            b.escrow_status IN ('held', 'released_to_owner')
+            OR 
+            -- Payout completed
+            b.payout_status = 'completed'
+            OR
+            -- Completed rental with verified payment
+            (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
+        )
     ");
     $totalIncomeStmt->bind_param("s", $owner_id);
     $totalIncomeStmt->execute();
     $totalIncome = floatval($totalIncomeStmt->get_result()->fetch_assoc()['total']);
     
+    // Calculate total refunds
+    $refundStmt = $conn->prepare("
+        SELECT COALESCE(SUM(r.refund_amount - COALESCE(r.deduction_amount, 0)), 0) as total
+        FROM refunds r
+        INNER JOIN bookings b ON r.booking_id = b.id
+        WHERE b.owner_id = ?
+        AND r.status IN ('completed', 'processing')
+    ");
+    $refundStmt->bind_param("s", $owner_id);
+    $refundStmt->execute();
+    $totalRefunds = floatval($refundStmt->get_result()->fetch_assoc()['total']);
+    
+    // Store gross for breakdown
+    $grossTotalIncome = $totalIncome;
+    $totalIncome = $totalIncome - $totalRefunds;
+    
     // Monthly Income (current month)
     $monthlyIncomeStmt = $conn->prepare("
-        SELECT COALESCE(SUM(total_amount), 0) as total 
-        FROM bookings 
-        WHERE owner_id = ? 
-        AND status IN ('ongoing', 'approved')
-        AND YEAR(created_at) = YEAR(CURDATE())
-        AND MONTH(created_at) = MONTH(CURDATE())
+        SELECT 
+            COALESCE(SUM(
+                b.owner_payout + 
+                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+            ), 0) as total
+        FROM bookings b
+        WHERE b.owner_id = ? 
+        AND (
+            b.escrow_status IN ('held', 'released_to_owner')
+            OR b.payout_status = 'completed'
+            OR (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
+        )
+        AND YEAR(b.created_at) = YEAR(CURDATE())
+        AND MONTH(b.created_at) = MONTH(CURDATE())
     ");
     $monthlyIncomeStmt->bind_param("s", $owner_id);
     $monthlyIncomeStmt->execute();
     $monthlyIncome = floatval($monthlyIncomeStmt->get_result()->fetch_assoc()['total']);
     
+    // Monthly refunds
+    $monthlyRefundStmt = $conn->prepare("
+        SELECT COALESCE(SUM(r.refund_amount - COALESCE(r.deduction_amount, 0)), 0) as total
+        FROM refunds r
+        INNER JOIN bookings b ON r.booking_id = b.id
+        WHERE b.owner_id = ?
+        AND r.status IN ('completed', 'processing')
+        AND YEAR(r.processed_at) = YEAR(CURDATE())
+        AND MONTH(r.processed_at) = MONTH(CURDATE())
+    ");
+    $monthlyRefundStmt->bind_param("s", $owner_id);
+    $monthlyRefundStmt->execute();
+    $monthlyRefunds = floatval($monthlyRefundStmt->get_result()->fetch_assoc()['total']);
+    
+    $grossMonthlyIncome = $monthlyIncome;
+    $monthlyIncome = $monthlyIncome - $monthlyRefunds;
+    
     // Weekly Income (last 7 days)
     $weeklyIncomeStmt = $conn->prepare("
-        SELECT COALESCE(SUM(total_amount), 0) as total 
-        FROM bookings 
-        WHERE owner_id = ? 
-        AND status IN ('ongoing', 'approved')
-        AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        SELECT 
+            COALESCE(SUM(
+                b.owner_payout + 
+                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+            ), 0) as total
+        FROM bookings b
+        WHERE b.owner_id = ? 
+        AND (
+            b.escrow_status IN ('held', 'released_to_owner')
+            OR b.payout_status = 'completed'
+            OR (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
+        )
+        AND b.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
     ");
     $weeklyIncomeStmt->bind_param("s", $owner_id);
     $weeklyIncomeStmt->execute();
     $weeklyIncome = floatval($weeklyIncomeStmt->get_result()->fetch_assoc()['total']);
     
+    // Weekly refunds
+    $weeklyRefundStmt = $conn->prepare("
+        SELECT COALESCE(SUM(r.refund_amount - COALESCE(r.deduction_amount, 0)), 0) as total
+        FROM refunds r
+        INNER JOIN bookings b ON r.booking_id = b.id
+        WHERE b.owner_id = ?
+        AND r.status IN ('completed', 'processing')
+        AND r.processed_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+    ");
+    $weeklyRefundStmt->bind_param("s", $owner_id);
+    $weeklyRefundStmt->execute();
+    $weeklyRefunds = floatval($weeklyRefundStmt->get_result()->fetch_assoc()['total']);
+    
+    $grossWeeklyIncome = $weeklyIncome;
+    $weeklyIncome = $weeklyIncome - $weeklyRefunds;
+    
     // Today's Income
     $todayIncomeStmt = $conn->prepare("
-        SELECT COALESCE(SUM(total_amount), 0) as total 
-        FROM bookings 
-        WHERE owner_id = ? 
-        AND status IN ('ongoing', 'approved')
-        AND DATE(created_at) = CURDATE()
+        SELECT 
+            COALESCE(SUM(
+                b.owner_payout + 
+                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+            ), 0) as total
+        FROM bookings b
+        WHERE b.owner_id = ? 
+        AND (
+            b.escrow_status IN ('held', 'released_to_owner')
+            OR b.payout_status = 'completed'
+            OR (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
+        )
+        AND DATE(b.created_at) = CURDATE()
     ");
     $todayIncomeStmt->bind_param("s", $owner_id);
     $todayIncomeStmt->execute();
     $todayIncome = floatval($todayIncomeStmt->get_result()->fetch_assoc()['total']);
+    
+    // Today's refunds
+    $todayRefundStmt = $conn->prepare("
+        SELECT COALESCE(SUM(r.refund_amount - COALESCE(r.deduction_amount, 0)), 0) as total
+        FROM refunds r
+        INNER JOIN bookings b ON r.booking_id = b.id
+        WHERE b.owner_id = ?
+        AND r.status IN ('completed', 'processing')
+        AND DATE(r.processed_at) = CURDATE()
+    ");
+    $todayRefundStmt->bind_param("s", $owner_id);
+    $todayRefundStmt->execute();
+    $todayRefunds = floatval($todayRefundStmt->get_result()->fetch_assoc()['total']);
+    
+    $grossTodayIncome = $todayIncome;
+    $todayIncome = $todayIncome - $todayRefunds;
+    
+    // Get late fees breakdown
+    $lateFeesStmt = $conn->prepare("
+        SELECT COALESCE(SUM(late_fee_amount), 0) as total
+        FROM bookings
+        WHERE owner_id = ?
+        AND late_fee_charged = 1
+        AND (
+            escrow_status IN ('held', 'released_to_owner')
+            OR payout_status = 'completed'
+            OR (status = 'completed' AND payment_verified_at IS NOT NULL)
+        )
+    ");
+    $lateFeesStmt->bind_param("s", $owner_id);
+    $lateFeesStmt->execute();
+    $totalLateFees = floatval($lateFeesStmt->get_result()->fetch_assoc()['total']);
 
     // ========================================
     // NOTIFICATIONS & MESSAGES
@@ -169,11 +287,36 @@ try {
             'cancelled_bookings' => intval($cancelledBookings),
             'rejected_bookings' => intval($rejectedBookings),
             
-            // Income Stats
+            // Income Stats (Net Revenue)
             'total_income' => $totalIncome,
             'monthly_income' => $monthlyIncome,
             'weekly_income' => $weeklyIncome,
             'today_income' => $todayIncome,
+            
+            // Revenue Breakdown (NEW)
+            'revenue_breakdown' => [
+                'total' => [
+                    'gross_revenue' => $grossTotalIncome,
+                    'late_fees' => $totalLateFees,
+                    'refunds_issued' => $totalRefunds,
+                    'net_revenue' => $totalIncome
+                ],
+                'monthly' => [
+                    'gross_revenue' => $grossMonthlyIncome,
+                    'refunds_issued' => $monthlyRefunds,
+                    'net_revenue' => $monthlyIncome
+                ],
+                'weekly' => [
+                    'gross_revenue' => $grossWeeklyIncome,
+                    'refunds_issued' => $weeklyRefunds,
+                    'net_revenue' => $weeklyIncome
+                ],
+                'today' => [
+                    'gross_revenue' => $grossTodayIncome,
+                    'refunds_issued' => $todayRefunds,
+                    'net_revenue' => $todayIncome
+                ]
+            ],
             
             // Notifications
             'unread_notifications' => intval($unreadNotifications),
@@ -192,9 +335,14 @@ try {
     $cancelledStmt->close();
     $rejectedStmt->close();
     $totalIncomeStmt->close();
+    $refundStmt->close();
     $monthlyIncomeStmt->close();
+    $monthlyRefundStmt->close();
     $weeklyIncomeStmt->close();
+    $weeklyRefundStmt->close();
     $todayIncomeStmt->close();
+    $todayRefundStmt->close();
+    $lateFeesStmt->close();
     $notifStmt->close();
 
 } catch (Exception $e) {
