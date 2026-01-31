@@ -95,6 +95,29 @@ try {
     ===================================================== */
     if ($action === 'verify') {
 
+        // Check if this is a late fee payment by checking payment_transactions metadata
+        $sql = "SELECT transaction_type, metadata FROM payment_transactions 
+                WHERE booking_id = ? AND transaction_type = 'payment'
+                ORDER BY created_at DESC LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $bookingId);
+        $stmt->execute();
+        $transactionResult = $stmt->get_result();
+        $transaction = $transactionResult->fetch_assoc();
+        
+        $isLateFeePayment = false;
+        $lateFeeAmount = 0;
+        $rentalAmount = 0;
+        
+        if ($transaction && $transaction['metadata']) {
+            $metadata = json_decode($transaction['metadata'], true);
+            if (isset($metadata['payment_type']) && $metadata['payment_type'] === 'late_fee_payment') {
+                $isLateFeePayment = true;
+                $lateFeeAmount = (float)($metadata['late_fee_amount'] ?? 0);
+                $rentalAmount = (float)($metadata['rental_amount'] ?? 0);
+            }
+        }
+
         $platformFee = round($amount * 0.10, 2);
         $ownerPayout = round($amount - $platformFee, 2);
 
@@ -129,56 +152,97 @@ try {
 
         $escrowId = $stmt->insert_id;
 
-        // Update booking
-        $sql = "
-        UPDATE bookings
-        SET payment_status = 'paid',
-            escrow_status = 'held',
-            platform_fee = ?,
-            owner_payout = ?,
-            escrow_held_at = NOW(),
-            payment_verified_at = NOW(),
-            payment_verified_by = ?
-        WHERE id = ?
-        ";
+        // Update booking - mark late_fee_charged if this is a late fee payment
+        if ($isLateFeePayment && $lateFeeAmount > 0) {
+            $sql = "
+            UPDATE bookings
+            SET payment_status = 'paid',
+                escrow_status = 'held',
+                platform_fee = ?,
+                owner_payout = ?,
+                escrow_held_at = NOW(),
+                payment_verified_at = NOW(),
+                payment_verified_by = ?,
+                late_fee_charged = 1
+            WHERE id = ?
+            ";
+        } else {
+            $sql = "
+            UPDATE bookings
+            SET payment_status = 'paid',
+                escrow_status = 'held',
+                platform_fee = ?,
+                owner_payout = ?,
+                escrow_held_at = NOW(),
+                payment_verified_at = NOW(),
+                payment_verified_by = ?
+            WHERE id = ?
+            ";
+        }
 
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ddii", $platformFee, $ownerPayout, $adminId, $bookingId);
         $stmt->execute();
 
-        // Notify renter
-        $sql = "
-        INSERT INTO notifications (user_id, title, message)
-        VALUES (?, 'Payment Verified ✓', 'Your payment has been verified. Booking approved!')
-        ";
+        // Notify renter - different message for late fee payments
+        if ($isLateFeePayment) {
+            $sql = "
+            INSERT INTO notifications (user_id, title, message)
+            VALUES (?, 'Late Fee Payment Verified ✓', CONCAT('Your late fee payment of ₱', ?, ' has been verified. Thank you for settling the overdue charges.'))
+            ";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("id", $row['user_id'], $amount);
+            $stmt->execute();
+        } else {
+            $sql = "
+            INSERT INTO notifications (user_id, title, message)
+            VALUES (?, 'Payment Verified ✓', 'Your payment has been verified. Booking approved!')
+            ";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $row['user_id']);
+            $stmt->execute();
+        }
 
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $row['user_id']);
-        $stmt->execute();
+        // Notify owner - different message for late fee payments
+        if ($isLateFeePayment) {
+            $sql = "
+            INSERT INTO notifications (user_id, title, message)
+            VALUES (?, 'Late Fee Payment Received 💰', CONCAT('Booking #', ?, ' late fee payment of ₱', ?, ' has been received (Rental: ₱', ?, ' + Late Fee: ₱', ?, ').'))
+            ";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iiddd", $row['owner_id'], $bookingId, $amount, $rentalAmount, $lateFeeAmount);
+            $stmt->execute();
+        } else {
+            $sql = "
+            INSERT INTO notifications (user_id, title, message)
+            VALUES (?, 'New Booking 🚗', CONCAT('Booking #', ?, ' has been confirmed. Payment received.'))
+            ";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("ii", $row['owner_id'], $bookingId);
+            $stmt->execute();
+        }
 
-        // Notify owner
-        $sql = "
-        INSERT INTO notifications (user_id, title, message)
-        VALUES (?, 'New Booking 🚗', CONCAT('Booking #', ?, ' has been confirmed. Payment received.'))
-        ";
-
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ii", $row['owner_id'], $bookingId);
-        $stmt->execute();
-
-        // Log actions
+        // Log actions with late fee details
+        $logMetadata = [
+            'payment_id' => $paymentId,
+            'escrow_id' => $escrowId,
+            'platform_fee' => $platformFee,
+            'owner_payout' => $ownerPayout
+        ];
+        
+        if ($isLateFeePayment) {
+            $logMetadata['is_late_fee_payment'] = true;
+            $logMetadata['rental_amount'] = $rentalAmount;
+            $logMetadata['late_fee_amount'] = $lateFeeAmount;
+        }
+        
         $logger->log(
             $bookingId,
             'payment',
             $amount,
-            "Payment verified via {$row['payment_method']}",
+            $isLateFeePayment ? "Late fee payment verified via {$row['payment_method']} (Rental: ₱{$rentalAmount} + Late Fee: ₱{$lateFeeAmount})" : "Payment verified via {$row['payment_method']}",
             $adminId,
-            [
-                'payment_id' => $paymentId,
-                'escrow_id' => $escrowId,
-                'platform_fee' => $platformFee,
-                'owner_payout' => $ownerPayout
-            ]
+            $logMetadata
         );
 
         $conn->commit();

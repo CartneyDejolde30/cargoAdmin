@@ -28,6 +28,7 @@ $sql = "SELECT
     b.overdue_days,
     b.late_fee_amount,
     b.late_fee_charged,
+    b.payment_status,
     b.overdue_detected_at,
     TIMESTAMPDIFF(HOUR, CONCAT(b.return_date, ' ', b.return_time), NOW()) as hours_overdue,
     u.fullname as renter_name,
@@ -72,6 +73,8 @@ $overdueBookings = [];
 while ($row = mysqli_fetch_assoc($result)) {
     $overdueBookings[] = [
         'booking_id' => $row['booking_id'],
+        'user_id' => $row['user_id'],
+        'owner_id' => $row['owner_id'],
         'renter_name' => $row['renter_name'],
         'renter_email' => $row['renter_email'],
         'renter_contact' => $row['renter_contact'],
@@ -86,6 +89,7 @@ while ($row = mysqli_fetch_assoc($result)) {
         'hours_overdue' => (int)$row['hours_overdue'],
         'late_fee_amount' => (float)$row['late_fee_amount'],
         'late_fee_charged' => (bool)$row['late_fee_charged'],
+        'payment_status' => $row['payment_status'],
         'total_amount' => (float)$row['total_amount'],
         'total_due' => (float)$row['total_amount'] + (float)$row['late_fee_amount'],
         'detected_at' => $row['overdue_detected_at']

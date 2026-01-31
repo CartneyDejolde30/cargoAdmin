@@ -6,9 +6,22 @@ include "include/db.php";
    PAYMENT STATISTICS
    ========================================================= */
 
-// Pending verification
+// Regular payments - Pending verification
 $pendingVerification = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COUNT(*) AS c FROM payments WHERE payment_status='pending'"
+    "SELECT COUNT(*) AS c FROM payments p
+     WHERE p.payment_status='pending'
+     AND NOT EXISTS (
+         SELECT 1 FROM payment_transactions pt 
+         WHERE pt.booking_id = p.booking_id 
+         AND pt.reference_id = p.payment_reference
+         AND pt.transaction_type = 'late_fee_payment'
+     )"
+))['c'];
+
+// Late fee payments - Pending verification (from late_fee_payments table)
+$pendingLateFees = mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COUNT(*) AS c FROM late_fee_payments 
+     WHERE payment_status='pending'"
 ))['c'];
 
 // Funds in escrow (verified)
@@ -46,17 +59,78 @@ if (isset($_GET['status']) && in_array($_GET['status'], $allowedStatuses, true))
     $statusFilter = $_GET['status'];
 }
 
-$where = " WHERE 1 ";
-$where .= " AND p.payment_method = 'gcash' ";
+// Payment type filter (regular or late_fee)
+$paymentType = isset($_GET['type']) ? trim($_GET['type']) : 'regular';
+$allowedTypes = ['regular', 'late_fee'];
+if (!in_array($paymentType, $allowedTypes)) {
+    $paymentType = 'regular';
+}
 
-if ($statusFilter !== "" && $statusFilter !== "all") {
-    $where .= " AND p.payment_status = '" . mysqli_real_escape_string($conn, $statusFilter) . "' ";
+// Build WHERE clause based on payment type
+if ($paymentType === 'late_fee') {
+    // For late fee payments, query the late_fee_payments table
+    $where = " WHERE 1 ";
+    $where .= " AND lfp.payment_method = 'gcash' ";
+    
+    if ($statusFilter !== "" && $statusFilter !== "all") {
+        $where .= " AND lfp.payment_status = '" . mysqli_real_escape_string($conn, $statusFilter) . "' ";
+    }
+} else {
+    // For regular payments, query the payments table
+    $where = " WHERE 1 ";
+    $where .= " AND p.payment_method = 'gcash' ";
+    
+    // Regular payments: exclude late fee payments
+    $where .= " AND NOT EXISTS (
+        SELECT 1 FROM payment_transactions pt 
+        WHERE pt.booking_id = p.booking_id 
+        AND pt.transaction_type = 'payment'
+        AND JSON_EXTRACT(pt.metadata, '$.payment_type') = 'late_fee_payment'
+    ) ";
+    
+    if ($statusFilter !== "" && $statusFilter !== "all") {
+        $where .= " AND p.payment_status = '" . mysqli_real_escape_string($conn, $statusFilter) . "' ";
+    }
 }
 
 /* =========================================================
    MAIN QUERY - FIXED WITH MOTORCYCLE SUPPORT
    ========================================================= */
-$sql = "SELECT 
+
+if ($paymentType === 'late_fee') {
+    // Query late_fee_payments table
+    $sql = "SELECT 
+    lfp.id, lfp.booking_id, lfp.user_id, lfp.total_amount as amount, 
+    lfp.late_fee_amount, lfp.rental_amount, lfp.is_rental_paid,
+    lfp.payment_method, lfp.payment_reference, 
+    lfp.payment_status, lfp.verification_notes, lfp.verified_by, lfp.verified_at, lfp.created_at,
+    b.pickup_date, b.return_date, b.status AS booking_status, b.total_amount AS booking_total,
+    b.escrow_status, b.platform_fee, b.owner_payout, b.payout_status, b.vehicle_type,
+    b.late_fee_payment_status, b.overdue_days,
+    u1.id AS renter_id, u1.fullname AS renter_name, u1.email AS renter_email, u1.phone AS renter_phone,
+    u2.id AS owner_id, u2.fullname AS owner_name,
+    COALESCE(c.brand, m.brand, 'Unknown') AS brand,
+    COALESCE(c.model, m.model, 'Unknown') AS model,
+    COALESCE(c.car_year, m.motorcycle_year, '') AS car_year,
+    COALESCE(c.plate_number, m.plate_number, '') AS plate_number,
+    COALESCE(c.image, m.image, '') AS image,
+    CASE 
+      WHEN b.vehicle_type = 'car' THEN CONCAT(c.brand, ' ', c.model)
+      WHEN b.vehicle_type = 'motorcycle' THEN CONCAT(m.brand, ' ', m.model)
+      ELSE 'Unknown'
+    END AS vehicle_name
+    FROM late_fee_payments lfp
+    JOIN bookings b ON lfp.booking_id = b.id
+    JOIN users u1 ON lfp.user_id = u1.id
+    JOIN users u2 ON b.owner_id = u2.id
+    LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+    LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+    $where
+    ORDER BY lfp.created_at DESC
+    LIMIT $limit OFFSET $offset";
+} else {
+    // Query regular payments table
+    $sql = "SELECT 
     /* ================= PAYMENTS ================= */
     p.id,
     p.booking_id,
@@ -103,6 +177,7 @@ LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
 $where
 ORDER BY p.created_at DESC
 LIMIT $limit OFFSET $offset";
+}
 
 $result = mysqli_query($conn, $sql);
 
@@ -113,10 +188,17 @@ if (!$result) {
 /* =========================================================
    COUNT FOR PAGINATION
    ========================================================= */
-$countSql = "SELECT COUNT(*) AS total 
-FROM payments p 
-JOIN bookings b ON p.booking_id = b.id
-$where";
+if ($paymentType === 'late_fee') {
+    $countSql = "SELECT COUNT(*) AS total 
+    FROM late_fee_payments lfp 
+    JOIN bookings b ON lfp.booking_id = b.id
+    $where";
+} else {
+    $countSql = "SELECT COUNT(*) AS total 
+    FROM payments p 
+    JOIN bookings b ON p.booking_id = b.id
+    $where";
+}
 
 $countRes = mysqli_query($conn, $countSql);
 $totalRows = mysqli_fetch_assoc($countRes)['total'];
@@ -209,6 +291,78 @@ $totalPages = max(1, ceil($totalRows / $limit));
 
     .modern-stat-card:hover .stat-icon-modern {
       transform: rotate(5deg) scale(1.05);
+    }
+
+    /* Payment Type Tabs */
+    .payment-type-tabs {
+      display: flex;
+      gap: 16px;
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .payment-type-tab {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 20px;
+      background: #f8f9fa;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      text-decoration: none;
+      color: #666;
+      font-weight: 600;
+      font-size: 15px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .payment-type-tab:hover {
+      background: #e9ecef;
+      border-color: #dee2e6;
+      color: #333;
+      transform: translateY(-2px);
+    }
+
+    .payment-type-tab.active {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      border-color: #1a1a1a;
+      color: white;
+      box-shadow: 0 4px 12px rgba(26, 26, 26, 0.2);
+    }
+
+    .payment-type-tab i {
+      font-size: 20px;
+    }
+
+    .payment-type-tab .tab-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #dc3545;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .payment-type-tab.active .tab-badge {
+      background: #fff;
+      color: #dc3545;
+    }
+
+    .payment-type-tab .tab-badge.warning {
+      background: #ff9800;
+    }
+
+    .payment-type-tab.active .tab-badge.warning {
+      background: #fff;
+      color: #ff9800;
     }
 
     .stat-badge {
@@ -951,6 +1105,26 @@ $totalPages = max(1, ceil($totalRows / $limit));
     </div>
 
     <div class="container-fluid p-4">
+      <!-- Payment Type Tabs -->
+      <div class="payment-type-tabs" style="margin-bottom: 30px;">
+        <a href="?type=regular&status=<?= $statusFilter ?>" 
+           class="payment-type-tab <?= $paymentType === 'regular' ? 'active' : '' ?>">
+          <i class="bi bi-wallet2"></i>
+          <span>Regular Payments</span>
+          <?php if ($pendingVerification > 0): ?>
+            <span class="tab-badge"><?= $pendingVerification ?></span>
+          <?php endif; ?>
+        </a>
+        <a href="?type=late_fee&status=<?= $statusFilter ?>" 
+           class="payment-type-tab <?= $paymentType === 'late_fee' ? 'active' : '' ?>">
+          <i class="bi bi-exclamation-triangle"></i>
+          <span>Late Fee Payments</span>
+          <?php if ($pendingLateFees > 0): ?>
+            <span class="tab-badge warning"><?= $pendingLateFees ?></span>
+          <?php endif; ?>
+        </a>
+      </div>
+
       <!-- Modern Stats Grid -->
       <div class="modern-stats-grid">
         <div class="modern-stat-card">
@@ -960,8 +1134,8 @@ $totalPages = max(1, ceil($totalRows / $limit));
             </div>
             <span class="stat-badge">Urgent</span>
           </div>
-          <div class="stat-value-modern"><?= $pendingVerification ?></div>
-          <div class="stat-label-modern">Pending Verification</div>
+          <div class="stat-value-modern"><?= $paymentType === 'late_fee' ? $pendingLateFees : $pendingVerification ?></div>
+          <div class="stat-label-modern"><?= $paymentType === 'late_fee' ? 'Late Fee Pending' : 'Pending Verification' ?></div>
         </div>
 
         <div class="modern-stat-card">
@@ -1034,15 +1208,27 @@ $totalPages = max(1, ceil($totalRows / $limit));
         </button>
         <button class="modern-tab <?= $statusFilter === 'pending' ? 'active' : '' ?>" onclick="filterPayments('pending')">
           Pending
-          <span class="tab-count"><?= $pendingVerification ?></span>
+          <span class="tab-count"><?= $paymentType === 'late_fee' ? $pendingLateFees : $pendingVerification ?></span>
         </button>
         <button class="modern-tab <?= $statusFilter === 'verified' ? 'active' : '' ?>" onclick="filterPayments('verified')">
           Verified
-          <span class="tab-count"><?= mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM payments WHERE payment_status='verified'"))['c'] ?></span>
+          <span class="tab-count"><?php 
+            if ($paymentType === 'late_fee') {
+              echo mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM late_fee_payments WHERE payment_status='verified'"))['c'];
+            } else {
+              echo mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM payments WHERE payment_status='verified'"))['c'];
+            }
+          ?></span>
         </button>
-        <button class="modern-tab" onclick="filterPayments('released')">
+        <button class="modern-tab <?= $statusFilter === 'released' ? 'active' : '' ?>" onclick="filterPayments('released')">
           Released
-          <span class="tab-count"><?= mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM payments WHERE payment_status='released'"))['c'] ?></span>
+          <span class="tab-count"><?php 
+            if ($paymentType === 'late_fee') {
+              echo mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM late_fee_payments WHERE payment_status='released'"))['c'];
+            } else {
+              echo mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM payments WHERE payment_status='released'"))['c'];
+            }
+          ?></span>
         </button>
       </div>
 
@@ -1149,11 +1335,11 @@ $totalPages = max(1, ceil($totalRows / $limit));
             </button>
 
             <?php if ($row['payment_status'] === 'pending'): ?>
-            <button class="action-btn-modern primary" onclick="verifyPayment(<?= $row['id'] ?>, 'verify')">
+            <button class="action-btn-modern primary" onclick="verifyPayment(<?= $row['id'] ?>, 'verify', '<?= $paymentType ?>')">
               <i class="bi bi-check-circle"></i>
               Verify
             </button>
-            <button class="action-btn-modern danger" onclick="verifyPayment(<?= $row['id'] ?>, 'reject')">
+            <button class="action-btn-modern danger" onclick="verifyPayment(<?= $row['id'] ?>, 'reject', '<?= $paymentType ?>')">
               <i class="bi bi-x-circle"></i>
               Reject
             </button>
@@ -1206,15 +1392,15 @@ $totalPages = max(1, ceil($totalRows / $limit));
           of <strong><?= $totalRows ?></strong> payments
         </div>
         <div class="pagination-controls-modern">
-          <a href="?page=<?= max(1, $page - 1) ?>&status=<?= $statusFilter ?>" class="page-btn-modern">
+          <a href="?page=<?= max(1, $page - 1) ?>&status=<?= $statusFilter ?>&type=<?= $paymentType ?>" class="page-btn-modern">
             <i class="bi bi-chevron-left"></i>
           </a>
           <?php for ($i = 1; $i <= min($totalPages, 5); $i++): ?>
-          <a href="?page=<?= $i ?>&status=<?= $statusFilter ?>" class="page-btn-modern <?= $i == $page ? 'active' : '' ?>">
+          <a href="?page=<?= $i ?>&status=<?= $statusFilter ?>&type=<?= $paymentType ?>" class="page-btn-modern <?= $i == $page ? 'active' : '' ?>">
             <?= $i ?>
           </a>
           <?php endfor; ?>
-          <a href="?page=<?= min($totalPages, $page + 1) ?>&status=<?= $statusFilter ?>" class="page-btn-modern">
+          <a href="?page=<?= min($totalPages, $page + 1) ?>&status=<?= $statusFilter ?>&type=<?= $paymentType ?>" class="page-btn-modern">
             <i class="bi bi-chevron-right"></i>
           </a>
         </div>
@@ -1293,7 +1479,18 @@ $totalPages = max(1, ceil($totalRows / $limit));
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function filterPayments(status) {
-    window.location.href = `payment.php${status ? '?status=' + status : ''}`;
+    const currentType = '<?= $paymentType ?>';
+    let url = 'payment.php?';
+    
+    if (currentType) {
+        url += 'type=' + currentType;
+    }
+    
+    if (status) {
+        url += (currentType ? '&' : '') + 'status=' + status;
+    }
+    
+    window.location.href = url;
 }
 
 function viewPaymentDetails(payment) {
@@ -1465,10 +1662,12 @@ function submitPayout(e) {
     });
 }
 
-function verifyPayment(paymentId, action) {
+function verifyPayment(paymentId, action, paymentType = 'regular') {
+    const isLateFee = paymentType === 'late_fee';
+    
     const message = action === 'verify' ? 
-        'Are you sure you want to verify this payment? Funds will be held in escrow.' : 
-        'Are you sure you want to reject this payment? The booking will be cancelled.';
+        (isLateFee ? 'Are you sure you want to verify this late fee payment?' : 'Are you sure you want to verify this payment? Funds will be held in escrow.') : 
+        (isLateFee ? 'Are you sure you want to reject this late fee payment?' : 'Are you sure you want to reject this payment? The booking will be cancelled.');
     
     if (!confirm(message)) return;
 
@@ -1476,7 +1675,18 @@ function verifyPayment(paymentId, action) {
     formData.append('payment_id', paymentId);
     formData.append('action', action);
 
-    fetch('api/payment/verify_payment.php', {
+    // Route to correct API based on payment type
+    const apiUrl = isLateFee ? 'api/payment/verify_late_fee_payment.php' : 'api/payment/verify_payment.php';
+    
+    // For late fee payments, we need to send admin_id and different action names
+    if (isLateFee) {
+        formData.append('admin_id', <?= $_SESSION['admin_id'] ?? 1 ?>);
+        formData.delete('action');
+        formData.append('action', action === 'verify' ? 'approve' : 'reject');
+        formData.append('notes', action === 'reject' ? 'Payment verification failed' : 'Payment verified successfully');
+    }
+
+    fetch(apiUrl, {
         method: 'POST',
         body: formData
     })
