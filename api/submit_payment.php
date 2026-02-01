@@ -168,6 +168,43 @@ try {
   }
 
   /* =========================================================
+     CREATE ADMIN NOTIFICATION
+     ========================================================= */
+  // Get booking and vehicle details for notification
+  $detailsQuery = "SELECT b.id, b.user_id, u.fullname as renter_name,
+                   CONCAT(COALESCE(c.brand, m.brand), ' ', COALESCE(c.model, m.model)) as vehicle_name,
+                   b.total_amount
+                   FROM bookings b
+                   LEFT JOIN users u ON b.user_id = u.id
+                   LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
+                   LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
+                   WHERE b.id = ?";
+  
+  $detailsStmt = $conn->prepare($detailsQuery);
+  $detailsStmt->bind_param("i", $bookingId);
+  $detailsStmt->execute();
+  $detailsResult = $detailsStmt->get_result();
+  $details = $detailsResult->fetch_assoc();
+  
+  if ($details) {
+    $adminMessage = "New payment of ₱" . number_format($amount, 2) . " submitted by {$details['renter_name']} for {$details['vehicle_name']} (Booking #{$bookingId}). Please verify.";
+    
+    // Check if admin_notifications table exists
+    $tableCheck = mysqli_query($conn, "SHOW TABLES LIKE 'admin_notifications'");
+    if (mysqli_num_rows($tableCheck) > 0) {
+      $notifQuery = "INSERT INTO admin_notifications 
+                     (type, title, message, link, icon, priority, read_status, created_at) 
+                     VALUES ('payment', 'New Payment Pending', ?, 'payment.php', 'credit-card', 'high', 'unread', NOW())";
+      
+      $notifStmt = $conn->prepare($notifQuery);
+      if ($notifStmt) {
+        $notifStmt->bind_param("s", $adminMessage);
+        $notifStmt->execute();
+      }
+    }
+  }
+
+  /* =========================================================
      COMMIT
      ========================================================= */
   mysqli_commit($conn);

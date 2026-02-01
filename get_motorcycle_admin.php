@@ -524,7 +524,7 @@ $stats = $statsQuery->fetch_assoc();
     <div class="notification-dropdown">
         <button class="notification-btn" title="Notifications">
             <i class="bi bi-bell"></i>
-            <span class="notification-badge" style="display: none;">0</span>
+            <span class="notification-badge"></span>
         </button>
     </div>
     <div class="user-avatar">

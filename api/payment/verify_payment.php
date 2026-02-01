@@ -187,16 +187,16 @@ try {
         // Notify renter - different message for late fee payments
         if ($isLateFeePayment) {
             $sql = "
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'Late Fee Payment Verified ✓', CONCAT('Your late fee payment of ₱', ?, ' has been verified. Thank you for settling the overdue charges.'))
+            INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+            VALUES (?, 'Late Fee Payment Verified ✓', CONCAT('Your late fee payment of ₱', ?, ' has been verified. Thank you for settling the overdue charges.'), 'payment_verified', 'unread', NOW())
             ";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("id", $row['user_id'], $amount);
             $stmt->execute();
         } else {
             $sql = "
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'Payment Verified ✓', 'Your payment has been verified. Booking approved!')
+            INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+            VALUES (?, 'Payment Verified ✓', 'Your payment has been verified. Booking approved!', 'payment_verified', 'unread', NOW())
             ";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("i", $row['user_id']);
@@ -206,16 +206,16 @@ try {
         // Notify owner - different message for late fee payments
         if ($isLateFeePayment) {
             $sql = "
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'Late Fee Payment Received 💰', CONCAT('Booking #', ?, ' late fee payment of ₱', ?, ' has been received (Rental: ₱', ?, ' + Late Fee: ₱', ?, ').'))
+            INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+            VALUES (?, 'Late Fee Payment Received 💰', CONCAT('Booking #', ?, ' late fee payment of ₱', ?, ' has been received (Rental: ₱', ?, ' + Late Fee: ₱', ?, ').'), 'payment_received', 'unread', NOW())
             ";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("iiddd", $row['owner_id'], $bookingId, $amount, $rentalAmount, $lateFeeAmount);
             $stmt->execute();
         } else {
             $sql = "
-            INSERT INTO notifications (user_id, title, message)
-            VALUES (?, 'New Booking 🚗', CONCAT('Booking #', ?, ' has been confirmed. Payment received.'))
+            INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+            VALUES (?, 'New Booking 🚗', CONCAT('Booking #', ?, ' has been confirmed. Payment received.'), 'booking_confirmed', 'unread', NOW())
             ";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("ii", $row['owner_id'], $bookingId);

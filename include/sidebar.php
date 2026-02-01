@@ -140,6 +140,19 @@
     <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
       <i class="bi bi-person"></i>
       <span>User Management</span>
+      <?php
+      // Get pending user verifications count
+      if (isset($conn)) {
+        $user_verif_query = "SELECT COUNT(*) as count FROM user_verifications WHERE status = 'pending'";
+        $user_verif_result = mysqli_query($conn, $user_verif_query);
+        if ($user_verif_result) {
+          $user_verif_data = mysqli_fetch_assoc($user_verif_result);
+          if ($user_verif_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $user_verif_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
     </a>
   </div>
 
@@ -149,10 +162,36 @@
     <a href="get_cars_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'get_cars_admin.php' ? 'active' : ''; ?>">
       <i class="bi bi-car-front"></i>
       <span>Car Listings</span>
+      <?php
+      // Get pending car listings count
+      if (isset($conn)) {
+        $car_pending_query = "SELECT COUNT(*) as count FROM cars WHERE status = 'pending'";
+        $car_pending_result = mysqli_query($conn, $car_pending_query);
+        if ($car_pending_result) {
+          $car_pending_data = mysqli_fetch_assoc($car_pending_result);
+          if ($car_pending_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $car_pending_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
     </a>
     <a href="get_motorcycle_admin.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'get_motorcycle_admin.php' ? 'active' : ''; ?>">
       <i class="bi bi-bicycle"></i>
       <span>Motorcycle Listings</span>
+      <?php
+      // Get pending motorcycle listings count
+      if (isset($conn)) {
+        $moto_pending_query = "SELECT COUNT(*) as count FROM motorcycles WHERE status = 'pending'";
+        $moto_pending_result = mysqli_query($conn, $moto_pending_query);
+        if ($moto_pending_result) {
+          $moto_pending_data = mysqli_fetch_assoc($moto_pending_result);
+          if ($moto_pending_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $moto_pending_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
     </a>
   </div>
 
@@ -162,10 +201,51 @@
     <a href="bookings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'bookings.php' ? 'active' : ''; ?>">
       <i class="bi bi-book"></i>
       <span>Bookings</span>
+      <?php
+      // Get pending bookings count
+      if (isset($conn)) {
+        $booking_pending_query = "SELECT COUNT(*) as count FROM bookings WHERE status = 'pending'";
+        $booking_pending_result = mysqli_query($conn, $booking_pending_query);
+        if ($booking_pending_result) {
+          $booking_pending_data = mysqli_fetch_assoc($booking_pending_result);
+          if ($booking_pending_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $booking_pending_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
     </a>
     <a href="payment.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'payment.php' ? 'active' : ''; ?>">
       <i class="bi bi-credit-card"></i>
       <span>Payments</span>
+      <?php
+      // Get pending payment verification count (regular + late fees)
+      if (isset($conn)) {
+        // Regular payments pending verification
+        $regular_pending = mysqli_fetch_assoc(mysqli_query($conn,
+          "SELECT COUNT(*) AS c FROM payments p
+           WHERE p.payment_status='pending'
+           AND NOT EXISTS (
+               SELECT 1 FROM payment_transactions pt 
+               WHERE pt.booking_id = p.booking_id 
+               AND pt.reference_id = p.payment_reference
+               AND pt.transaction_type = 'late_fee_payment'
+           )"
+        ))['c'];
+        
+        // Late fee payments pending verification
+        $latefee_pending = mysqli_fetch_assoc(mysqli_query($conn,
+          "SELECT COUNT(*) AS c FROM late_fee_payments 
+           WHERE payment_status='pending'"
+        ))['c'];
+        
+        $total_pending = $regular_pending + $latefee_pending;
+        
+        if ($total_pending > 0) {
+          echo '<span class="menu-badge">' . $total_pending . '</span>';
+        }
+      }
+      ?>
     </a>
   </div>
 
@@ -249,6 +329,11 @@
   <!-- REPORTS -->
   <div class="menu-section">
     <div class="menu-label">Report</div>
+    <a href="calendar.php" 
+       class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'calendar.php' ? 'active' : ''; ?>">
+      <i class="bi bi-calendar3"></i>
+      <span>Event Calendar</span>
+    </a>
     <a href="statistics.php" 
        class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'statistics.php' ? 'active' : ''; ?>">
       <i class="bi bi-bar-chart"></i>
@@ -257,11 +342,42 @@
     <a href="reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
       <i class="bi bi-file-text"></i>
       <span>User Reports</span>
+      <?php
+      // Get unresolved reports count (pending + under_review)
+      if (isset($conn)) {
+        $reports_query = "SELECT COUNT(*) as count FROM reports WHERE status IN ('pending', 'under_review')";
+        $reports_result = mysqli_query($conn, $reports_query);
+        if ($reports_result) {
+          $reports_data = mysqli_fetch_assoc($reports_result);
+          if ($reports_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $reports_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
     </a>
   </div>
 
   <!-- SYSTEM -->
   <div class="menu-section">
+    <div class="menu-label">System</div>
+    <a href="notifications.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'notifications.php' ? 'active' : ''; ?>">
+      <i class="bi bi-bell"></i>
+      <span>Notifications</span>
+      <?php
+      // Get unread admin notifications count
+      if (isset($conn)) {
+        $notif_query = "SELECT COUNT(*) as count FROM admin_notifications WHERE read_status = 'unread'";
+        $notif_result = mysqli_query($conn, $notif_query);
+        if ($notif_result) {
+          $notif_data = mysqli_fetch_assoc($notif_result);
+          if ($notif_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $notif_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
     <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
       <i class="bi bi-gear"></i>
       <span>Settings</span>
@@ -274,5 +390,99 @@
 </aside>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+// Real-time badge update system
+(function() {
+    const BADGE_UPDATE_INTERVAL = 30000; // Update every 30 seconds
+    
+    // Map of badge IDs to their menu items
+    const badgeMap = {
+        'users': 'users.php',
+        'cars': 'get_cars_admin.php',
+        'motorcycles': 'get_motorcycle_admin.php',
+        'bookings': 'bookings.php',
+        'payments': 'payment.php',
+        'overdue': 'overdue_management.php',
+        'refunds': 'refunds.php',
+        'payouts': 'payouts.php',
+        'escrow': 'escrow.php',
+        'reports': 'reports.php',
+        'notifications': 'notifications.php'
+    };
+    
+    function updateBadges() {
+        fetch('api/get_sidebar_badge_counts.php')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.badges) {
+                    Object.keys(data.badges).forEach(key => {
+                        const count = data.badges[key];
+                        const menuHref = badgeMap[key];
+                        
+                        if (menuHref) {
+                            // Find the menu item by href
+                            const menuItem = document.querySelector(`a.menu-item[href="${menuHref}"]`);
+                            
+                            if (menuItem) {
+                                // Find existing badge or create new one
+                                let badge = menuItem.querySelector('.menu-badge');
+                                
+                                if (count > 0) {
+                                    if (!badge) {
+                                        // Create new badge
+                                        badge = document.createElement('span');
+                                        badge.className = 'menu-badge';
+                                        
+                                        // Special styling for overdue
+                                        if (key === 'overdue') {
+                                            badge.style.background = '#dc3545';
+                                        }
+                                        
+                                        menuItem.appendChild(badge);
+                                    }
+                                    
+                                    // Update badge count with animation
+                                    if (badge.textContent !== count.toString()) {
+                                        badge.style.transform = 'scale(1.2)';
+                                        setTimeout(() => {
+                                            badge.style.transform = 'scale(1)';
+                                        }, 200);
+                                    }
+                                    
+                                    badge.textContent = count;
+                                } else {
+                                    // Remove badge if count is 0
+                                    if (badge) {
+                                        badge.remove();
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    console.log('Sidebar badges updated:', data.timestamp);
+                }
+            })
+            .catch(error => {
+                console.error('Failed to update badges:', error);
+            });
+    }
+    
+    // Update badges immediately on load
+    updateBadges();
+    
+    // Set up periodic updates
+    setInterval(updateBadges, BADGE_UPDATE_INTERVAL);
+    
+    // Update when page gains focus (user returns to tab)
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            updateBadges();
+        }
+    });
+})();
+</script>
+
 </body>
 </html>

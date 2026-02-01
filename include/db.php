@@ -15,6 +15,9 @@ if ($conn->connect_error) {
     die("MySQLi Error: " . $conn->connect_error);
 }
 
+// Set charset to UTF-8mb4 for proper emoji/unicode support
+$conn->set_charset("utf8mb4");
+
 // PDO Connection (for GPS tracking)
 try {
     $pdo = new PDO(

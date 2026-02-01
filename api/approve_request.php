@@ -52,24 +52,26 @@ $car_name  = $booking['car_name'];
 // SAVE NOTIFICATION FOR RENTER
 $title_renter = "Booking Approved";
 $body_renter  = "Your booking for {$car_name} has been approved.";
+$type_renter  = "booking_approved";
 
 $notif_r = $conn->prepare("
-    INSERT INTO notifications (user_id, title, message)
-    VALUES (?, ?, ?)
+    INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+    VALUES (?, ?, ?, ?, 'unread', NOW())
 ");
-$notif_r->bind_param("iss", $renter_id, $title_renter, $body_renter);
+$notif_r->bind_param("isss", $renter_id, $title_renter, $body_renter, $type_renter);
 $notif_r->execute();
 $notif_r->close();
 
 // SAVE NOTIFICATION FOR OWNER
 $title_owner = "You Approved a Booking";
 $body_owner  = "You approved booking #{$booking_id} for {$car_name}.";
+$type_owner  = "booking_update";
 
 $notif_o = $conn->prepare("
-    INSERT INTO notifications (user_id, title, message)
-    VALUES (?, ?, ?)
+    INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+    VALUES (?, ?, ?, ?, 'unread', NOW())
 ");
-$notif_o->bind_param("iss", $owner_id, $title_owner, $body_owner);
+$notif_o->bind_param("isss", $owner_id, $title_owner, $body_owner, $type_owner);
 $notif_o->execute();
 $notif_o->close();
 

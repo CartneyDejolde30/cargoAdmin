@@ -52,24 +52,26 @@ $car_name  = $booking['car_name'];
 // Notification for renter
 $title_r = "Booking Rejected";
 $msg_r   = "Your booking for {$car_name} was rejected. Reason: {$reason}";
+$type_r  = "booking_rejected";
 
 $notifR = $conn->prepare("
-    INSERT INTO notifications (user_id, title, message)
-    VALUES (?, ?, ?)
+    INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+    VALUES (?, ?, ?, ?, 'unread', NOW())
 ");
-$notifR->bind_param("iss", $renter_id, $title_r, $msg_r);
+$notifR->bind_param("isss", $renter_id, $title_r, $msg_r, $type_r);
 $notifR->execute();
 $notifR->close();
 
 // Owner log notification
 $title_o = "Booking Rejected";
 $msg_o   = "You rejected booking #{$booking_id} for {$car_name}.";
+$type_o  = "booking_update";
 
 $notifO = $conn->prepare("
-    INSERT INTO notifications (user_id, title, message)
-    VALUES (?, ?, ?)
+    INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+    VALUES (?, ?, ?, ?, 'unread', NOW())
 ");
-$notifO->bind_param("iss", $owner_id, $title_o, $msg_o);
+$notifO->bind_param("isss", $owner_id, $title_o, $msg_o, $type_o);
 $notifO->execute();
 $notifO->close();
 

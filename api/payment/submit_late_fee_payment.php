@@ -217,25 +217,14 @@ try {
     $paymentBreakdown = $isRentalPaid 
         ? "Late Fee Only: ₱{$lateFeeAmount} (rental already paid)"
         : "Rental: ₱{$actualRentalAmount} + Late Fee: ₱{$lateFeeAmount}";
-    $adminNotification = "New late fee payment submitted for {$booking['vehicle_name']} by {$booking['renter_name']}. Amount: ₱{$totalAmount} ({$paymentBreakdown})";
+    $adminNotification = "New late fee payment of ₱" . number_format($totalAmount, 2) . " submitted by {$booking['renter_name']} for {$booking['vehicle_name']} (Booking #{$bookingId}). {$paymentBreakdown}. Please verify.";
     
     // Check if admin_notifications table exists
     $tableCheck = mysqli_query($conn, "SHOW TABLES LIKE 'admin_notifications'");
     if (mysqli_num_rows($tableCheck) > 0) {
         $notifQuery = "INSERT INTO admin_notifications 
-                       (admin_id, title, message, type, related_id, created_at) 
-                       VALUES (1, 'Late Fee Payment Pending', ?, 'payment', ?, NOW())";
-        
-        $stmt = mysqli_prepare($conn, $notifQuery);
-        if ($stmt) {
-            mysqli_stmt_bind_param($stmt, "si", $adminNotification, $paymentId);
-            mysqli_stmt_execute($stmt);
-        }
-    } else {
-        // Fallback to regular notifications
-        $notifQuery = "INSERT INTO notifications 
-                       (user_id, title, message, read_status, created_at) 
-                       VALUES (1, 'Late Fee Payment Pending', ?, 'unread', NOW())";
+                       (type, title, message, link, icon, priority, read_status, created_at) 
+                       VALUES ('payment', 'Late Fee Payment Pending', ?, 'payment.php?type=late_fee', 'credit-card', 'high', 'unread', NOW())";
         
         $stmt = mysqli_prepare($conn, $notifQuery);
         if ($stmt) {

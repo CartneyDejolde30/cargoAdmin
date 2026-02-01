@@ -73,32 +73,45 @@ while ($row = $result->fetch_assoc()) {
     $blocked_dates[] = $row['blocked_date'];
 }
 
-// Also get dates with existing bookings
-$booking_query = "SELECT DISTINCT DATE(pickup_date) as booked_date
+// Get ALL dates with existing bookings (including dates BETWEEN pickup and return)
+// This ensures that if a booking is from Jan 10-15, ALL dates from Jan 10 to Jan 15 are marked as booked
+$booking_query = "SELECT 
+                    pickup_date,
+                    return_date
                   FROM bookings 
                   WHERE car_id = ? 
                   AND vehicle_type = ? 
                   AND status IN ('pending', 'approved', 'ongoing')
-                  AND pickup_date BETWEEN ? AND ?
-                  UNION
-                  SELECT DISTINCT DATE(return_date) as booked_date
-                  FROM bookings 
-                  WHERE car_id = ? 
-                  AND vehicle_type = ? 
-                  AND status IN ('pending', 'approved', 'ongoing')
-                  AND return_date BETWEEN ? AND ?";
+                  AND (
+                    (pickup_date BETWEEN ? AND ?) OR
+                    (return_date BETWEEN ? AND ?) OR
+                    (pickup_date <= ? AND return_date >= ?)
+                  )";
 
 $booking_stmt = $conn->prepare($booking_query);
-$booking_stmt->bind_param("isssisss", 
-    $vehicle_id, $vehicle_type, $start_date, $end_date,
-    $vehicle_id, $vehicle_type, $start_date, $end_date
+$booking_stmt->bind_param("isssssss", 
+    $vehicle_id, $vehicle_type, 
+    $start_date, $end_date,
+    $start_date, $end_date,
+    $start_date, $end_date
 );
 $booking_stmt->execute();
 $booking_result = $booking_stmt->get_result();
 
 $booked_dates = [];
 while ($row = $booking_result->fetch_assoc()) {
-    $booked_dates[] = $row['booked_date'];
+    $pickup = new DateTime($row['pickup_date']);
+    $return = new DateTime($row['return_date']);
+    
+    // Add all dates between pickup and return (inclusive)
+    $current = clone $pickup;
+    while ($current <= $return) {
+        $dateStr = $current->format('Y-m-d');
+        if (!in_array($dateStr, $booked_dates)) {
+            $booked_dates[] = $dateStr;
+        }
+        $current->modify('+1 day');
+    }
 }
 
 echo json_encode([

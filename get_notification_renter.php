@@ -1,5 +1,5 @@
 <?php
-header("Content-Type: application/json");
+header("Content-Type: application/json; charset=utf-8");
 header("Access-Control-Allow-Origin: *");
 
 require_once "include/db.php";
@@ -73,9 +73,18 @@ while ($row = $result->fetch_assoc()) {
     ];
 }
 
+// Get unread count
+$unreadStmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read_status = 'unread'");
+$unreadStmt->bind_param("i", $user_id);
+$unreadStmt->execute();
+$unreadResult = $unreadStmt->get_result()->fetch_assoc();
+$unreadCount = $unreadResult['count'] ?? 0;
+$unreadStmt->close();
+
 echo json_encode([
     "status" => "success",
-    "notifications" => $notifications
+    "notifications" => $notifications,
+    "unread_count" => $unreadCount
 ], JSON_UNESCAPED_UNICODE); // IMPORTANT for emojis
 
 $stmt->close();
