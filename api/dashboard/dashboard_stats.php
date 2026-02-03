@@ -15,30 +15,51 @@ if (!$owner_id) {
 
 try {
     // ========================================
-    // CAR STATISTICS
+    // VEHICLE STATISTICS (CARS + MOTORCYCLES)
     // ========================================
     
-    // Total Cars
-    $carStmt = $conn->prepare("SELECT COUNT(*) as total FROM cars WHERE owner_id = ?");
-    $carStmt->bind_param("s", $owner_id);
+    // ✅ FIXED: Total Vehicles - ONLY APPROVED (for dashboard)
+    // Fix: Use "ii" for integer binding instead of "ss" for string
+    $totalCarsQuery = "
+        SELECT 
+            (SELECT COUNT(*) FROM cars WHERE owner_id = ? AND status = 'approved') +
+            (SELECT COUNT(*) FROM motorcycles WHERE owner_id = ? AND status = 'approved') as total
+    ";
+    $carStmt = $conn->prepare($totalCarsQuery);
+    $carStmt->bind_param("ii", $owner_id, $owner_id);
     $carStmt->execute();
     $totalCars = $carStmt->get_result()->fetch_assoc()['total'];
     
-    // Approved Cars
-    $approvedStmt = $conn->prepare("SELECT COUNT(*) as total FROM cars WHERE owner_id = ? AND status = 'approved'");
-    $approvedStmt->bind_param("s", $owner_id);
+    // ✅ FIXED: Approved Vehicles (Cars + Motorcycles)
+    $approvedQuery = "
+        SELECT 
+            (SELECT COUNT(*) FROM cars WHERE owner_id = ? AND status = 'approved') +
+            (SELECT COUNT(*) FROM motorcycles WHERE owner_id = ? AND status = 'approved') as total
+    ";
+    $approvedStmt = $conn->prepare($approvedQuery);
+    $approvedStmt->bind_param("ii", $owner_id, $owner_id);
     $approvedStmt->execute();
     $approvedCars = $approvedStmt->get_result()->fetch_assoc()['total'];
     
-    // Pending Cars
-    $pendingStmt = $conn->prepare("SELECT COUNT(*) as total FROM cars WHERE owner_id = ? AND status = 'pending'");
-    $pendingStmt->bind_param("s", $owner_id);
+    // ✅ FIXED: Pending Vehicles (Cars + Motorcycles)
+    $pendingQuery = "
+        SELECT 
+            (SELECT COUNT(*) FROM cars WHERE owner_id = ? AND status = 'pending') +
+            (SELECT COUNT(*) FROM motorcycles WHERE owner_id = ? AND status = 'pending') as total
+    ";
+    $pendingStmt = $conn->prepare($pendingQuery);
+    $pendingStmt->bind_param("ii", $owner_id, $owner_id);
     $pendingStmt->execute();
     $pendingCars = $pendingStmt->get_result()->fetch_assoc()['total'];
     
-    // Rented Cars (currently active)
-    $rentedStmt = $conn->prepare("SELECT COUNT(*) as total FROM cars WHERE owner_id = ? AND status = 'rented'");
-    $rentedStmt->bind_param("s", $owner_id);
+    // ✅ FIXED: Rented Vehicles (Cars + Motorcycles currently active)
+    $rentedQuery = "
+        SELECT 
+            (SELECT COUNT(*) FROM cars WHERE owner_id = ? AND status = 'rented') +
+            (SELECT COUNT(*) FROM motorcycles WHERE owner_id = ? AND status = 'rented') as total
+    ";
+    $rentedStmt = $conn->prepare($rentedQuery);
+    $rentedStmt->bind_param("ii", $owner_id, $owner_id);
     $rentedStmt->execute();
     $rentedCars = $rentedStmt->get_result()->fetch_assoc()['total'];
 

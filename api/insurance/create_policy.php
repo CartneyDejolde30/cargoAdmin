@@ -4,12 +4,26 @@
  * Creates an insurance policy for a booking
  */
 
+// Error handling - ensure JSON output even on errors
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Don't display errors directly
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
 
-require_once __DIR__ . '/../../include/db.php';
+try {
+    require_once __DIR__ . '/../../include/db.php';
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => 'Database connection error: ' . $e->getMessage()]);
+    exit;
+}
+
+if (!isset($conn) || !$conn) {
+    echo json_encode(['success' => false, 'message' => 'Database connection not established']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
@@ -127,26 +141,28 @@ try {
     
     $roadsideAssistance = ($coverageType === 'comprehensive') ? 1 : 0;
     
+    // Format string: 18 parameters total
+    // Pattern: s i i s i i i s s s d d d d d d d i
     $stmt->bind_param(
-        "siiisiisssddddddd",
-        $policyNumber,
-        $providerId,
-        $bookingId,
-        $booking['vehicle_type'],
-        $booking['car_id'],
-        $booking['user_id'],
-        $booking['owner_id'],
-        $coverageType,
-        $booking['pickup_date'],
-        $booking['return_date'],
-        $premiumAmount,
-        $limits['limit'],
-        $limits['deductible'],
-        $limits['collision'],
-        $limits['liability'],
-        $limits['theft'],
-        $limits['injury'],
-        $roadsideAssistance
+        "siisiiiissdddddddi",
+        $policyNumber,           // 1. s - policy_number
+        $providerId,             // 2. i - provider_id
+        $bookingId,              // 3. i - booking_id
+        $booking['vehicle_type'], // 4. s - vehicle_type
+        $booking['car_id'],      // 5. i - vehicle_id
+        $booking['user_id'],     // 6. i - user_id
+        $booking['owner_id'],    // 7. i - owner_id
+        $coverageType,           // 8. s - coverage_type
+        $booking['pickup_date'], // 9. s - policy_start
+        $booking['return_date'], // 10. s - policy_end
+        $premiumAmount,          // 11. d - premium_amount
+        $limits['limit'],        // 12. d - coverage_limit
+        $limits['deductible'],   // 13. d - deductible
+        $limits['collision'],    // 14. d - collision_coverage
+        $limits['liability'],    // 15. d - liability_coverage
+        $limits['theft'],        // 16. d - theft_coverage
+        $limits['injury'],       // 17. d - personal_injury_coverage
+        $roadsideAssistance      // 18. i - roadside_assistance
     );
     
     if (!$stmt->execute()) {
@@ -205,7 +221,12 @@ try {
 } catch (Exception $e) {
     mysqli_rollback($conn);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+} catch (Error $e) {
+    mysqli_rollback($conn);
+    echo json_encode(['success' => false, 'message' => 'PHP Error: ' . $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
 }
 
-$conn->close();
+if (isset($conn)) {
+    $conn->close();
+}
 ?>

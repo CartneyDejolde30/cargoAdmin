@@ -200,7 +200,7 @@ SELECT
   ip.booking_id,
   b.user_id,
   b.owner_id,
-  CONCAT(u.firstname, ' ', u.lastname) AS renter_name,
+  u.fullname AS renter_name,
   ip.coverage_type,
   ip.premium_amount,
   ip.coverage_limit,
@@ -226,7 +226,7 @@ SELECT
   ic.claimed_amount,
   ic.approved_amount,
   b.id AS booking_id,
-  CONCAT(u.firstname, ' ', u.lastname) AS claimant_name,
+  u.fullname AS claimant_name,
   ip.policy_number,
   ic.incident_date,
   ic.created_at AS claim_date

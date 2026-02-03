@@ -3,12 +3,26 @@
  * Get Insurance Policy Details
  */
 
+// Error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 header('Access-Control-Allow-Headers: Content-Type');
 
-require_once __DIR__ . '/../../include/db.php';
+try {
+    require_once __DIR__ . '/../../include/db.php';
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => 'Database connection error: ' . $e->getMessage()]);
+    exit;
+}
+
+if (!isset($conn) || !$conn) {
+    echo json_encode(['success' => false, 'message' => 'Database connection not established']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
@@ -35,9 +49,9 @@ try {
             b.return_date,
             b.total_amount as booking_amount,
             b.vehicle_type,
-            CONCAT(u.firstname, ' ', u.lastname) AS renter_name,
+            u.fullname AS renter_name,
             u.email as renter_email,
-            u.contact as renter_contact
+            u.phone as renter_contact
         FROM insurance_policies ip
         JOIN insurance_providers prov ON ip.provider_id = prov.id
         JOIN bookings b ON ip.booking_id = b.id
@@ -106,7 +120,11 @@ try {
     
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+} catch (Error $e) {
+    echo json_encode(['success' => false, 'message' => 'PHP Error: ' . $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
 }
 
-$conn->close();
+if (isset($conn)) {
+    $conn->close();
+}
 ?>

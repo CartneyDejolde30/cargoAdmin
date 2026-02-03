@@ -76,7 +76,7 @@ try {
         }
         
         $coverageTypes[] = [
-            'id' => $row['id'],
+            'id' => intval($row['id']),
             'name' => $row['coverage_name'],
             'code' => strtolower($row['coverage_code']),
             'description' => $row['description'],
@@ -85,12 +85,12 @@ try {
             'max_coverage' => floatval($row['max_coverage_amount']),
             'is_mandatory' => (bool)$row['is_mandatory'],
             'features' => [
-                'collision_damage' => $details['collision'],
-                'third_party_liability' => $details['liability'],
-                'theft_protection' => $details['theft'],
-                'personal_injury' => $details['injury'],
-                'roadside_assistance' => $details['roadside'],
-                'deductible' => $details['deductible']
+                'collision_damage' => floatval($details['collision']),
+                'third_party_liability' => floatval($details['liability']),
+                'theft_protection' => floatval($details['theft']),
+                'personal_injury' => floatval($details['injury']),
+                'roadside_assistance' => (bool)$details['roadside'],
+                'deductible' => floatval($details['deductible'])
             ]
         ];
     }
@@ -98,7 +98,7 @@ try {
     echo json_encode([
         'success' => true,
         'data' => $coverageTypes
-    ]);
+    ], JSON_NUMERIC_CHECK);
     
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);

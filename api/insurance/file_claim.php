@@ -3,12 +3,26 @@
  * File Insurance Claim
  */
 
+// Error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
 
-require_once __DIR__ . '/../../include/db.php';
+try {
+    require_once __DIR__ . '/../../include/db.php';
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => 'Database connection error: ' . $e->getMessage()]);
+    exit;
+}
+
+if (!isset($conn) || !$conn) {
+    echo json_encode(['success' => false, 'message' => 'Database connection not established']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
@@ -95,19 +109,20 @@ try {
         )
     ");
     
+    // 11 parameters: s i i i s s s s s d s
     $stmt->bind_param(
-        "siiissssds",
-        $claimNumber,
-        $policyId,
-        $bookingId,
-        $userId,
-        $claimType,
-        $incidentDate,
-        $incidentLocation,
-        $incidentDescription,
-        $policeReportNumber,
-        $claimedAmount,
-        $evidencePhotosJson
+        "siiisssssds",
+        $claimNumber,            // 1. s - claim_number
+        $policyId,               // 2. i - policy_id
+        $bookingId,              // 3. i - booking_id
+        $userId,                 // 4. i - user_id
+        $claimType,              // 5. s - claim_type
+        $incidentDate,           // 6. s - incident_date
+        $incidentLocation,       // 7. s - incident_location
+        $incidentDescription,    // 8. s - incident_description
+        $policeReportNumber,     // 9. s - police_report_number
+        $claimedAmount,          // 10. d - claimed_amount
+        $evidencePhotosJson      // 11. s - evidence_photos
     );
     
     if (!$stmt->execute()) {
@@ -161,7 +176,12 @@ try {
 } catch (Exception $e) {
     mysqli_rollback($conn);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+} catch (Error $e) {
+    mysqli_rollback($conn);
+    echo json_encode(['success' => false, 'message' => 'PHP Error: ' . $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
 }
 
-$conn->close();
+if (isset($conn)) {
+    $conn->close();
+}
 ?>

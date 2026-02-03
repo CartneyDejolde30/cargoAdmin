@@ -324,6 +324,23 @@
       }
       ?>
     </a>
+    <a href="insurance.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'insurance.php' ? 'active' : ''; ?>">
+      <i class="bi bi-shield-check"></i>
+      <span>Insurance Management</span>
+      <?php
+      // Get pending claims count
+      if (isset($conn)) {
+        $insurance_query = "SELECT COUNT(*) as count FROM insurance_claims WHERE status IN ('submitted', 'under_review')";
+        $insurance_result = mysqli_query($conn, $insurance_query);
+        if ($insurance_result) {
+          $insurance_data = mysqli_fetch_assoc($insurance_result);
+          if ($insurance_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $insurance_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
   </div>
 
   <!-- REPORTS -->
@@ -407,6 +424,7 @@
         'refunds': 'refunds.php',
         'payouts': 'payouts.php',
         'escrow': 'escrow.php',
+        'insurance': 'insurance.php',
         'reports': 'reports.php',
         'notifications': 'notifications.php'
     };
