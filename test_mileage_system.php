@@ -253,7 +253,7 @@ echo "</div>";
 // TEST 10: API Connectivity Test
 echo "<div class='test-section'>";
 echo "<h2>Test 10: API Connectivity</h2>";
-$base_url = "http://10.218.197.49/carGOAdmin/";
+$base_url = "http://10.77.127.2/carGOAdmin/";
 $test_api = $base_url . "api/mileage/get_mileage_details.php?booking_id=999";
 
 echo "<p>Testing API endpoint: <code>$test_api</code></p>";

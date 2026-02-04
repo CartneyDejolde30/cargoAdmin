@@ -461,7 +461,7 @@ $stats = $stats_result->fetch_assoc();
         }
 
         function displayMileageDetails(data) {
-            const baseUrl = 'http://10.218.197.49/carGOAdmin/';
+            const baseUrl = 'http://10.77.127.2/carGOAdmin/';
             let html = `
                 <div class="info-row">
                     <span class="info-label">Booking ID:</span>

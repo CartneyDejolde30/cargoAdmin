@@ -109,7 +109,7 @@ try {
     $carName = trim($row['car_brand'] . ' ' . $row['car_model'] . ' ' . $row['car_year']);
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.218.197.49/carGOAdmin/' . $carImage;
+        $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
     }
     
     // Calculate rental duration

@@ -22,7 +22,7 @@ echo "<style>
 echo "<h1>🧪 API Endpoints Test</h1>";
 echo "<p>Testing all mileage monitoring API endpoints...</p>";
 
-$base_url = "http://10.218.197.49/carGOAdmin/api/mileage/";
+$base_url = "http://10.77.127.2/carGOAdmin/api/mileage/";
 $tests_passed = 0;
 $tests_failed = 0;
 

@@ -1,0 +1,6 @@
+[03-Feb-2026 11:24:57 Europe/Berlin] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'dbcargo.late_fee_payments' doesn't exist in C:\xampp\htdocs\carGOAdmin\include\sidebar.php:237
+Stack trace:
+#0 C:\xampp\htdocs\carGOAdmin\include\sidebar.php(237): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 C:\xampp\htdocs\carGOAdmin\users.php(431): include('C:\\xampp\\htdocs...')
+#2 {main}
+  thrown in C:\xampp\htdocs\carGOAdmin\include\sidebar.php on line 237
