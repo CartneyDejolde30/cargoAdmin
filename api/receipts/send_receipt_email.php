@@ -1,17 +1,20 @@
 <?php
-require_once __DIR__ . '/../include/db.php';
+require_once __DIR__ . '/../../include/config.php';
+require_once __DIR__ . '/../../include/db.php';
+require_once __DIR__ . '/../../include/smtp_mailer.php';
 require_once __DIR__ . '/generate_receipt.php';
 
-function sendReceiptEmail($bookingId, $conn = null) {
+function sendReceiptEmail($bookingId, $connection = null) {
+    global $conn;
     $shouldClose = false;
-    if (!$conn) {
-        $conn = new mysqli("localhost", "root", "", "dbcargo");
-        $shouldClose = true;
+    if (!$connection) {
+        $connection = $conn; // Use centralized connection
+        $shouldClose = false; // Don't close shared connection
     }
     
     try {
         // Get booking and renter email
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             SELECT 
                 b.id,
                 b.total_amount,
@@ -33,7 +36,7 @@ function sendReceiptEmail($bookingId, $conn = null) {
         }
         
         // Generate receipt
-        $receipt = generateReceipt($bookingId, $conn);
+        $receipt = generateReceipt($bookingId, $connection);
         
         if (isset($receipt['error'])) {
             return $receipt;
@@ -80,32 +83,20 @@ function sendReceiptEmail($bookingId, $conn = null) {
         </html>
         ";
         
-        // Email headers
-        $headers = "MIME-Version: 1.0" . "\r\n";
-        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-        $headers .= "From: CarGo Rentals <noreply@cargo.ph>" . "\r\n";
-        
-        // Send email
-        if (function_exists('mail')) {
-            $sent = mail($to, $subject, $message, $headers);
+        // Send email using SMTP
+        try {
+            send_smtp_email($to, $subject, $message);
             
-            if ($sent) {
-                return [
-                    'success' => true,
-                    'message' => 'Receipt email sent successfully',
-                    'email' => $to
-                ];
-            } else {
-                return [
-                    'success' => false,
-                    'message' => 'Failed to send email (mail function failed)',
-                    'receipt' => $receipt
-                ];
-            }
-        } else {
+            return [
+                'success' => true,
+                'message' => 'Receipt email sent successfully via SMTP',
+                'email' => $to,
+                'receipt' => $receipt
+            ];
+        } catch (Exception $e) {
             return [
                 'success' => false,
-                'message' => 'Mail function not available. Receipt generated but not emailed.',
+                'message' => 'Failed to send email: ' . $e->getMessage(),
                 'receipt' => $receipt
             ];
         }
@@ -113,8 +104,8 @@ function sendReceiptEmail($bookingId, $conn = null) {
     } catch (Exception $e) {
         return ['error' => $e->getMessage()];
     } finally {
-        if ($shouldClose) {
-            $conn->close();
+        if ($shouldClose && $connection) {
+            $connection->close();
         }
     }
 }

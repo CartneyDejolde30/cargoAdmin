@@ -73,8 +73,8 @@ try {
     $totalBookingsStmt->execute();
     $totalBookings = $totalBookingsStmt->get_result()->fetch_assoc()['total'];
     
-    // Pending Requests
-    $pendingRequestsStmt = $conn->prepare("SELECT COUNT(*) as total FROM bookings WHERE owner_id = ? AND status = 'pending'");
+    // Pending Requests (only count bookings with verified payments)
+    $pendingRequestsStmt = $conn->prepare("SELECT COUNT(*) as total FROM bookings WHERE owner_id = ? AND status = 'pending' AND payment_status = 'paid'");
     $pendingRequestsStmt->bind_param("s", $owner_id);
     $pendingRequestsStmt->execute();
     $pendingRequests = $pendingRequestsStmt->get_result()->fetch_assoc()['total'];
@@ -110,24 +110,25 @@ try {
     // ========================================
     
     // Total Income (all secured and completed payments)
+    // FIX: Use IF-ELSEIF logic via CASE to prevent duplicate counting
     $totalIncomeStmt = $conn->prepare("
         SELECT 
             COALESCE(SUM(
-                b.owner_payout + 
-                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                CASE
+                    -- Priority 1: Payout already completed (final state)
+                    WHEN b.payout_status = 'completed' THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    -- Priority 2: Money held in escrow (secured but not paid out yet)
+                    WHEN b.escrow_status IN ('held', 'released_to_owner') THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    -- Priority 3: Completed rental with verified payment (legacy bookings)
+                    WHEN b.status = 'completed' AND b.payment_verified_at IS NOT NULL THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    ELSE 0
+                END
             ), 0) as total
         FROM bookings b
-        WHERE b.owner_id = ? 
-        AND (
-            -- Money in escrow (secured for owner)
-            b.escrow_status IN ('held', 'released_to_owner')
-            OR 
-            -- Payout completed
-            b.payout_status = 'completed'
-            OR
-            -- Completed rental with verified payment
-            (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
-        )
+        WHERE b.owner_id = ?
     ");
     $totalIncomeStmt->bind_param("s", $owner_id);
     $totalIncomeStmt->execute();
@@ -150,19 +151,22 @@ try {
     $totalIncome = $totalIncome - $totalRefunds;
     
     // Monthly Income (current month)
+    // FIX: Use IF-ELSEIF logic via CASE to prevent duplicate counting
     $monthlyIncomeStmt = $conn->prepare("
         SELECT 
             COALESCE(SUM(
-                b.owner_payout + 
-                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                CASE
+                    WHEN b.payout_status = 'completed' THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    WHEN b.escrow_status IN ('held', 'released_to_owner') THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    WHEN b.status = 'completed' AND b.payment_verified_at IS NOT NULL THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    ELSE 0
+                END
             ), 0) as total
         FROM bookings b
         WHERE b.owner_id = ? 
-        AND (
-            b.escrow_status IN ('held', 'released_to_owner')
-            OR b.payout_status = 'completed'
-            OR (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
-        )
         AND YEAR(b.created_at) = YEAR(CURDATE())
         AND MONTH(b.created_at) = MONTH(CURDATE())
     ");
@@ -188,19 +192,22 @@ try {
     $monthlyIncome = $monthlyIncome - $monthlyRefunds;
     
     // Weekly Income (last 7 days)
+    // FIX: Use IF-ELSEIF logic via CASE to prevent duplicate counting
     $weeklyIncomeStmt = $conn->prepare("
         SELECT 
             COALESCE(SUM(
-                b.owner_payout + 
-                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                CASE
+                    WHEN b.payout_status = 'completed' THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    WHEN b.escrow_status IN ('held', 'released_to_owner') THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    WHEN b.status = 'completed' AND b.payment_verified_at IS NOT NULL THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    ELSE 0
+                END
             ), 0) as total
         FROM bookings b
         WHERE b.owner_id = ? 
-        AND (
-            b.escrow_status IN ('held', 'released_to_owner')
-            OR b.payout_status = 'completed'
-            OR (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
-        )
         AND b.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
     ");
     $weeklyIncomeStmt->bind_param("s", $owner_id);
@@ -224,19 +231,22 @@ try {
     $weeklyIncome = $weeklyIncome - $weeklyRefunds;
     
     // Today's Income
+    // FIX: Use IF-ELSEIF logic via CASE to prevent duplicate counting
     $todayIncomeStmt = $conn->prepare("
         SELECT 
             COALESCE(SUM(
-                b.owner_payout + 
-                CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                CASE
+                    WHEN b.payout_status = 'completed' THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    WHEN b.escrow_status IN ('held', 'released_to_owner') THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    WHEN b.status = 'completed' AND b.payment_verified_at IS NOT NULL THEN 
+                        b.owner_payout + CASE WHEN b.late_fee_charged = 1 THEN COALESCE(b.late_fee_amount, 0) ELSE 0 END
+                    ELSE 0
+                END
             ), 0) as total
         FROM bookings b
         WHERE b.owner_id = ? 
-        AND (
-            b.escrow_status IN ('held', 'released_to_owner')
-            OR b.payout_status = 'completed'
-            OR (b.status = 'completed' AND b.payment_verified_at IS NOT NULL)
-        )
         AND DATE(b.created_at) = CURDATE()
     ");
     $todayIncomeStmt->bind_param("s", $owner_id);
@@ -260,16 +270,18 @@ try {
     $todayIncome = $todayIncome - $todayRefunds;
     
     // Get late fees breakdown
+    // FIX: Use IF-ELSEIF logic via CASE to prevent duplicate counting
     $lateFeesStmt = $conn->prepare("
-        SELECT COALESCE(SUM(late_fee_amount), 0) as total
+        SELECT COALESCE(SUM(
+            CASE
+                WHEN payout_status = 'completed' AND late_fee_charged = 1 THEN late_fee_amount
+                WHEN escrow_status IN ('held', 'released_to_owner') AND late_fee_charged = 1 THEN late_fee_amount
+                WHEN status = 'completed' AND payment_verified_at IS NOT NULL AND late_fee_charged = 1 THEN late_fee_amount
+                ELSE 0
+            END
+        ), 0) as total
         FROM bookings
         WHERE owner_id = ?
-        AND late_fee_charged = 1
-        AND (
-            escrow_status IN ('held', 'released_to_owner')
-            OR payout_status = 'completed'
-            OR (status = 'completed' AND payment_verified_at IS NOT NULL)
-        )
     ");
     $lateFeesStmt->bind_param("s", $owner_id);
     $lateFeesStmt->execute();

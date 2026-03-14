@@ -10,6 +10,48 @@ if (!isset($_SESSION['admin_id'])) {
 $admin_id = $_SESSION['admin_id'];
 $admin_name = $_SESSION['fullname'] ?? 'Admin';
 
+// -----------------------------------------------------------------------------
+// Ensure admin_notifications table exists (self-healing for fresh/partial setups)
+// -----------------------------------------------------------------------------
+$tableCheck = mysqli_query($conn, "SHOW TABLES LIKE 'admin_notifications'");
+$tableExists = $tableCheck && mysqli_num_rows($tableCheck) > 0;
+
+if (!$tableExists) {
+    // Create table if missing (minimal schema aligned with your DB dump)
+    $createSql = "CREATE TABLE IF NOT EXISTS `admin_notifications` (
+        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `admin_id` int(11) DEFAULT NULL,
+        `type` enum('booking','payment','verification','report','car','user','system') NOT NULL DEFAULT 'system',
+        `title` varchar(255) NOT NULL,
+        `message` text NOT NULL,
+        `link` varchar(255) DEFAULT NULL,
+        `icon` varchar(50) DEFAULT 'bi-bell',
+        `priority` enum('low','medium','high','urgent') DEFAULT 'medium',
+        `read_status` enum('read','unread') DEFAULT 'unread',
+        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+        `read_at` timestamp NULL DEFAULT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+
+    mysqli_query($conn, $createSql);
+}
+
+// If table exists but is empty, insert one welcome notification (helps verify UI)
+$seedRes = mysqli_query($conn, "SELECT COUNT(*) AS c FROM admin_notifications");
+if ($seedRes) {
+    $seedCount = (int)(mysqli_fetch_assoc($seedRes)['c'] ?? 0);
+    if ($seedCount === 0) {
+        $welcomeTitle = 'Welcome to CarGo Admin';
+        $welcomeMsg = 'Notifications will appear here when there are new payments to verify, verifications to review, reports, and system alerts.';
+        $stmt = $conn->prepare("INSERT INTO admin_notifications (type, title, message, link, icon, priority, read_status, created_at) VALUES ('system', ?, ?, 'dashboard.php', 'bi-bell', 'low', 'unread', NOW())");
+        if ($stmt) {
+            $stmt->bind_param('ss', $welcomeTitle, $welcomeMsg);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+}
+
 // Pagination
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $limit = 20;
@@ -17,7 +59,8 @@ $offset = ($page - 1) * $limit;
 
 // Filters
 $status_filter = $_GET['status'] ?? 'all';
-$type_filter = $_GET['type'] ?? 'all';
+        $type_filter = $_GET['type'] ?? 'all';
+        $priority_filter = $_GET['priority'] ?? 'all';
 
 // Build WHERE clause
 $where_clauses = [];
@@ -25,16 +68,22 @@ if ($status_filter !== 'all') {
     $where_clauses[] = "read_status = '" . mysqli_real_escape_string($conn, $status_filter) . "'";
 }
 if ($type_filter !== 'all') {
-    $where_clauses[] = "type = '" . mysqli_real_escape_string($conn, $type_filter) . "'";
-}
+            $where_clauses[] = "type = '" . mysqli_real_escape_string($conn, $type_filter) . "'";
+        }
+        if ($priority_filter !== 'all') {
+            $where_clauses[] = "priority = '" . mysqli_real_escape_string($conn, $priority_filter) . "'";
+        }
 
 $where_sql = !empty($where_clauses) ? 'WHERE ' . implode(' AND ', $where_clauses) : '';
 
 // Get total count
 $count_query = "SELECT COUNT(*) as total FROM admin_notifications $where_sql";
 $count_result = mysqli_query($conn, $count_query);
-$total_notifications = mysqli_fetch_assoc($count_result)['total'];
-$total_pages = ceil($total_notifications / $limit);
+if (!$count_result) {
+    die('Notifications count query failed: ' . mysqli_error($conn));
+}
+$total_notifications = (int)(mysqli_fetch_assoc($count_result)['total'] ?? 0);
+$total_pages = max(1, (int)ceil($total_notifications / $limit));
 
 // Get notifications
 $query = "
@@ -65,6 +114,9 @@ $query = "
 ";
 
 $result = mysqli_query($conn, $query);
+if (!$result) {
+    die('Notifications list query failed: ' . mysqli_error($conn));
+}
 $notifications = [];
 while ($row = mysqli_fetch_assoc($result)) {
     $notifications[] = $row;
@@ -385,10 +437,20 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             </select>
             <select class="filter-select" id="typeFilter" onchange="applyFilters()">
                 <option value="all" <?= $type_filter === 'all' ? 'selected' : '' ?>>All Types</option>
-                <option value="booking">Bookings</option>
-                <option value="payment">Payments</option>
-                <option value="alert">Alerts</option>
-                <option value="info">Info</option>
+                <option value="booking" <?= $type_filter === 'booking' ? 'selected' : '' ?>>Bookings</option>
+                <option value="payment" <?= $type_filter === 'payment' ? 'selected' : '' ?>>Payments</option>
+                <option value="verification" <?= $type_filter === 'verification' ? 'selected' : '' ?>>Verifications</option>
+                <option value="report" <?= $type_filter === 'report' ? 'selected' : '' ?>>Reports</option>
+                <option value="car" <?= $type_filter === 'car' ? 'selected' : '' ?>>Car Listings</option>
+                <option value="user" <?= $type_filter === 'user' ? 'selected' : '' ?>>Users</option>
+                <option value="system" <?= $type_filter === 'system' ? 'selected' : '' ?>>System</option>
+            </select>
+            <select class="filter-select" id="priorityFilter" onchange="applyFilters()">
+                <option value="all" <?= $priority_filter === 'all' ? 'selected' : '' ?>>All Priorities</option>
+                <option value="low" <?= $priority_filter === 'low' ? 'selected' : '' ?>>Low</option>
+                <option value="medium" <?= $priority_filter === 'medium' ? 'selected' : '' ?>>Medium</option>
+                <option value="high" <?= $priority_filter === 'high' ? 'selected' : '' ?>>High</option>
+                <option value="urgent" <?= $priority_filter === 'urgent' ? 'selected' : '' ?>>Urgent</option>
             </select>
             <div style="margin-left: auto;">
                 <button class="btn btn-sm btn-outline-primary" onclick="markAllAsRead()">
@@ -447,7 +509,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                             <ul class="pagination justify-content-center mb-0">
                                 <?php for ($i = 1; $i <= $total_pages; $i++): ?>
                                     <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                                        <a class="page-link" href="?page=<?= $i ?>&status=<?= $status_filter ?>&type=<?= $type_filter ?>">
+                                        <a class="page-link" href="?page=<?= $i ?>&status=<?= $status_filter ?>&type=<?= $type_filter ?>&priority=<?= $priority_filter ?>">
                                             <?= $i ?>
                                         </a>
                                     </li>
@@ -465,7 +527,8 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
             const type = document.getElementById('typeFilter').value;
-            window.location.href = `notifications.php?status=${status}&type=${type}`;
+            const priority = document.getElementById('priorityFilter').value;
+            window.location.href = `notifications.php?status=${status}&type=${type}&priority=${priority}`;
         }
         
         function handleNotificationClick(id, link) {

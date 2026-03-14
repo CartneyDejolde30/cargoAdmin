@@ -131,7 +131,7 @@ $sql = "
         motorcycles.has_unlimited_mileage,
         users.fullname AS owner_name,
         users.address AS owner_address,
-        COALESCE(motorcycles.rating, 5) AS rating
+        COALESCE(motorcycles.rating, 0) AS rating
     FROM motorcycles
     JOIN users ON users.id = motorcycles.owner_id
     WHERE $whereClause

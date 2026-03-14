@@ -116,7 +116,11 @@ try {
         // Format vehicle image
         $vehicleImage = $row['vehicle_image'];
         if (!empty($vehicleImage) && strpos($vehicleImage, 'http') !== 0) {
-            $vehicleImage = 'http://10.77.127.2/carGOAdmin/' . $vehicleImage;
+            // Load config if not already loaded
+            if (!defined('BASE_URL')) {
+                require_once __DIR__ . '/../include/config.php';
+            }
+            $vehicleImage = BASE_URL . '/' . $vehicleImage;
         }
         
         // Determine status and badge

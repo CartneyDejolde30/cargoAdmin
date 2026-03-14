@@ -1,5 +1,7 @@
 <?php
+session_start();
 include 'include/db.php';
+include 'include/admin_profile.php';
 include 'include/dashboard_stats.php';
 
 // ============================================================================
@@ -46,6 +48,22 @@ $recentBookings = getRecentBookings($conn, 10);
 $avgBookingValue = getAverageBookingValue($conn);
 $utilizationRate = getCarUtilizationRate($conn);
 $cancellationRate = getCancellationRate($conn);
+
+// ============================================================================
+// WELCOME CARD CTA (dynamic)
+// ============================================================================
+$ctaHref = 'bookings.php';
+$ctaLabel = 'Go to Bookings';
+
+// Prioritize what admins usually need to act on first
+if (!empty($verifications['pending']) && (int)$verifications['pending'] > 0) {
+  $ctaHref = 'users.php?verification=pending';
+  $ctaLabel = 'Review Verifications';
+} elseif (!empty($bookings['pending']) && (int)$bookings['pending'] > 0) {
+  // In this dashboard stats, $bookings refers to cars listing stats (pending car listings)
+  $ctaHref = 'get_cars_admin.php?status=pending';
+  $ctaLabel = 'Review Pending Listings';
+}
 ?>
 
 <!DOCTYPE html>
@@ -90,7 +108,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
     </div>
@@ -98,9 +116,21 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
     <!-- Welcome Card -->
     <div class="welcome-card">
       <div class="welcome-content">
-        <h2>Get where you need to go<br>with our service</h2>
-        <p>Connect car owners with renters across Agusan del Sur. Manage your peer-to-peer platform with comprehensive coverage and the highest quality service.</p>
-        <button class="welcome-btn">Start Exploring</button>
+        <h2>Welcome back, <?= htmlspecialchars($currentAdminName) ?>.</h2>
+        <p>
+          Here’s a quick snapshot: <strong><?= formatNumber($users['total']) ?></strong> users,
+          <strong><?= formatNumber($bookings['active']) ?></strong> active listings,
+          and <strong><?= formatNumber($verifications['pending']) ?></strong> pending verifications.
+          Keep things moving by reviewing items that need your attention.
+        </p>
+        <div class="welcome-actions">
+          <a class="welcome-btn" href="<?= htmlspecialchars($ctaHref) ?>">
+            <?= htmlspecialchars($ctaLabel) ?>
+          </a>
+          <a class="welcome-btn secondary" href="notifications.php">
+            View Notifications
+          </a>
+        </div>
       </div>
       <svg class="welcome-illustration" viewBox="0 0 200 150" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="100" cy="100" r="40" fill="#1a1a1a" opacity="0.1"/>
@@ -117,7 +147,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
       <div class="stat-card">
         <div class="stat-header">
           <div class="stat-icon">
-            <i class="bi bi-currency-dollar"></i>
+            <span class="currency-symbol">₱</span>
           </div>
           <div class="stat-trend <?= $earningsGrowth >= 0 ? '' : 'down' ?>">
             <i class="bi bi-arrow-<?= $earningsGrowth >= 0 ? 'up' : 'down' ?>"></i>

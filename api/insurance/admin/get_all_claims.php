@@ -78,6 +78,19 @@ try {
     
     $claims = [];
     while ($row = $result->fetch_assoc()) {
+        $evidence = [];
+        if (!empty($row['evidence_photos'])) {
+            $decoded = json_decode($row['evidence_photos'], true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $p) {
+                    if (defined('BASE_URL') && strpos($p, 'http') !== 0) {
+                        $evidence[] = BASE_URL . '/' . $p;
+                    } else {
+                        $evidence[] = $p;
+                    }
+                }
+            }
+        }
         $claims[] = [
             'claim_id' => $row['id'],
             'claim_number' => $row['claim_number'],
@@ -89,12 +102,17 @@ try {
             ],
             'claim_type' => $row['claim_type'],
             'incident_date' => $row['incident_date'],
+            'incident_location' => $row['incident_location'],
+            'incident_description' => $row['incident_description'],
+            'police_report_number' => $row['police_report_number'],
             'claimed_amount' => floatval($row['claimed_amount']),
             'approved_amount' => floatval($row['approved_amount']),
             'status' => $row['status'],
             'priority' => $row['priority'],
             'created_at' => $row['created_at'],
-            'reviewed_at' => $row['reviewed_at']
+            'reviewed_at' => $row['reviewed_at'],
+            'evidence_photos' => $evidence,
+            'evidence_count' => count($evidence)
         ];
     }
     

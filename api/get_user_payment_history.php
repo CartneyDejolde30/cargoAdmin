@@ -13,6 +13,7 @@ $userId = intval($_GET['user_id']);
 
 try {
     // Get all payments for user with detailed booking info
+    // FIXED: Only get the latest payment per booking to avoid duplicates
     $stmt = $conn->prepare("
         SELECT 
             p.id AS payment_id,
@@ -33,13 +34,21 @@ try {
             b.owner_payout,
             b.escrow_status,
             b.payment_verified_at,
+            b.vehicle_type,
             
-            -- Car details
-            c.brand,
-            c.model,
-            c.car_year,
+            -- Car details (for cars)
+            c.brand AS car_brand,
+            c.model AS car_model,
+            c.car_year AS car_year,
             c.image AS car_image,
-            c.plate_number,
+            c.plate_number AS car_plate,
+            
+            -- Motorcycle details (for motorcycles)
+            m.brand AS moto_brand,
+            m.model AS moto_model,
+            m.motorcycle_year AS moto_year,
+            m.image AS moto_image,
+            m.plate_number AS moto_plate,
             
             -- Owner details
             u.fullname AS owner_name,
@@ -57,11 +66,17 @@ try {
             
         FROM payments p
         INNER JOIN bookings b ON p.booking_id = b.id
-        LEFT JOIN cars c ON b.car_id = c.id
+        LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
+        LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
         LEFT JOIN users u ON b.owner_id = u.id
         LEFT JOIN receipts r ON r.booking_id = b.id
         LEFT JOIN refunds ref ON ref.booking_id = b.id
         WHERE p.user_id = ?
+        AND p.id = (
+            SELECT MAX(id) 
+            FROM payments 
+            WHERE booking_id = p.booking_id
+        )
         ORDER BY p.created_at DESC
     ");
     
@@ -76,13 +91,34 @@ try {
     $pendingCount = 0;
     
     while ($row = $result->fetch_assoc()) {
-        // Format car name
-        $carFullName = trim($row['brand'] . ' ' . $row['model'] . ' ' . $row['car_year']);
+        // Determine vehicle type and get appropriate details
+        $vehicleType = $row['vehicle_type'] ?? 'car';
         
-        // Format car image
-        $carImage = $row['car_image'];
+        if ($vehicleType === 'motorcycle') {
+            $brand = $row['moto_brand'];
+            $model = $row['moto_model'];
+            $year = $row['moto_year'];
+            $vehicleImage = $row['moto_image'];
+            $plateNumber = $row['moto_plate'];
+        } else {
+            $brand = $row['car_brand'];
+            $model = $row['car_model'];
+            $year = $row['car_year'];
+            $vehicleImage = $row['car_image'];
+            $plateNumber = $row['car_plate'];
+        }
+        
+        // Format vehicle name
+        $carFullName = trim($brand . ' ' . $model . ' ' . $year);
+        
+        // Format vehicle image with full URL
+        $carImage = $vehicleImage;
         if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-            $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
+            // Load config if not already loaded
+            if (!defined('BASE_URL')) {
+                require_once __DIR__ . '/../include/config.php';
+            }
+            $carImage = BASE_URL . '/' . $carImage;
         }
         
         // Determine status badge
@@ -95,7 +131,14 @@ try {
         $hasReceipt = !empty($row['receipt_no']);
         
         // Update statistics
-        if (in_array($row['payment_status'], ['verified', 'paid', 'completed'])) {
+        // Don't count refunded transactions in pending
+        $currentRefundStatus = determineRefundStatus($row);
+        $isRefunded = ($currentRefundStatus === 'completed');
+        
+        if ($isRefunded) {
+            // Refunded transactions don't count in pending or paid
+            // They're in their own category
+        } elseif (in_array($row['payment_status'], ['verified', 'paid', 'completed'])) {
             $totalPaid += floatval($row['amount']);
             $verifiedCount++;
         } elseif ($row['payment_status'] === 'pending') {
@@ -123,7 +166,8 @@ try {
             // Car info
             'car_full_name' => $carFullName,
             'car_image' => $carImage,
-            'plate_number' => $row['plate_number'],
+            'plate_number' => $plateNumber,
+            'vehicle_type' => $vehicleType,
             
             // Owner info
             'owner_name' => $row['owner_name'],
@@ -139,10 +183,10 @@ try {
             'receipt_url' => $row['receipt_url'],
             'receipt_date' => $row['receipt_date'],
             
-            // Refund info
+            // Refund info - Check escrow_status for accurate refund state
             'refund_id' => $row['refund_id'],
-            'refund_status' => $row['refund_status'],
-            'refund_amount' => $row['refund_amount'],
+            'refund_status' => determineRefundStatus($row),
+            'refund_amount' => $row['refund_amount'] ? floatval($row['refund_amount']) : null,
             'can_request_refund' => $canRefund,
             
             // Status badge
@@ -221,6 +265,31 @@ function getPaymentStatusBadge($paymentStatus, $escrowStatus) {
         'color' => 'grey',
         'icon' => 'info'
     ];
+}
+
+function determineRefundStatus($row) {
+    // If there's no refund record, return null
+    if (empty($row['refund_id'])) {
+        return null;
+    }
+    
+    // Get the refund status from refunds table (most reliable source)
+    $refundStatus = $row['refund_status'];
+    
+    // If refund status is 'completed' OR 'approved', show as completed
+    // This is the PRIMARY check - refunds table is the source of truth
+    if (in_array($refundStatus, ['completed', 'approved'])) {
+        return 'completed';
+    }
+    
+    // FALLBACK: If escrow is refunded, refund is definitely completed
+    // (in case escrow was updated but refund wasn't)
+    if ($row['escrow_status'] === 'refunded') {
+        return 'completed';
+    }
+    
+    // Return the actual refund status from refunds table
+    return $refundStatus;
 }
 
 function canRequestRefund($payment) {

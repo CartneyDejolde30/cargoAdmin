@@ -1,10 +1,8 @@
 <?php
 
 // --- ERROR LOGGING (Recommended in development only) ---
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', __DIR__ . '/php_errors.log');
-error_reporting(E_ALL);
+// Load configuration (handles error reporting based on environment)
+require_once __DIR__ . '/include/config.php';
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
@@ -87,7 +85,7 @@ $user = [
     "phone" => $phone,
     "address" => $address,
     "profile_image" => !empty($profile_image)
-        ? "http://10.77.127.2/carGOAdmin/$uploadDir$profile_image"
+        ? BASE_URL . "/$uploadDir$profile_image"
         : ""
 ];
 

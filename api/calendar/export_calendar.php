@@ -176,12 +176,17 @@ try {
 
 function exportCSV($events, $month, $year) {
     $monthName = date('F', mktime(0, 0, 0, $month, 1));
-    $filename = "calendar_{$monthName}_{$year}.csv";
+    $filename = "calendar_{$monthName}_{$year}_" . date('His') . ".csv";
     
-    header('Content-Type: text/csv');
+    header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
     
     $output = fopen('php://output', 'w');
+    
+    // UTF-8 BOM for Excel compatibility
+    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
     
     // Header
     fputcsv($output, ['Date', 'Time', 'Event Type', 'Customer', 'Details', 'Status', 'Amount']);
@@ -205,10 +210,12 @@ function exportCSV($events, $month, $year) {
 
 function exportExcel($events, $month, $year) {
     $monthName = date('F', mktime(0, 0, 0, $month, 1));
-    $filename = "calendar_{$monthName}_{$year}.xls";
+    $filename = "calendar_{$monthName}_{$year}_" . date('His') . ".xls";
     
-    header('Content-Type: application/vnd.ms-excel');
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
     
     echo '<html xmlns:x="urn:schemas-microsoft-com:office:excel">';
     echo '<head><meta charset="UTF-8"></head>';

@@ -2,51 +2,37 @@
 /**
  * ============================================================================
  * GET REFUND HISTORY - For renter's refund history screen
- * DEBUG VERSION: Fixes "Unexpected character" error
  * ============================================================================
  */
 
-// CRITICAL: Prevent any output before JSON
-error_reporting(0); // Suppress all errors from displaying
+error_reporting(E_ALL);
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
-// Clear any existing output buffers
-if (ob_get_level()) {
-    ob_end_clean();
-}
-ob_start();
-
-// Set headers FIRST before any other output
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
-// Start session and connect to DB
 require_once '../../include/db.php';
 
-// Function to return JSON and exit cleanly
-function jsonResponse($data) {
-    ob_clean(); // Clean output buffer
-    echo json_encode($data);
-    exit;
-}
+try {
+    // ============================================================================
+    // GET USER ID
+    // ============================================================================
+    
+    $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
+    
+    if ($user_id <= 0) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid user ID'
+        ]);
+        exit;
+    }
 
 // ============================================================================
-// GET USER ID
-// ============================================================================
-
-$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
-
-if ($user_id <= 0) {
-    http_response_code(400);
-    jsonResponse([
-        'success' => false,
-        'message' => 'Invalid user ID'
-    ]);
-}
-
-// ============================================================================
-// GET REFUND HISTORY
-// ============================================================================
+    // GET REFUND HISTORY
+    // ============================================================================
 
 $query = "
     SELECT 
@@ -106,21 +92,23 @@ $query = "
     ORDER BY r.created_at DESC
 ";
 
-$stmt = mysqli_prepare($conn, $query);
-if (!$stmt) {
-    jsonResponse([
-        'success' => false,
-        'message' => 'Database error'
-    ]);
-}
-
-mysqli_stmt_bind_param($stmt, "i", $user_id);
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
+    $stmt = $conn->prepare($query);
+    if (!$stmt) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Query preparation failed: ' . $conn->error
+        ]);
+        exit;
+    }
+    
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
 $refunds = [];
 
-while ($row = mysqli_fetch_assoc($result)) {
+while ($row = $result->fetch_assoc()) {
     // Calculate final refund amount
     $refund_amount = floatval($row['refund_amount'] ?? 0);
     $deduction_amount = floatval($row['deduction_amount'] ?? 0);
@@ -133,7 +121,11 @@ while ($row = mysqli_fetch_assoc($result)) {
     // Build car image URL
     $car_image = $row['car_image'] ?? '';
     if ($car_image && strpos($car_image, 'http') !== 0) {
-        $car_image = 'http://10.244.29.49/carGOAdmin/' . $car_image;
+        // Load config if not already loaded
+        if (!defined('BASE_URL')) {
+            require_once __DIR__ . '/../../include/config.php';
+        }
+        $car_image = BASE_URL . '/' . $car_image;
     }
     
     $refunds[] = [
@@ -215,11 +207,11 @@ $stats_query = "
     WHERE user_id = ?
 ";
 
-$stmt = mysqli_prepare($conn, $stats_query);
-mysqli_stmt_bind_param($stmt, "i", $user_id);
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-$stats = mysqli_fetch_assoc($result);
+$stmt = $conn->prepare($stats_query);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$stats = $result->fetch_assoc();
 
 // Format statistics
 $statistics = [
@@ -229,18 +221,28 @@ $statistics = [
     'processing_count' => intval($stats['processing_count'] ?? 0),
     'completed_count' => intval($stats['completed_count'] ?? 0),
     'rejected_count' => intval($stats['rejected_count'] ?? 0),
-    'total_refunded' => floatval($stats['total_refunded'] ?? 0)
+    'total_refunded' => floatval($stats['total_refunded'] ?? 0),
+    'avg_processing_days' => 0.0  // Add this field for Flutter compatibility
 ];
 
 // ============================================================================
 // SUCCESS RESPONSE
 // ============================================================================
 
-mysqli_close($conn);
-
-jsonResponse([
-    'success' => true,
-    'refunds' => $refunds,
-    'statistics' => $statistics,
-    'count' => count($refunds)
-]);
+    $conn->close();
+    
+    echo json_encode([
+        'success' => true,
+        'refunds' => $refunds,
+        'statistics' => $statistics,
+        'count' => count($refunds)
+    ]);
+    
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Error: ' . $e->getMessage(),
+        'line' => $e->getLine()
+    ]);
+}

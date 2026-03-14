@@ -6,6 +6,7 @@ header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
 require_once __DIR__ . "/../include/db.php";
+require_once __DIR__ . "/security/suspension_guard.php";
 
 $response = ["success" => false, "message" => ""];
 
@@ -32,6 +33,9 @@ if (!empty($_POST['user_id'])) {
         echo json_encode(["success"=>false,"message"=>"User not found"]);
         exit;
     }
+
+    // Block suspended users
+    require_not_suspended($conn, $userId);
 
     if ($user['is_verified'] != 1) {
         echo json_encode(["success"=>false,"message"=>"Account not verified"]);
@@ -72,14 +76,33 @@ $table = ($vehicleType === 'motorcycle') ? 'motorcycles' : 'cars';
 /* =========================================================
    3️⃣ TIME + OTHER INPUTS
 ========================================================= */
-$pickupDate = $_POST['pickup_date'];
-$returnDate = $_POST['return_date'];
-
+$pickupDate = trim($_POST['pickup_date']);
+$returnDate = trim($_POST['return_date']);
 $pickupTime = $_POST['pickup_time'] ?? '09:00';
 $returnTime = $_POST['return_time'] ?? '18:00';
 
-$pickupTime = date("H:i:s", strtotime($pickupTime));
-$returnTime = date("H:i:s", strtotime($returnTime));
+$pickupTimeTs = strtotime($pickupTime);
+$returnTimeTs = strtotime($returnTime);
+$pickupTime = $pickupTimeTs !== false ? date("H:i:s", $pickupTimeTs) : '09:00:00';
+$returnTime = $returnTimeTs !== false ? date("H:i:s", $returnTimeTs) : '18:00:00';
+
+// Validate date formats and logical order (combine date+time for same-day booking support)
+$pickupTs = strtotime($pickupDate);
+$returnTs = strtotime($returnDate);
+if ($pickupTs === false || $returnTs === false) {
+    echo json_encode(["success"=>false,"message"=>"Invalid date format"]);
+    exit;
+}
+if ($pickupTs < strtotime(date('Y-m-d'))) {
+    echo json_encode(["success"=>false,"message"=>"Pickup date must be today or in the future"]);
+    exit;
+}
+$pickupDateTimeTs = strtotime($pickupDate . ' ' . $pickupTime);
+$returnDateTimeTs = strtotime($returnDate . ' ' . $returnTime);
+if ($returnDateTimeTs <= $pickupDateTimeTs) {
+    echo json_encode(["success"=>false,"message"=>"Return date/time must be after pickup date/time"]);
+    exit;
+}
 
 $rentalPeriod = $_POST['rental_period'] ?? 'Day';
 $needsDelivery = intval($_POST['needs_delivery'] ?? 0);
@@ -112,77 +135,126 @@ try {
     }
 
     /* =========================================================
+       4b️⃣ CHECK FOR OVERLAPPING BOOKINGS (with row-level lock)
+    ========================================================= */
+    $overlapStmt = $conn->prepare("
+        SELECT id FROM bookings
+        WHERE car_id = ?
+          AND vehicle_type = ?
+          AND status NOT IN ('cancelled', 'rejected')
+          AND pickup_date < ?
+          AND return_date > ?
+        LIMIT 1
+        FOR UPDATE
+    ");
+    $overlapStmt->bind_param("isss", $vehicleId, $vehicleType, $returnDate, $pickupDate);
+    $overlapStmt->execute();
+    $overlapResult = $overlapStmt->get_result();
+    if ($overlapResult->num_rows > 0) {
+        throw new Exception("Vehicle is already booked for the selected dates");
+    }
+    $overlapStmt->close();
+
+    /* =========================================================
        5️⃣ CALCULATE TOTAL
     ========================================================= */
     $pickup = strtotime($pickupDate);
     $return = strtotime($returnDate);
-    $days = max(1, ceil(($return - $pickup) / 86400));
+    // +1 matches Flutter's numberOfDays = returnDate.difference(pickupDate).inDays + 1
+    // e.g., Mon pickup → Fri return = 4 day diff + 1 = 5 rental days
+    $days = max(1, (int)(($return - $pickup) / 86400) + 1);
 
-    $totalAmount = isset($_POST['total_amount'])
-        ? floatval($_POST['total_amount'])
-        : ($days * $vehicle['price_per_day']);
+    $baseRental = $days * $vehicle['price_per_day'];
+    $insurancePremium = floatval($_POST['insurance_premium'] ?? 0.0);
+
+    // Apply period discount (mirrors Flutter PricingCalculator logic)
+    $discount = 0.0;
+    if ($rentalPeriod === 'Weekly' && $days >= 7) {
+        $discount = $baseRental * 0.12;
+    } elseif ($rentalPeriod === 'Monthly' && $days >= 30) {
+        $discount = $baseRental * 0.25;
+    }
+    $discountedRental = $baseRental - $discount;
+
+    // Service fee is 5% of (discounted rental + insurance) — mirrors Flutter PricingCalculator
+    $serviceFee = ($discountedRental + $insurancePremium) * 0.05;
+    $totalAmount = $discountedRental + $insurancePremium + $serviceFee;
+
+    // Calculate security deposit (20% of rental amount, min ₱500, max ₱10,000)
+    $securityDeposit = $totalAmount * 0.20;
+    if ($securityDeposit < 500) {
+        $securityDeposit = 500;
+    } elseif ($securityDeposit > 10000) {
+        $securityDeposit = 10000;
+    }
+    $securityDeposit = round($securityDeposit, 2);
 
     /* =========================================================
        6️⃣ CREATE BOOKING
     ========================================================= */
     $stmt = $conn->prepare("
-    INSERT INTO bookings
-    (user_id, vehicle_type, car_id, owner_id, pickup_date, return_date, pickup_time, return_time,
-     total_amount, price_per_day, rental_period, needs_delivery,
-     full_name, email, contact, status, payment_status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', NOW())
-");
+        INSERT INTO bookings
+            (user_id, vehicle_type, car_id, owner_id,
+             pickup_date, return_date, pickup_time, return_time,
+             total_amount, price_per_day, rental_period, needs_delivery,
+             full_name, email, contact,
+             insurance_premium, security_deposit_amount, status, payment_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', NOW())
+    ");
 
+    if (!$stmt) {
+        throw new Exception("Failed to prepare booking statement: " . $conn->error);
+    }
 
+    $ownerId = intval($vehicle['owner_id']);
     $stmt->bind_param(
-    "isiissssddsisss",
-    $userId,
-    $vehicleType,     // <-- THIS is what was missing
-    $vehicleId,
-    $vehicle['owner_id'],
-    $pickupDate,
-    $returnDate,
-    $pickupTime,
-    $returnTime,
-    $totalAmount,
-    $vehicle['price_per_day'],
-    $rentalPeriod,
-    $needsDelivery,
-    $fullName,
-    $email,
-    $contact
-);
-
+        "isiissssddsisssdd",
+        $userId,
+        $vehicleType,
+        $vehicleId,
+        $ownerId,
+        $pickupDate,
+        $returnDate,
+        $pickupTime,
+        $returnTime,
+        $totalAmount,
+        $vehicle['price_per_day'],
+        $rentalPeriod,
+        $needsDelivery,
+        $fullName,
+        $email,
+        $contact,
+        $insurancePremium,
+        $securityDeposit
+    );
 
     if (!$stmt->execute()) {
-        throw new Exception("Failed to create booking");
+        throw new Exception("Failed to create booking: " . $stmt->error);
     }
 
     $bookingId = $stmt->insert_id;
 
     /* =========================================================
-       7️⃣ STORE PAYMENT RECORD (Manual GCash Payment)
+       7️⃣ COMMIT
     ========================================================= */
-    $stmt = $conn->prepare("
-        INSERT INTO payments
-        (booking_id, user_id, amount, payment_method, payment_reference, payment_status, created_at)
-        VALUES (?, ?, ?, 'gcash', NULL, 'pending', NOW())
-    ");
-    $stmt->bind_param("iid", $bookingId, $userId, $totalAmount);
-    $stmt->execute();
-    
-    $paymentId = $stmt->insert_id;
-
     mysqli_commit($conn);
 
     echo json_encode([
         "success" => true,
         "message" => "Booking created successfully. Please proceed to payment.",
         "data" => [
-            "booking_id" => $bookingId,
-            "payment_id" => $paymentId,
-            "total_amount" => $totalAmount,
-            "payment_method" => "gcash"
+            "booking_id"        => $bookingId,
+            "base_rental"       => $baseRental,
+            "discount"          => $discount,
+            "discounted_rental" => $discountedRental,
+            "insurance_premium" => $insurancePremium,
+            "service_fee"       => $serviceFee,
+            "total_amount"      => $totalAmount,
+            "security_deposit"  => $securityDeposit,
+            "grand_total"       => $totalAmount + $securityDeposit,
+            "payment_method"    => "gcash",
+            "rental_period"     => $rentalPeriod,
+            "days"              => $days
         ]
     ]);
 

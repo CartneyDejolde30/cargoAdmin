@@ -1,18 +1,20 @@
 <?php
-require_once 'include/db.php';
+require_once __DIR__ . '/../../include/config.php';
+require_once __DIR__ . '/../../include/db.php';
 
-function releaseEscrowToOwner($bookingId, $conn = null, $processedBy = null) {
+function releaseEscrowToOwner($bookingId, $connection = null, $processedBy = null) {
+    global $conn;
     $shouldClose = false;
-    if (!$conn) {
-        $conn = new mysqli("localhost", "root", "", "dbcargo");
-        $shouldClose = true;
+    if (!$connection) {
+        $connection = $conn; // Use centralized connection
+        $shouldClose = false; // Don't close shared connection
     }
     
     try {
-        mysqli_begin_transaction($conn);
+        mysqli_begin_transaction($connection);
         
         // Get escrow
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             SELECT e.id, e.amount, b.owner_id, b.owner_payout, b.platform_fee
             FROM escrow e
             JOIN bookings b ON b.id = e.booking_id
@@ -27,7 +29,7 @@ function releaseEscrowToOwner($bookingId, $conn = null, $processedBy = null) {
         }
         
         // Update escrow
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             UPDATE escrow 
             SET status = 'released', 
                 released_at = NOW(),
@@ -39,7 +41,7 @@ function releaseEscrowToOwner($bookingId, $conn = null, $processedBy = null) {
         $stmt->execute();
         
         // Update booking
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             UPDATE bookings 
             SET escrow_status = 'released_to_owner',
                 escrow_released_at = NOW(),
@@ -50,7 +52,7 @@ function releaseEscrowToOwner($bookingId, $conn = null, $processedBy = null) {
         $stmt->execute();
         
         // Create payout
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO payouts 
             (booking_id, owner_id, escrow_id, amount, platform_fee, net_amount, status, scheduled_at)
             VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())
@@ -66,7 +68,7 @@ function releaseEscrowToOwner($bookingId, $conn = null, $processedBy = null) {
         $stmt->execute();
         
         // Log
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO payment_transactions 
             (booking_id, transaction_type, amount, description, created_by)
             VALUES (?, 'escrow_release', ?, 'Escrow released to owner', ?)
@@ -75,24 +77,24 @@ function releaseEscrowToOwner($bookingId, $conn = null, $processedBy = null) {
         $stmt->execute();
         
         // Notify owner
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO notifications (user_id, title, message)
             VALUES (?, 'Payment Released 💰', CONCAT('Your payout of ₱', FORMAT(?, 2), ' for booking #', ?, ' is being processed.'))
         ");
         $stmt->bind_param("idi", $escrow['owner_id'], $escrow['owner_payout'], $bookingId);
         $stmt->execute();
         
-        mysqli_commit($conn);
+        mysqli_commit($connection);
         
         return ['success' => true, 'payout_amount' => $escrow['owner_payout']];
         
     } catch (Exception $e) {
-        mysqli_rollback($conn);
+        mysqli_rollback($connection);
         error_log("Release failed: " . $e->getMessage());
         return ['error' => $e->getMessage()];
     } finally {
-        if ($shouldClose) {
-            $conn->close();
+        if ($shouldClose && $connection) {
+            $connection->close();
         }
     }
 }

@@ -31,8 +31,8 @@ try {
             reviewer.fullname as reviewer_name,
             reviewer.email as reviewer_email,
             CASE 
-                WHEN ip.vehicle_type = 'car' THEN CONCAT(c.brand, ' ', c.model, ' ', c.year)
-                WHEN ip.vehicle_type = 'motorcycle' THEN CONCAT(m.brand, ' ', m.model, ' ', m.year)
+                WHEN ip.vehicle_type = 'car' THEN CONCAT(c.brand, ' ', c.model, ' ', c.car_year)
+                WHEN ip.vehicle_type = 'motorcycle' THEN CONCAT(m.brand, ' ', m.model, ' ', m.motorcycle_year)
             END AS vehicle_name
         FROM insurance_claims ic
         JOIN insurance_policies ip ON ic.policy_id = ip.id
@@ -56,22 +56,45 @@ try {
     
     $row = $result->fetch_assoc();
     
-    // Get supporting documents if any
-    $docsQuery = "SELECT * FROM claim_documents WHERE claim_id = ?";
-    $docsStmt = $conn->prepare($docsQuery);
-    $docsStmt->bind_param('i', $claimId);
-    $docsStmt->execute();
-    $docsResult = $docsStmt->get_result();
-    
+    // Get supporting documents if any (check if table exists first)
     $documents = [];
-    while ($doc = $docsResult->fetch_assoc()) {
-        $documents[] = [
-            'id' => $doc['id'],
-            'file_name' => $doc['file_name'],
-            'file_path' => $doc['file_path'],
-            'file_type' => $doc['file_type'],
-            'uploaded_at' => $doc['uploaded_at']
-        ];
+    $tableCheckQuery = "SHOW TABLES LIKE 'claim_documents'";
+    $tableCheckResult = $conn->query($tableCheckQuery);
+    
+    if ($tableCheckResult && $tableCheckResult->num_rows > 0) {
+        $docsQuery = "SELECT * FROM claim_documents WHERE claim_id = ?";
+        $docsStmt = $conn->prepare($docsQuery);
+        $docsStmt->bind_param('i', $claimId);
+        $docsStmt->execute();
+        $docsResult = $docsStmt->get_result();
+        
+        while ($doc = $docsResult->fetch_assoc()) {
+            $documents[] = [
+                'id' => $doc['id'],
+                'file_name' => $doc['file_name'],
+                'file_path' => $doc['file_path'],
+                'file_type' => $doc['file_type'],
+                'uploaded_at' => $doc['uploaded_at']
+            ];
+        }
+    }
+    
+    // Parse evidence photos from JSON
+    $evidencePhotos = [];
+    if (!empty($row['evidence_photos'])) {
+        $decoded = json_decode($row['evidence_photos'], true);
+        if (is_array($decoded)) {
+            $evidencePhotos = $decoded;
+        }
+    }
+    
+    // Parse damage assessment from JSON
+    $damageAssessment = null;
+    if (!empty($row['damage_assessment'])) {
+        $decoded = json_decode($row['damage_assessment'], true);
+        if ($decoded) {
+            $damageAssessment = $decoded;
+        }
     }
     
     $claim = [
@@ -83,6 +106,8 @@ try {
         'incident_date' => $row['incident_date'],
         'incident_location' => $row['incident_location'],
         'incident_description' => $row['incident_description'],
+        'police_report_number' => $row['police_report_number'],
+        'police_report_file' => $row['police_report_file'],
         'claimed_amount' => floatval($row['claimed_amount']),
         'approved_amount' => floatval($row['approved_amount']),
         'status' => $row['status'],
@@ -91,6 +116,8 @@ try {
         'rejection_reason' => $row['rejection_reason'],
         'created_at' => $row['created_at'],
         'reviewed_at' => $row['reviewed_at'],
+        'evidence_photos' => $evidencePhotos,
+        'damage_assessment' => $damageAssessment,
         'claimant' => [
             'id' => $row['claimant_id'],
             'name' => $row['claimant_name'],

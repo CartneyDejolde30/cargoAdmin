@@ -1,233 +1,175 @@
 <?php
 include "include/db.php";
-
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
-error_reporting(E_ALL);
-ini_set("display_errors", 1);
+$action = $_POST['action'] ?? '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+// ========== INSERT MOTORCYCLE ==========
+if ($action === "insert") {
+    require_once __DIR__ . '/include/vehicle_validation.php';
 
-/* ------------------ FILE HELPERS ------------------ */
-function uploadSingle($field, $prefix) {
-    if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
+    $common = vv_validate_common_insert_fields();
+    $moto = vv_validate_motorcycle_fields();
 
-    $ext = pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION) ?: 'jpg';
-    $name = $prefix . time() . "_" . rand(1000, 9999) . "." . $ext;
+    $owner_id = $common['owner_id'];
+    $status = $common['status'];
+    $brand = $common['brand'];
+    $model = $common['model'];
+    $body_style = $common['body_style'];
+    $plate_number = $common['plate_number'];
+    $color = $common['color'];
+    $description = $common['description'];
+    $advance_notice = $common['advance_notice'];
+    $min_trip_duration = $common['min_trip_duration'];
+    $max_trip_duration = $common['max_trip_duration'];
+    $delivery_types = $common['delivery_types'];
+    $features = $common['features'];
+    $rules = $common['rules'];
+    $has_unlimited_mileage = (string)$common['has_unlimited_mileage'];
+    $price_per_day = $common['price_per_day'];
+    $location = $common['location'];
+    $latitude = $common['latitude'];
+    $longitude = $common['longitude'];
 
-    $folder = __DIR__ . "/../uploads/";
-    if (!is_dir($folder)) mkdir($folder, 0777, true);
+    // Motorcycle-specific fields
+    $motorcycle_year = $moto['motorcycle_year'];
+    $engine_displacement = $moto['engine_displacement'];
 
-    return move_uploaded_file($_FILES[$field]['tmp_name'], $folder . $name) ? "uploads/$name" : null;
-}
-
-function uploadMultiple($field, $prefix) {
-    if (!isset($_FILES[$field])) return [];
-
-    $paths = [];
-    foreach ($_FILES[$field]['name'] as $i => $file) {
-        if ($_FILES[$field]['error'][$i] !== UPLOAD_ERR_OK) continue;
-
-        $ext = pathinfo($file, PATHINFO_EXTENSION) ?: 'jpg';
-        $name = $prefix . time() . "_" . $i . "_" . rand(1000,9999) . "." . $ext;
-
-        $folder = __DIR__ . "/../uploads/";
-        if (!is_dir($folder)) mkdir($folder, 0777, true);
-
-        if (move_uploaded_file($_FILES[$field]['tmp_name'][$i], $folder . $name)) {
-            $paths[] = "uploads/$name";
+    // -------- UPLOAD FILES --------
+    $uploadDir = "uploads/";
+    
+    // Main Photo
+    $mainPhoto = null;
+    if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
+        $ext = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
+        $mainPhotoName = uniqid("motorcycle_main_") . "." . $ext;
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $mainPhotoName)) {
+            $mainPhoto = $uploadDir . $mainPhotoName;
         }
     }
-    return $paths;
-}
 
-/* ------------------ PROCESS REQUEST ------------------ */
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $action = $_POST['action'] ?? "insert";
-    $id     = $_POST['id'] ?? null;
-
-    /* ---------- DELETE ---------- */
-    if ($action === "delete" && $id) {
-        $stmt = $conn->prepare("DELETE FROM motorcycles WHERE id=?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        echo json_encode(["success" => true]);
-        exit;
+    // Official Receipt
+    $orPhoto = null;
+    if (isset($_FILES['official_receipt']) && $_FILES['official_receipt']['error'] == 0) {
+        $ext = pathinfo($_FILES['official_receipt']['name'], PATHINFO_EXTENSION);
+        $orName = uniqid("or_") . "." . $ext;
+        if (move_uploaded_file($_FILES['official_receipt']['tmp_name'], $uploadDir . $orName)) {
+            $orPhoto = $uploadDir . $orName;
+        }
     }
 
-    /* ---------- READ INPUT ---------- */
-    $owner_id   = $_POST['owner_id'] ?? null;
-    $status     = $_POST['status'] ?? "pending";
-    $year       = $_POST['year'] ?? "";
-    $brand      = $_POST['brand'] ?? "";
-    $model      = $_POST['model'] ?? "";
-    $body_style = $_POST['body_style'] ?? "";
-    $engine_displacement = $_POST['trim'] ?? ""; // Flutter sends 'trim' for engine size
-    $plate      = $_POST['plate_number'] ?? "";
-    $color      = $_POST['color'] ?? "";
-    $desc       = $_POST['description'] ?? "";
-
-    $notice     = $_POST['advance_notice'] ?? "";
-    $minTrip    = $_POST['min_trip_duration'] ?? "";
-    $maxTrip    = $_POST['max_trip_duration'] ?? "";
-
-    $delivery   = $_POST['delivery_types'] ?? "[]";
-    $features   = $_POST['features'] ?? "[]";
-    $rules      = $_POST['rules'] ?? "[]";
-
-    $unlim      = $_POST['has_unlimited_mileage'] ?? 1;
-
-    $rate = $_POST['daily_rate'] ?? $_POST['price_per_day'] ?? 0;
-    $location   = $_POST['location'] ?? "";
-    $lat        = $_POST['latitude'] ?? 0;
-    $lng        = $_POST['longitude'] ?? 0;
-
-    /* ---------- UPLOAD FILES ---------- */
-    $main = uploadSingle("image", "moto_");
-    $or = uploadSingle("official_receipt", "or_moto_");
-    $cr = uploadSingle("certificate_of_registration", "cr_moto_");
-    $extra = uploadMultiple("extra_photos", "extra_moto_");
-
-    /* ---------- If updating, keep old data ---------- */
-    if ($action === "update" && $id) {
-        $q = $conn->prepare("SELECT image, official_receipt, certificate_of_registration, extra_images FROM motorcycles WHERE id=?");
-        $q->bind_param("i", $id);
-        $q->execute();
-        $old = $q->get_result()->fetch_assoc();
-
-        $main = $main ?: $old['image'];
-        $or   = $or ?: $old['official_receipt'];
-        $cr   = $cr ?: $old['certificate_of_registration'];
-
-        $existing = json_decode($old['extra_images'], true) ?? [];
-        $extra = array_merge($existing, $extra);
+    // Certificate of Registration
+    $crPhoto = null;
+    if (isset($_FILES['certificate_of_registration']) && $_FILES['certificate_of_registration']['error'] == 0) {
+        $ext = pathinfo($_FILES['certificate_of_registration']['name'], PATHINFO_EXTENSION);
+        $crName = uniqid("cr_") . "." . $ext;
+        if (move_uploaded_file($_FILES['certificate_of_registration']['tmp_name'], $uploadDir . $crName)) {
+            $crPhoto = $uploadDir . $crName;
+        }
     }
 
-    $extra_json = json_encode($extra);
+    // Extra Photos
+    $extraImages = [];
+    if (isset($_FILES['extra_photos'])) {
+        foreach ($_FILES['extra_photos']['tmp_name'] as $key => $tmpName) {
+            if ($_FILES['extra_photos']['error'][$key] == 0) {
+                $ext = pathinfo($_FILES['extra_photos']['name'][$key], PATHINFO_EXTENSION);
+                $extraName = uniqid("extra_") . "." . $ext;
+                if (move_uploaded_file($tmpName, $uploadDir . $extraName)) {
+                    $extraImages[] = $uploadDir . $extraName;
+                }
+            }
+        }
+    }
 
-    /* ---------- INSERT ---------- */
-    if ($action === "insert") {
-        $stmt = $conn->prepare("
-            INSERT INTO motorcycles (
-                owner_id, status, motorcycle_year, brand, model, body_style, engine_displacement,
-                plate_number, color, description, advance_notice, min_trip_duration,
-                max_trip_duration, delivery_types, features, rules,
-                has_unlimited_mileage, daily_rate, location,
-                latitude, longitude, image, official_receipt, certificate_of_registration,
-                extra_images
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    $extraImagesJson = json_encode($extraImages);
+
+    // -------- INSERT INTO DATABASE --------
+    $stmt = $conn->prepare("
+        INSERT INTO motorcycles (
+            owner_id, status, brand, model, body_style, plate_number, color, description,
+            advance_notice, min_trip_duration, max_trip_duration, delivery_types,
+            features, rules, has_unlimited_mileage, price_per_day,
+            location, latitude, longitude, image, official_receipt, certificate_of_registration,
+            extra_images, motorcycle_year, engine_displacement, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    ");
+
+    $stmt->bind_param(
+        "isssssssssssssidsddssssss",
+        $owner_id, $status, $brand, $model, $body_style, $plate_number, $color, $description,
+        $advance_notice, $min_trip_duration, $max_trip_duration, $delivery_types,
+        $features, $rules, $has_unlimited_mileage, $price_per_day,
+        $location, $latitude, $longitude, $mainPhoto, $orPhoto, $crPhoto,
+        $extraImagesJson, $motorcycle_year, $engine_displacement
+    );
+
+    if ($stmt->execute()) {
+        $insertedId = $stmt->insert_id;
+        
+        // Send notification to owner
+        $notifStmt = $conn->prepare("
+            INSERT INTO notifications (user_id, title, message, read_status, created_at) 
+            VALUES (?, ?, ?, 'unread', NOW())
         ");
-
-        $stmt->bind_param(
-            "issssssssssssssidsddsss",
-            $owner_id,
-            $status,
-            $year,
-            $brand,
-            $model,
-            $body_style,
-            $engine_displacement,
-            $plate,
-            $color,
-            $desc,
-            $notice,
-            $minTrip,
-            $maxTrip,
-            $delivery,
-            $features,
-            $rules,
-            $unlim,
-            $rate,
-            $location,
-            $lat,
-            $lng,
-            $main,
-            $or,
-            $cr,
-            $extra_json
-        );
-
-        $stmt->execute();
-        echo json_encode(["success" => true, "id" => $stmt->insert_id]);
-        exit;
+        
+        $notifTitle = "Motorcycle Submitted ✅";
+        $notifMessage = "Your motorcycle '{$brand} {$model}' has been submitted for approval.";
+        
+        $notifStmt->bind_param("iss", $owner_id, $notifTitle, $notifMessage);
+        $notifStmt->execute();
+        $notifStmt->close();
+        
+        echo json_encode(["success" => true, "id" => $insertedId, "message" => "Motorcycle submitted successfully"]);
+    } else {
+        echo json_encode(["success" => false, "message" => $stmt->error]);
     }
 
-    /* ---------- UPDATE ---------- */
-    if ($action === "update" && $id) {
-        $stmt = $conn->prepare("
-            UPDATE motorcycles SET
-                owner_id=?, status=?, motorcycle_year=?, brand=?, model=?, body_style=?, engine_displacement=?,
-                plate_number=?, color=?, description=?, advance_notice=?, min_trip_duration=?, max_trip_duration=?,
-                delivery_types=?, features=?, rules=?, has_unlimited_mileage=?, daily_rate=?,
-                location=?, latitude=?, longitude=?, image=?, official_receipt=?, certificate_of_registration=?,
-                extra_images=? WHERE id=?
-        ");
-
-        $stmt->bind_param(
-            "isssssssssssssssidsddssi",
-            $owner_id,
-            $status,
-            $year,
-            $brand,
-            $model,
-            $body_style,
-            $engine_displacement,
-            $plate,
-            $color,
-            $desc,
-            $notice,
-            $minTrip,
-            $maxTrip,
-            $delivery,
-            $features,
-            $rules,
-            $unlim,
-            $rate,
-            $location,
-            $lat,
-            $lng,
-            $main,
-            $or,
-            $cr,
-            $extra_json,
-            $id
-        );
-
-        $stmt->execute();
-        echo json_encode(["success" => true, "updated_id" => $id]);
-        exit;
-    }
-
-    echo json_encode(["success" => false, "message" => "Invalid action"]);
+    $stmt->close();
+    $conn->close();
     exit;
 }
 
-/* ---------- FETCH MOTORCYCLES ---------- */
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['owner_id'])) {
-    $stmt = $conn->prepare("
-        SELECT * FROM motorcycles WHERE owner_id=? 
-        ORDER BY id DESC, FIELD(status, 'approved', 'pending', 'rejected')
-    ");
-    $stmt->bind_param("i", $_GET['owner_id']);
+// ========== UPDATE MOTORCYCLE STATUS ==========
+if ($action === "update_status") {
+    $id = $_POST['id'] ?? 0;
+    $status = $_POST['status'] ?? '';
+    $remarks = $_POST['remarks'] ?? '';
+    
+    $stmt = $conn->prepare("UPDATE motorcycles SET status = ?, remarks = ? WHERE id = ?");
+    $stmt->bind_param("ssi", $status, $remarks, $id);
+    
+    if ($stmt->execute()) {
+        echo json_encode(["success" => true]);
+    } else {
+        echo json_encode(["success" => false, "message" => $stmt->error]);
+    }
+    
+    $stmt->close();
+    $conn->close();
+    exit;
+}
+
+// ========== GET MOTORCYCLE BY ID ==========
+if ($action === "get_by_id") {
+    $id = $_GET['id'] ?? 0;
+    
+    $stmt = $conn->prepare("SELECT * FROM motorcycles WHERE id = ?");
+    $stmt->bind_param("i", $id);
     $stmt->execute();
     $result = $stmt->get_result();
-
-    $motorcycles = [];
-    while ($row = $result->fetch_assoc()) {
-        $row["status"] = strtolower(trim($row["status"]));
-        $row["extra_images"] = $row["extra_images"] ? json_decode($row["extra_images"], true) : [];
-        $row["photo_urls"] = $row["extra_images"];
-        $motorcycles[] = $row;
+    
+    if ($row = $result->fetch_assoc()) {
+        echo json_encode(["success" => true, "motorcycle" => $row]);
+    } else {
+        echo json_encode(["success" => false, "message" => "Motorcycle not found"]);
     }
-
-    echo json_encode($motorcycles);
+    
+    $stmt->close();
+    $conn->close();
     exit;
 }
+
+echo json_encode(["success" => false, "message" => "Invalid action"]);
 ?>

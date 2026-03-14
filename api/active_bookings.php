@@ -33,6 +33,8 @@ try {
             c.car_year,
             c.image as car_image,
             c.location,
+            c.latitude,
+            c.longitude,
             c.seat,
             c.transmission,
             c.price_per_day

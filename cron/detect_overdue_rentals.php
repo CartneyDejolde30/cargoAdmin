@@ -31,6 +31,8 @@ if (!$settings['late_fee_enabled']) {
 }
 
 // Find overdue bookings
+// ⚠️ CRITICAL FIX: Only adetect overdue for ONGOING trips, not completed ones
+// Completed trips should have late fees calculated when they END, not by cron
 $sql = "SELECT 
     b.*,
     TIMESTAMPDIFF(HOUR, CONCAT(b.return_date, ' ', b.return_time), NOW()) as hours_overdue,
@@ -47,7 +49,9 @@ JOIN users u ON b.user_id = u.id
 JOIN users o ON b.owner_id = o.id
 LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
 LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
-WHERE b.status = 'approved'
+WHERE b.status IN ('approved', 'ongoing')
+AND b.trip_started = 1
+AND b.trip_ended = 0
 AND CONCAT(b.return_date, ' ', b.return_time) < NOW()
 ORDER BY hours_overdue DESC";
 
@@ -174,21 +178,22 @@ function calculateLateFee($hoursLate, $settings) {
         $tier1Hours = 6 - $graceHours;
         $fee = ($tier1Hours * $tier1Rate) + (($hoursLate - 6) * $tier2Rate);
     }
-    // Tier 3: 1+ days
+    // Tier 3: 24+ hours
+    // First 24h: tier1 (4h) + tier2 (18h) = ₱10,200
+    // Beyond 24h: ₱2,000 per additional full day + partial hours at tier1/2 rates
     else {
-        $daysLate = floor($hoursLate / 24);
-        $remainingHours = $hoursLate % 24;
-        
-        // Full tier 1 + full tier 2 + daily rate
         $tier1Hours = 6 - $graceHours;
-        $fee = ($tier1Hours * $tier1Rate) + (18 * $tier2Rate) + ($daysLate * $tier3Rate);
-        
-        // Add remaining hours of current day
-        if ($remainingHours > $graceHours) {
-            if ($remainingHours <= 6) {
-                $fee += ($remainingHours - $graceHours) * $tier1Rate;
+        $additionalHours = $hoursLate - 24;
+        $additionalFullDays = floor($additionalHours / 24);
+        $partialHours = $additionalHours % 24;
+
+        $fee = ($tier1Hours * $tier1Rate) + (18 * $tier2Rate) + ($additionalFullDays * $tier3Rate);
+
+        if ($partialHours > 0) {
+            if ($partialHours <= $tier1Hours) {
+                $fee += $partialHours * $tier1Rate;
             } else {
-                $fee += ($tier1Hours * $tier1Rate) + (($remainingHours - 6) * $tier2Rate);
+                $fee += ($tier1Hours * $tier1Rate) + (($partialHours - $tier1Hours) * $tier2Rate);
             }
         }
     }

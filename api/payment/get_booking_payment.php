@@ -4,11 +4,29 @@
  * Returns payment details, escrow status, and transaction history for a booking
  */
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../../error_log.txt');
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET');
 
-require_once __DIR__ . '/../include/db.php';
+try {
+    require_once __DIR__ . '/../../include/db.php';
+} catch (Exception $e) {
+    error_log("Payment API - DB Connection Error: " . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Database connection error: ' . $e->getMessage()]);
+    exit;
+}
+
+if (!isset($conn) || !$conn) {
+    error_log("Payment API - DB Connection not established");
+    echo json_encode(['success' => false, 'message' => 'Database connection not established']);
+    exit;
+}
 
 // Validate input
 if (!isset($_GET['booking_id'])) {
@@ -41,6 +59,11 @@ try {
             b.platform_fee,
             b.owner_payout,
             b.return_date AS expected_release_date,
+            
+            -- Refund information
+            b.refund_status,
+            b.refund_requested,
+            b.refund_amount,
             
             -- Transaction details
             b.id AS booking_id,

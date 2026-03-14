@@ -1,4 +1,5 @@
 <?php
+session_start();
 include "include/db.php";
 
 // Get filter values
@@ -15,7 +16,7 @@ $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
 $page = max($page, 1);
 $offset = ($page - 1) * $limit;
 
-// Base query
+// Base query - include extra_images
 $sql = "
     SELECT cars.*, users.fullname 
     FROM cars 
@@ -84,12 +85,24 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
   <link href="include/notifications.css" rel="stylesheet">
-
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
+  <style>
+    .action-btn {
+      width: auto !important;
+      height: auto !important;
+      min-width: unset !important;
+      padding: 6px 14px !important;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .action-btn i { font-size: 13px; }
+  </style>
 </head>
 <body>
 
 <div class="dashboard-wrapper">
   <?php include('include/sidebar.php'); ?>
+  <?php include('include/admin_profile.php'); ?>
 
   <!-- Main Content -->
   <main class="main-content">
@@ -107,7 +120,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
     </div>
@@ -227,12 +240,28 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
               </span>
             </td>
             <td>
-              <?php if(!empty($row['image'])) { ?>
-                <img src="<?= htmlspecialchars($row['image']) ?>" 
-          class="car-thumb"
-          onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>', '<?= htmlspecialchars($row['brand'].' '.$row['model']) ?>')"
-          alt="Car">
-
+              <?php 
+              $extraImages = !empty($row['extra_images']) ? json_decode($row['extra_images'], true) : [];
+              $allImages = array_filter(array_merge(
+                [$row['image'] ?? ''], 
+                is_array($extraImages) ? $extraImages : []
+              ));
+              
+              if(!empty($allImages)) { 
+                $mainImage = $allImages[0];
+              ?>
+                <div style="position: relative; display: inline-block;">
+                  <img src="<?= htmlspecialchars($mainImage) ?>" 
+                    class="car-thumb"
+                    onclick="viewCarGallery(<?= htmlspecialchars(json_encode($allImages)) ?>, '<?= htmlspecialchars($row['brand'].' '.$row['model']) ?>', 0)"
+                    alt="Car"
+                    style="cursor: pointer;">
+                  <?php if(count($allImages) > 1) { ?>
+                    <span style="position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">
+                      +<?= count($allImages) - 1 ?>
+                    </span>
+                  <?php } ?>
+                </div>
               <?php } else { ?>
                 <span class="text-muted">No Image</span>
               <?php } ?>
@@ -253,18 +282,21 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 
             <td>
               <div class="action-buttons">
+                <button class="action-btn view" onclick="viewCarDetails(<?= $row['id'] ?>)" title="View Details">
+                  <i class="bi bi-eye"></i> View
+                </button>
                 <form method="POST" action="update_car_status.php" style="display: contents;">
                   <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                  
+
                   <?php if($row['status'] !== 'approved') { ?>
-                    <button name="status" value="approved" class="action-btn approve pe-5 ps-5">
+                    <button name="status" value="approved" class="action-btn approve">
                       <i class="bi bi-check-lg"></i> Approve
                     </button>
                   <?php } ?>
 
                   <?php if($row['status'] !== 'rejected') { ?>
-                    <button type="button" 
-                            class="action-btn reject rejectBtn pe-5 ps-5" 
+                    <button type="button"
+                            class="action-btn reject rejectBtn"
                             data-id="<?= $row['id'] ?>">
                       <i class="bi bi-x-lg"></i> Reject
                     </button>
@@ -344,21 +376,101 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   </div>
 </div>
 
-<!-- Image Modal -->
+<!-- Enhanced Image Gallery Modal -->
 <div class="image-modal" id="imageModal">
   <div class="image-modal-content">
     <div class="image-modal-header">
-      <button class="modal-action-btn download" onclick="downloadImage()" title="Download Image">
-        <i class="bi bi-download"></i>
-      </button>
-      <button class="modal-action-btn close" onclick="closeImageModal()" title="Close">
-        <i class="bi bi-x-lg"></i>
-      </button>
+      <span id="imageCounter" style="color: white; font-weight: 600; font-size: 14px;"></span>
+      <div>
+        <button class="modal-action-btn download" onclick="downloadImage()" title="Download Image">
+          <i class="bi bi-download"></i>
+        </button>
+        <button class="modal-action-btn close" onclick="closeImageModal()" title="Close">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
     </div>
+    
+    <!-- Navigation Arrows -->
+    <button class="gallery-nav prev" onclick="navigateGallery(-1)" id="prevBtn" style="display: none;">
+      <i class="bi bi-chevron-left"></i>
+    </button>
+    <button class="gallery-nav next" onclick="navigateGallery(1)" id="nextBtn" style="display: none;">
+      <i class="bi bi-chevron-right"></i>
+    </button>
+    
     <img id="modalImage" src="" alt="Car Image">
     <div class="image-modal-footer" id="modalCaption"></div>
+    
+    <!-- Thumbnail Strip -->
+    <div class="thumbnail-strip" id="thumbnailStrip" style="display: none;"></div>
   </div>
 </div>
+
+<style>
+.gallery-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.3s;
+  z-index: 1001;
+}
+
+.gallery-nav:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.gallery-nav.prev {
+  left: 20px;
+}
+
+.gallery-nav.next {
+  right: 20px;
+}
+
+.thumbnail-strip {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  margin-top: 15px;
+  overflow-x: auto;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.thumbnail-strip img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.3s;
+  border: 2px solid transparent;
+}
+
+.thumbnail-strip img:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.thumbnail-strip img.active {
+  opacity: 1;
+  border-color: #fff;
+}
+</style>
 
 
 
@@ -383,8 +495,152 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 </div>
 
 
+<!-- Car Details Modal -->
+<div class="modal fade" id="carDetailsModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-car-front-fill me-2"></i>Car Listing Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="carDetailsBody">
+        <div class="text-center py-5">
+          <div class="spinner-border" role="status"></div>
+          <p class="mt-2 text-muted">Loading details...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+  function viewCarDetails(carId) {
+    const modal = new bootstrap.Modal(document.getElementById('carDetailsModal'));
+    document.getElementById('carDetailsBody').innerHTML = `
+      <div class="text-center py-5">
+        <div class="spinner-border" role="status"></div>
+        <p class="mt-2 text-muted">Loading details...</p>
+      </div>`;
+    modal.show();
+
+    fetch(`api/get_car_details.php?id=${carId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.status !== 'success') {
+          document.getElementById('carDetailsBody').innerHTML = `<div class="alert alert-danger">${data.message || 'Failed to load.'}</div>`;
+          return;
+        }
+        const c = data.car;
+        const reviews = data.reviews || [];
+
+        // Helpers
+        const stars = n => { n = Math.min(5, Math.round(parseFloat(n)||0)); return '★'.repeat(n)+'☆'.repeat(5-n); };
+        const row   = (label, val) => `<div class="col-md-4 mb-3"><small class="text-muted d-block">${label}</small><strong>${val || '—'}</strong></div>`;
+        const money = v => v ? '&#8369;' + parseFloat(v).toLocaleString('en-PH',{minimumFractionDigits:2}) : '—';
+
+        // Parse JSON fields safely
+        let features=[], rules=[], delivery=[], extraImages=[];
+        try { features = JSON.parse(c.features||'[]'); }    catch(e){}
+        try { rules    = JSON.parse(c.rules||'[]'); }        catch(e){}
+        try { delivery = JSON.parse(c.delivery_types||'[]');}catch(e){}
+        try { extraImages = JSON.parse(c.extra_images||'[]');}catch(e){}
+        if (!Array.isArray(features))    features    = [];
+        if (!Array.isArray(rules))       rules       = [];
+        if (!Array.isArray(delivery))    delivery    = [];
+        if (!Array.isArray(extraImages)) extraImages = [];
+
+        const allImages = [c.image, ...extraImages].filter(Boolean);
+        const vName = ((c.brand||'')+' '+(c.model||'')).replace(/'/g,'');
+
+        const thumbs = allImages.map((img,i) =>
+          `<img src="${img}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid #eee;"
+            onclick="viewCarGallery(${JSON.stringify(allImages)},'${vName}',${i})">`
+        ).join('');
+
+        const reviewsHtml = reviews.length ? reviews.map(rv =>
+          `<div class="border rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong>${rv.reviewer_name||'Renter'}</strong>
+              <span class="text-warning">${stars(rv.rating)} <small class="text-muted">${parseFloat(rv.rating).toFixed(1)}</small></span>
+            </div>
+            <p class="mb-0 small text-muted">${rv.review||'<em>No comment</em>'}</p>
+            <small class="text-muted">${new Date(rv.created_at).toLocaleDateString()}</small>
+          </div>`).join('') : '<p class="text-muted">No reviews yet.</p>';
+
+        const statusBadge = `<span class="status-badge ${c.status}">${(c.status||'').charAt(0).toUpperCase()+(c.status||'').slice(1)}</span>`;
+        const mileage = c.has_unlimited_mileage == 1 ? 'Unlimited' : 'Limited';
+
+        document.getElementById('carDetailsBody').innerHTML = `
+          <div class="row g-0">
+            ${allImages.length ? `<div class="col-12 mb-4"><div class="d-flex gap-2 flex-wrap">${thumbs}</div></div>` : ''}
+
+            <div class="col-12 mb-3"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-info-circle me-1"></i>Basic Information</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Brand', c.brand)}
+              ${row('Model', c.model)}
+              ${row('Year', c.car_year)}
+              ${row('Plate Number', c.plate_number)}
+              ${row('Color', c.color)}
+              ${row('Body Style', c.body_style)}
+              ${row('Trim', c.trim)}
+              ${row('Status', statusBadge)}
+            </div></div>
+
+            <div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-cash me-1"></i>Pricing & Trip Settings</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Price per Day', money(c.price_per_day))}
+              ${row('Min Trip Duration', c.min_trip_duration ? c.min_trip_duration+' day(s)' : '—')}
+              ${row('Max Trip Duration', c.max_trip_duration ? c.max_trip_duration+' day(s)' : '—')}
+              ${row('Advance Notice', c.advance_notice ? c.advance_notice+' hr(s)' : '—')}
+              ${row('Mileage', mileage)}
+            </div></div>
+
+            <div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-geo-alt me-1"></i>Location & Delivery</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Location', c.location)}
+              ${row('Delivery Types', delivery.length ? delivery.join(', ') : '—')}
+            </div></div>
+
+            ${c.description ? `<div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-file-text me-1"></i>Description</h6><p class="text-muted">${c.description}</p></div>` : ''}
+
+            <div class="col-md-6 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-star me-1"></i>Features</h6>
+              ${features.length ? `<div class="d-flex flex-wrap gap-1">${features.map(f=>`<span class="badge bg-light text-dark border">${f}</span>`).join('')}</div>` : '<p class="text-muted small">None listed.</p>'}
+            </div>
+            <div class="col-md-6 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-shield-check me-1"></i>Rules</h6>
+              ${rules.length ? `<ul class="list-unstyled mb-0">${rules.map(r=>`<li><i class="bi bi-dot"></i>${r}</li>`).join('')}</ul>` : '<p class="text-muted small">No rules listed.</p>'}
+            </div>
+
+            <div class="col-12 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-star-half me-1"></i>Rating & Reviews</h6>
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <span class="fs-3 fw-bold">${parseFloat(c.average_rating||0).toFixed(1)}</span>
+                <div><span class="text-warning fs-5">${stars(c.average_rating||0)}</span><br>
+                  <small class="text-muted">${c.review_count||0} review(s)</small></div>
+              </div>
+              ${reviewsHtml}
+            </div>
+
+            <div class="col-12 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-person me-1"></i>Owner</h6>
+              <div class="d-flex align-items-center gap-3">
+                ${c.owner_image ? `<img src="${c.owner_image}" style="width:50px;height:50px;border-radius:50%;object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(c.owner_name||'O')}&background=1a1a1a&color=fff'">` : ''}
+                <div><strong>${c.owner_name||'—'}</strong><br><small class="text-muted">${c.phone||'No phone'}</small></div>
+              </div>
+            </div>
+
+            <div class="col-12 mt-2">
+              <small class="text-muted">Listed on: ${c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</small>
+            </div>
+          </div>`;
+      })
+      .catch(() => {
+        document.getElementById('carDetailsBody').innerHTML = '<div class="alert alert-danger">Error loading car details.</div>';
+      });
+  }
+
 document.addEventListener("DOMContentLoaded", function () {
 
   let currentImageUrl = '';
@@ -406,21 +662,87 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   /* ===============================
-     IMAGE MODAL
+     IMAGE GALLERY MODAL
   =============================== */
-  window.viewCarImage = function (imageUrl, carName) {
+  let galleryImages = [];
+  let currentGalleryIndex = 0;
+  
+  window.viewCarGallery = function (images, carName, startIndex = 0) {
     const modal = document.getElementById("imageModal");
     const img = document.getElementById("modalImage");
     const caption = document.getElementById("modalCaption");
+    const counter = document.getElementById("imageCounter");
+    const thumbnailStrip = document.getElementById("thumbnailStrip");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
 
     if (!modal || !img) return;
 
-    currentImageUrl = imageUrl;
-    img.src = imageUrl;
+    galleryImages = Array.isArray(images) ? images : [images];
+    currentGalleryIndex = startIndex;
+    
+    // Show navigation only if multiple images
+    if (galleryImages.length > 1) {
+      prevBtn.style.display = "block";
+      nextBtn.style.display = "block";
+      thumbnailStrip.style.display = "flex";
+      
+      // Build thumbnails
+      thumbnailStrip.innerHTML = galleryImages.map((imgUrl, idx) => 
+        `<img src="${imgUrl}" onclick="jumpToImage(${idx})" class="${idx === currentGalleryIndex ? 'active' : ''}" />`
+      ).join('');
+    } else {
+      prevBtn.style.display = "none";
+      nextBtn.style.display = "none";
+      thumbnailStrip.style.display = "none";
+    }
+    
+    updateGalleryImage();
     caption.textContent = carName || "Car Image";
-
     modal.classList.add("active");
     document.body.style.overflow = "hidden";
+  };
+  
+  window.navigateGallery = function(direction) {
+    currentGalleryIndex += direction;
+    
+    if (currentGalleryIndex < 0) {
+      currentGalleryIndex = galleryImages.length - 1;
+    } else if (currentGalleryIndex >= galleryImages.length) {
+      currentGalleryIndex = 0;
+    }
+    
+    updateGalleryImage();
+  };
+  
+  window.jumpToImage = function(index) {
+    currentGalleryIndex = index;
+    updateGalleryImage();
+  };
+  
+  function updateGalleryImage() {
+    const img = document.getElementById("modalImage");
+    const counter = document.getElementById("imageCounter");
+    const thumbnailStrip = document.getElementById("thumbnailStrip");
+    
+    currentImageUrl = galleryImages[currentGalleryIndex];
+    img.src = currentImageUrl;
+    
+    if (galleryImages.length > 1) {
+      counter.textContent = `${currentGalleryIndex + 1} / ${galleryImages.length}`;
+      
+      // Update active thumbnail
+      thumbnailStrip.querySelectorAll('img').forEach((thumb, idx) => {
+        thumb.classList.toggle('active', idx === currentGalleryIndex);
+      });
+    } else {
+      counter.textContent = '';
+    }
+  }
+  
+  // Legacy support for single image
+  window.viewCarImage = function (imageUrl, carName) {
+    viewCarGallery([imageUrl], carName, 0);
   };
 
   window.closeImageModal = function () {
@@ -429,6 +751,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     modal.classList.remove("active");
     document.body.style.overflow = "auto";
+    galleryImages = [];
+    currentGalleryIndex = 0;
   };
 
   window.downloadImage = function () {
@@ -504,11 +828,19 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /* ===============================
-     ESC KEY CLOSE
+     KEYBOARD NAVIGATION
   =============================== */
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") {
-      closeImageModal();
+    const imageModal = document.getElementById("imageModal");
+    if (imageModal && imageModal.classList.contains("active")) {
+      if (e.key === "ArrowLeft") {
+        navigateGallery(-1);
+      } else if (e.key === "ArrowRight") {
+        navigateGallery(1);
+      } else if (e.key === "Escape") {
+        closeImageModal();
+      }
+    } else if (e.key === "Escape") {
       closeDocModal();
     }
   });

@@ -27,11 +27,15 @@ if ($update->affected_rows <= 0) {
 }
 $update->close();
 
-// Fetch booking data for notifications
+// Fetch booking data for notifications - Support both cars and motorcycles
 $q = $conn->prepare("
-    SELECT b.*, c.brand AS car_name
+    SELECT b.*, 
+           b.vehicle_type,
+           COALESCE(c.brand, m.brand) AS car_name,
+           COALESCE(c.model, m.model) AS model
     FROM bookings b
-    JOIN cars c ON c.id = b.car_id
+    LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+    LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
     WHERE b.id=? LIMIT 1
 ");
 $q->bind_param("i", $booking_id);
@@ -47,11 +51,12 @@ if (!$booking) {
 
 $renter_id = $booking['user_id'];   // renter
 $owner_id  = $booking['owner_id'];  // owner
-$car_name  = $booking['car_name'];
+$vehicle_name = trim($booking['car_name'] . ' ' . $booking['model']);
+$vehicle_type = ucfirst($booking['vehicle_type'] ?? 'vehicle');
 
 // Notification for renter
 $title_r = "Booking Rejected";
-$msg_r   = "Your booking for {$car_name} was rejected. Reason: {$reason}";
+$msg_r   = "Your booking for {$vehicle_name} ({$vehicle_type}) was rejected. Reason: {$reason}";
 $type_r  = "booking_rejected";
 
 $notifR = $conn->prepare("
@@ -64,7 +69,7 @@ $notifR->close();
 
 // Owner log notification
 $title_o = "Booking Rejected";
-$msg_o   = "You rejected booking #{$booking_id} for {$car_name}.";
+$msg_o   = "You rejected booking #{$booking_id} for {$vehicle_name} ({$vehicle_type}).";
 $type_o  = "booking_update";
 
 $notifO = $conn->prepare("

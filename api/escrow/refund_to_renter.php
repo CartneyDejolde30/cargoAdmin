@@ -1,18 +1,20 @@
 <?php
-require_once 'include/db.php';
+require_once __DIR__ . '/../../include/config.php';
+require_once __DIR__ . '/../../include/db.php';
 
-function refundEscrowToRenter($bookingId, $reason, $conn = null, $processedBy = null) {
+function refundEscrowToRenter($bookingId, $reason, $connection = null, $processedBy = null) {
+    global $conn;
     $shouldClose = false;
-    if (!$conn) {
-        $conn = new mysqli("localhost", "root", "", "dbcargo");
-        $shouldClose = true;
+    if (!$connection) {
+        $connection = $conn; // Use centralized connection
+        $shouldClose = false; // Don't close shared connection
     }
     
     try {
-        mysqli_begin_transaction($conn);
+        mysqli_begin_transaction($connection);
         
         // Get escrow
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             SELECT e.id, e.amount, b.user_id
             FROM escrow e
             JOIN bookings b ON b.id = e.booking_id
@@ -27,7 +29,7 @@ function refundEscrowToRenter($bookingId, $reason, $conn = null, $processedBy = 
         }
         
         // Update escrow
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             UPDATE escrow 
             SET status = 'refunded',
                 refunded_at = NOW(),
@@ -39,7 +41,7 @@ function refundEscrowToRenter($bookingId, $reason, $conn = null, $processedBy = 
         $stmt->execute();
         
         // Update booking
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             UPDATE bookings 
             SET escrow_status = 'refunded',
                 payment_status = 'refunded'
@@ -49,7 +51,7 @@ function refundEscrowToRenter($bookingId, $reason, $conn = null, $processedBy = 
         $stmt->execute();
         
         // Log
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO payment_transactions 
             (booking_id, transaction_type, amount, description, created_by)
             VALUES (?, 'refund', ?, ?, ?)
@@ -58,23 +60,23 @@ function refundEscrowToRenter($bookingId, $reason, $conn = null, $processedBy = 
         $stmt->execute();
         
         // Notify
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO notifications (user_id, title, message)
             VALUES (?, 'Refund Processed 💵', CONCAT('Your refund of ₱', FORMAT(?, 2), ' has been processed.'))
         ");
         $stmt->bind_param("id", $escrow['user_id'], $escrow['amount']);
         $stmt->execute();
         
-        mysqli_commit($conn);
+        mysqli_commit($connection);
         
         return ['success' => true];
         
     } catch (Exception $e) {
-        mysqli_rollback($conn);
+        mysqli_rollback($connection);
         return ['error' => $e->getMessage()];
     } finally {
-        if ($shouldClose) {
-            $conn->close();
+        if ($shouldClose && $connection) {
+            $connection->close();
         }
     }
 }

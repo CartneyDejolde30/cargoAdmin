@@ -2,18 +2,15 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-$host = "127.0.0.1";
-$db_name = "dbcargo";
-$username = "root";
-$password = "";
+// Use centralized database connection
+require_once __DIR__ . '/../include/config.php';
+require_once __DIR__ . '/../include/db.php';
 
 try {
-    $conn = new PDO("mysql:host=$host;dbname=$db_name", $username, $password);
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    // Test query for user 7
+    // Test query for user 7 (using PDO from db.php)
     $query = "SELECT * FROM user_verifications WHERE user_id = 7";
-    $stmt = $conn->prepare($query);
+    $stmt = $pdo->prepare($query);
     $stmt->execute();
     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
     

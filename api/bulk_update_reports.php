@@ -55,7 +55,7 @@ try {
 
 } catch (Exception $e) {
     $conn->rollback();
-    echo json_encode([s
+    echo json_encode([
         'success' => false,
         'message' => $e->getMessage()
     ]);

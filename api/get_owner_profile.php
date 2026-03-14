@@ -56,6 +56,18 @@ if ($ownerResult->num_rows === 0) {
 $owner = $ownerResult->fetch_assoc();
 $owner_id = $owner['id']; // normalize for queries below
 
+// Build full URL for profile_image
+if (!empty($owner['profile_image'])) {
+    if (!filter_var($owner['profile_image'], FILTER_VALIDATE_URL)) {
+        if (!defined('UPLOADS_URL')) {
+            require_once __DIR__ . '/../include/config.php';
+        }
+        $owner['profile_image'] = UPLOADS_URL . '/profile_images/' . $owner['profile_image'];
+    }
+} else {
+    $owner['profile_image'] = '';
+}
+
 // --------------------------------------------------
 // Count approved cars
 // --------------------------------------------------

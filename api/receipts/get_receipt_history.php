@@ -88,7 +88,7 @@ function getReceiptDetails($conn, $bookingId, $receipt) {
     // Calculate rental duration
     $pickup = strtotime($booking['pickup_date']);
     $return = strtotime($booking['return_date']);
-    $days = max(1, ceil(($return - $pickup) / 86400));
+    $days = max(1, (int)(($return - $pickup) / 86400) + 1);
     
     return [
         'receipt_no' => $receipt['receipt_no'],

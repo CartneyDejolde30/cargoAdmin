@@ -461,7 +461,8 @@ $stats = $stats_result->fetch_assoc();
         }
 
         function displayMileageDetails(data) {
-            const baseUrl = 'http://10.77.127.2/carGOAdmin/';
+            // Dynamic base URL based on current host
+            const baseUrl = window.location.origin + '/carGOAdmin/';
             let html = `
                 <div class="info-row">
                     <span class="info-label">Booking ID:</span>

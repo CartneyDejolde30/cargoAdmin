@@ -73,7 +73,7 @@ try {
             b.owner_id
         FROM payments p
         INNER JOIN bookings b ON p.booking_id = b.id
-        WHERE p.id = ? AND p.status = 'escrow_pending'
+        WHERE p.id = ? AND p.status IN ('pending', 'escrow_pending')
         FOR UPDATE
     ";
 
@@ -141,12 +141,14 @@ try {
         $stmt->bind_param("ii", $adminId, $paymentId);
         $stmt->execute();
 
-        // Cancel booking
+        // Reject booking
         $stmt = $conn->prepare("
             UPDATE bookings
-            SET 
-                booking_status = 'cancelled',
-                payment_status = 'payment_under_review'
+            SET
+                status = 'rejected',
+                payment_status = 'rejected',
+                rejected_at = NOW(),
+                rejection_reason = 'Payment rejected by admin'
             WHERE id = ?
         ");
         $stmt->bind_param("i", $bookingId);

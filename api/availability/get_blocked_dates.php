@@ -75,6 +75,7 @@ while ($row = $result->fetch_assoc()) {
 
 // Get ALL dates with existing bookings (including dates BETWEEN pickup and return)
 // This ensures that if a booking is from Jan 10-15, ALL dates from Jan 10 to Jan 15 are marked as booked
+// ✅ UPDATED: Only block dates for bookings with VERIFIED payments (payment_status = 'verified')
 $booking_query = "SELECT 
                     pickup_date,
                     return_date
@@ -82,6 +83,7 @@ $booking_query = "SELECT
                   WHERE car_id = ? 
                   AND vehicle_type = ? 
                   AND status IN ('pending', 'approved', 'ongoing')
+                  AND payment_status = 'verified'
                   AND (
                     (pickup_date BETWEEN ? AND ?) OR
                     (return_date BETWEEN ? AND ?) OR

@@ -1,5 +1,6 @@
 <?php
-require_once __DIR__ . '/../include/db.php';
+require_once __DIR__ . '/../../include/config.php';
+require_once __DIR__ . '/../../include/db.php';
 
 /**
  * --------------------------------------------------
@@ -40,20 +41,23 @@ if ($hasTCPDF) {
  * Generate Receipt Function
  * --------------------------------------------------
  */
-function generateReceipt($bookingId, $conn = null) {
-    global $hasTCPDF;
+function generateReceipt($bookingId, $connection = null) {
+    global $hasTCPDF, $conn;
 
     $shouldClose = false;
-    if (!$conn) {
-        $conn = new mysqli("localhost", "root", "", "dbcargo");
+    if (!$connection) {
+        $connection = $conn; // Use centralized connection
         $shouldClose = true;
     }
     try {
         // Fetch booking details
-        $stmt = $conn->prepare("
-            SELECT 
+        $stmt = $connection->prepare("
+            SELECT
                 b.*,
-                c.brand, c.model, c.car_year, c.plate_number,
+                COALESCE(c.brand, m.brand) AS brand,
+                COALESCE(c.model, m.model) AS model,
+                COALESCE(c.car_year, m.motorcycle_year) AS vehicle_year,
+                COALESCE(c.plate_number, m.plate_number) AS plate_number,
                 u1.fullname AS renter_name,
                 u1.email AS renter_email,
                 u1.phone AS renter_contact,
@@ -61,9 +65,14 @@ function generateReceipt($bookingId, $conn = null) {
                 p.payment_reference,
                 p.payment_status
             FROM bookings b
-            LEFT JOIN cars c ON b.car_id = c.id
+            LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
+            LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
             LEFT JOIN users u1 ON b.user_id = u1.id
-            LEFT JOIN payments p ON p.booking_id = b.id
+            LEFT JOIN payments p ON p.id = (
+                SELECT id FROM payments
+                WHERE booking_id = b.id AND payment_status IN ('verified', 'paid', 'escrowed', 'released')
+                ORDER BY id DESC LIMIT 1
+            )
             WHERE b.id = ?
             LIMIT 1
         ");
@@ -81,32 +90,54 @@ function generateReceipt($bookingId, $conn = null) {
         // Calculate duration
         $pickup = strtotime($booking['pickup_date']);
         $return = strtotime($booking['return_date']);
-        $days = max(1, ceil(($return - $pickup) / 86400));
+        $days = max(1, (int)(($return - $pickup) / 86400) + 1);
 
         // Receipt data
         $receiptNo = "RCP-" . str_pad($bookingId, 6, "0", STR_PAD_LEFT);
         $bookingIdFormatted = "#BK-" . str_pad($bookingId, 4, "0", STR_PAD_LEFT);
-        $carName = "{$booking['brand']} {$booking['model']} {$booking['car_year']}";
+        $brand    = $booking['brand'] ?? '';
+        $model    = $booking['model'] ?? '';
+        $year     = $booking['vehicle_year'] ?? '';
+        $plate    = $booking['plate_number'] ?? '';
+        $carName  = trim("$brand $model $year");
+        if ($plate) $carName .= " ($plate)";
+
+        // Payment breakdown
+        $pricePerDay     = floatval($booking['price_per_day'] ?? 0);
+        $baseRental      = round($pricePerDay * $days, 2);
+        $totalAmount     = floatval($booking['total_amount']);
+        $serviceFee      = round($totalAmount - $baseRental, 2);
+        $securityDeposit = floatval($booking['security_deposit_amount'] ?? 0);
+        $grandTotal      = round($totalAmount + $securityDeposit, 2);
+
+        // Build additional fee rows for template
+        $additionalFees = '';
+        if ($serviceFee > 0) {
+            $additionalFees .= '<tr><td>Service Fee (5%)</td><td>&#8369;' . number_format($serviceFee, 2) . '</td></tr>';
+        }
+        if ($securityDeposit > 0) {
+            $additionalFees .= '<tr><td>Security Deposit (Held)</td><td>&#8369;' . number_format($securityDeposit, 2) . '</td></tr>';
+        }
 
         // Template replacements
         $replacements = [
-            '{{RECEIPT_NO}}' => $receiptNo,
-            '{{BOOKING_ID}}' => $bookingIdFormatted,
-            '{{DATE_ISSUED}}' => date('F d, Y h:i A'),
-            '{{STATUS}}' => strtoupper($booking['payment_status'] ?? 'PAID'),
-            '{{RENTER_NAME}}' => $booking['renter_name'],
-            '{{RENTER_EMAIL}}' => $booking['renter_email'],
-            '{{RENTER_CONTACT}}' => $booking['renter_contact'],
-            '{{CAR_NAME}}' => $carName . " ({$booking['plate_number']})",
-            '{{PICKUP_DATETIME}}' => date('F d, Y', strtotime($booking['pickup_date'])) . " at " . $booking['pickup_time'],
-            '{{RETURN_DATETIME}}' => date('F d, Y', strtotime($booking['return_date'])) . " at " . $booking['return_time'],
-            '{{DURATION}}' => $days . " day" . ($days > 1 ? 's' : ''),
-            '{{DAILY_RATE}}' => number_format($booking['price_per_day'], 2),
-            '{{BASE_AMOUNT}}' => number_format($booking['total_amount'], 2),
-            '{{TOTAL_AMOUNT}}' => number_format($booking['total_amount'], 2),
-            '{{PAYMENT_METHOD}}' => strtoupper($booking['payment_method'] ?? 'N/A'),
+            '{{RECEIPT_NO}}'        => $receiptNo,
+            '{{BOOKING_ID}}'        => $bookingIdFormatted,
+            '{{DATE_ISSUED}}'       => date('F d, Y h:i A'),
+            '{{STATUS}}'            => strtoupper($booking['payment_status'] ?? 'PAID'),
+            '{{RENTER_NAME}}'       => $booking['renter_name'] ?? 'N/A',
+            '{{RENTER_EMAIL}}'      => $booking['renter_email'] ?? 'N/A',
+            '{{RENTER_CONTACT}}'    => $booking['renter_contact'] ?? 'N/A',
+            '{{CAR_NAME}}'          => $carName ?: 'N/A',
+            '{{PICKUP_DATETIME}}'   => date('F d, Y', strtotime($booking['pickup_date'])) . ' at ' . $booking['pickup_time'],
+            '{{RETURN_DATETIME}}'   => date('F d, Y', strtotime($booking['return_date'])) . ' at ' . $booking['return_time'],
+            '{{DURATION}}'          => $days . ' day' . ($days > 1 ? 's' : ''),
+            '{{DAILY_RATE}}'        => number_format($pricePerDay, 2),
+            '{{BASE_AMOUNT}}'       => number_format($baseRental, 2),
+            '{{ADDITIONAL_FEES}}'   => $additionalFees,
+            '{{TOTAL_AMOUNT}}'      => number_format($grandTotal, 2),
+            '{{PAYMENT_METHOD}}'    => strtoupper($booking['payment_method'] ?? 'N/A'),
             '{{PAYMENT_REFERENCE}}' => $booking['payment_reference'] ?? 'N/A',
-            '{{ADDITIONAL_FEES}}' => ''
         ];
 
         $html = str_replace(array_keys($replacements), array_values($replacements), $template);
@@ -133,7 +164,11 @@ function generateReceipt($bookingId, $conn = null) {
             $filename = "receipt_{$bookingId}_" . time() . ".pdf";
             $receiptPath = "receipts/" . $filename;
             $filepath = $receiptDir . "/" . $filename;
-            $receiptUrl = "http://10.77.127.2/carGOAdmin/" . $receiptPath;
+            // Load config if not already loaded
+            if (!defined('BASE_URL')) {
+                require_once __DIR__ . '/../../include/config.php';
+            }
+            $receiptUrl = BASE_URL . "/" . $receiptPath;
 
             $pdf->Output($filepath, 'F');
 
@@ -142,7 +177,7 @@ function generateReceipt($bookingId, $conn = null) {
              * Save receipt to database
              * --------------------------------------------------
              */
-            $stmt = $conn->prepare("
+            $stmt = $connection->prepare("
                 INSERT INTO receipts (
                     booking_id, receipt_no, receipt_path, receipt_url, status, generated_at
                 )
@@ -163,7 +198,17 @@ function generateReceipt($bookingId, $conn = null) {
             ];
         }
 
-        // TCPDF missing
+        // TCPDF missing — still persist receipt_no so get_receipt.php can find it
+        $stmt = $connection->prepare("
+            INSERT INTO receipts (booking_id, receipt_no, receipt_path, receipt_url, status, generated_at)
+            VALUES (?, ?, NULL, NULL, 'generated', NOW())
+            ON DUPLICATE KEY UPDATE
+                receipt_no = VALUES(receipt_no),
+                status = 'generated'
+        ");
+        $stmt->bind_param("is", $bookingId, $receiptNo);
+        $stmt->execute();
+
         return [
             'success' => true,
             'receipt_no' => $receiptNo,
@@ -174,8 +219,8 @@ function generateReceipt($bookingId, $conn = null) {
     } catch (Exception $e) {
         return ['error' => $e->getMessage()];
     } finally {
-        if ($shouldClose) {
-            $conn->close();
+        if ($shouldClose && $connection) {
+            $connection->close();
         }
     }
 }

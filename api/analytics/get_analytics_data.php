@@ -66,9 +66,16 @@ function getOverviewStats($conn, $owner_id = null) {
     $completedBookings = mysqli_fetch_assoc(mysqli_query($conn, 
         "SELECT COUNT(*) as count FROM bookings $whereAnd status = 'completed'"))['count'];
     
-    // Total revenue
+    // Total revenue (owner's earnings from paid/escrow bookings - matches dashboard logic)
+    $revenueField = $owner_id ? "owner_payout" : "total_amount";
     $totalRevenue = mysqli_fetch_assoc(mysqli_query($conn, 
-        "SELECT COALESCE(SUM(total_amount), 0) as revenue FROM bookings $whereAnd status = 'completed'"))['revenue'];
+        "SELECT COALESCE(SUM($revenueField), 0) as revenue 
+         FROM bookings 
+         $whereAnd (
+             escrow_status IN ('held', 'released_to_owner')
+             OR payout_status = 'completed'
+             OR (status = 'completed' AND payment_verified_at IS NOT NULL)
+         )"))['revenue'];
     
     // Active vehicles
     $vehicleWhere = $owner_id ? "WHERE owner_id = $owner_id" : "";
@@ -80,7 +87,7 @@ function getOverviewStats($conn, $owner_id = null) {
     
     // Average rating
     $avgRating = mysqli_fetch_assoc(mysqli_query($conn, 
-        "SELECT AVG(rating) as avg_rating FROM reviews WHERE owner_id = " . ($owner_id ?? 0)))['avg_rating'] ?? 5.0;
+        "SELECT AVG(rating) as avg_rating FROM reviews WHERE owner_id = " . ($owner_id ?? 0)))['avg_rating'] ?? 0.0;
     
     return [
         'success' => true,
@@ -99,12 +106,22 @@ function getBookingTrends($conn, $owner_id = null) {
     $where = $owner_id ? "WHERE owner_id = $owner_id AND" : "WHERE";
     
     // Last 6 months trend
+    // Use owner_payout for owner-specific revenue, total_amount for admin view
+    $revenueField = $owner_id ? "owner_payout" : "total_amount";
+    
     $query = "SELECT 
                 DATE_FORMAT(created_at, '%Y-%m') as month,
                 COUNT(*) as count,
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
                 SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-                COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) as revenue
+                COALESCE(SUM(CASE 
+                    WHEN (
+                        escrow_status IN ('held', 'released_to_owner')
+                        OR payout_status = 'completed'
+                        OR (status = 'completed' AND payment_verified_at IS NOT NULL)
+                    ) THEN $revenueField 
+                    ELSE 0 
+                END), 0) as revenue
               FROM bookings 
               $where created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
               GROUP BY DATE_FORMAT(created_at, '%Y-%m')
@@ -130,13 +147,21 @@ function getBookingTrends($conn, $owner_id = null) {
 function getRevenueBreakdown($conn, $owner_id = null) {
     $where = $owner_id ? "WHERE owner_id = $owner_id AND" : "WHERE";
     
-    // Revenue by vehicle type
+    // Use owner_payout for owner-specific revenue, total_amount for admin view
+    $revenueField = $owner_id ? "owner_payout" : "total_amount";
+    
+    // Revenue by vehicle type - Include bookings with escrow, completed, or payout
+    // (matches dashboard revenue counting logic)
     $query = "SELECT 
                 vehicle_type,
                 COUNT(*) as bookings,
-                COALESCE(SUM(total_amount), 0) as revenue
+                COALESCE(SUM($revenueField), 0) as revenue
               FROM bookings 
-              $where status = 'completed'
+              $where (
+                  escrow_status IN ('held', 'released_to_owner')
+                  OR payout_status = 'completed'
+                  OR (status = 'completed' AND payment_verified_at IS NOT NULL)
+              )
               GROUP BY vehicle_type";
     
     $result = mysqli_query($conn, $query);
@@ -150,13 +175,17 @@ function getRevenueBreakdown($conn, $owner_id = null) {
         ];
     }
     
-    // Payment status breakdown
+    // Payment status breakdown - Include all paid bookings with revenue
     $paymentQuery = "SELECT 
                         payment_status,
                         COUNT(*) as count,
-                        COALESCE(SUM(total_amount), 0) as amount
+                        COALESCE(SUM($revenueField), 0) as amount
                      FROM bookings
-                     $where
+                     $where (
+                         escrow_status IN ('held', 'released_to_owner')
+                         OR payout_status = 'completed'
+                         OR (status = 'completed' AND payment_verified_at IS NOT NULL)
+                     )
                      GROUP BY payment_status";
     
     $paymentResult = mysqli_query($conn, $paymentQuery);
@@ -180,6 +209,9 @@ function getRevenueBreakdown($conn, $owner_id = null) {
 function getPopularVehicles($conn, $owner_id = null) {
     $ownerWhere = $owner_id ? "AND b.owner_id = $owner_id" : "";
     
+    // Use owner_payout for owner-specific revenue, total_amount for admin view
+    $revenueField = $owner_id ? "b.owner_payout" : "b.total_amount";
+    
     // Top 10 most booked cars
     $carsQuery = "SELECT 
                     c.id,
@@ -188,10 +220,10 @@ function getPopularVehicles($conn, $owner_id = null) {
                     c.plate_number,
                     c.image,
                     COUNT(b.id) as booking_count,
-                    COALESCE(AVG(r.rating), 5.0) as avg_rating,
-                    COALESCE(SUM(b.total_amount), 0) as total_revenue
+                    COALESCE(AVG(r.rating), 0.0) as avg_rating,
+                    COALESCE(SUM($revenueField), 0) as total_revenue
                   FROM cars c
-                  LEFT JOIN bookings b ON c.id = b.car_id AND b.vehicle_type = 'car' $ownerWhere
+                  LEFT JOIN bookings b ON c.id = b.car_id AND b.vehicle_type = 'car' AND b.status = 'completed' $ownerWhere
                   LEFT JOIN reviews r ON c.id = r.car_id
                   WHERE c.status = 'approved'
                   GROUP BY c.id
@@ -221,10 +253,11 @@ function getPopularVehicles($conn, $owner_id = null) {
                            m.plate_number,
                            m.image,
                            COUNT(b.id) as booking_count,
-                           COALESCE(AVG(5.0), 5.0) as avg_rating,
-                           COALESCE(SUM(b.total_amount), 0) as total_revenue
+                           COALESCE(AVG(r.rating), 0.0) as avg_rating,
+                           COALESCE(SUM($revenueField), 0) as total_revenue
                          FROM motorcycles m
-                         LEFT JOIN bookings b ON m.id = b.car_id AND b.vehicle_type = 'motorcycle' $ownerWhere
+                         LEFT JOIN bookings b ON m.id = b.car_id AND b.vehicle_type = 'motorcycle' AND b.status = 'completed' $ownerWhere
+                         LEFT JOIN reviews r ON m.id = r.car_id
                          WHERE m.status = 'approved'
                          GROUP BY m.id
                          ORDER BY booking_count DESC, total_revenue DESC

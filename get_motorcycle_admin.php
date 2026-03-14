@@ -1,4 +1,5 @@
 <?php
+session_start();
 include "include/db.php";
 
 // Get filter values
@@ -8,8 +9,8 @@ $status = $_GET['status'] ?? 'all';
 $search = $conn->real_escape_string($search);
 $status = $conn->real_escape_string($status);
 
-// Pagination
-$limit = 10;
+// Pagination settings
+$limit = 5; // rows per page (matching cars admin)
 $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
 $page = max($page, 1);
 $offset = ($page - 1) * $limit;
@@ -37,13 +38,14 @@ if ($status !== "all") {
     $sql .= " AND motorcycles.status = '$status'";
 }
 
-// Count total
+// Count total rows for pagination
 $countQuery = $conn->query($sql);
 $totalRows = $countQuery->num_rows;
 $totalPages = ceil($totalRows / $limit);
 
-// Final query
+// Final query with sorting + limit
 $sql .= " ORDER BY motorcycles.created_at DESC LIMIT $limit OFFSET $offset";
+
 $query = $conn->query($sql);
 
 // Get stats
@@ -93,456 +95,32 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
   <link href="include/notifications.css" rel="stylesheet">
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
   <style>
-    /* Enhanced Animations */
-    @keyframes slideInUp {
-      from {
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-    }
-
-    .fade-in {
-      animation: fadeIn 0.5s ease-in;
-    }
-
-    /* Enhanced Stats Cards */
-    .stats-grid {
-      animation: slideInUp 0.6s ease-out;
-    }
-
-    .stat-card {
-      position: relative;
-      overflow: hidden;
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      cursor: pointer;
-    }
-
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-      transition: left 0.5s;
-    }
-
-    .stat-card:hover::before {
-      left: 100%;
-    }
-
-    .stat-card:hover {
-      transform: translateY(-10px) scale(1.02);
-      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-    }
-
-    /* Motorcycle-specific stat icons */
-    .stat-icon.stat-total {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-
-    .stat-icon.stat-pending {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    }
-
-    .stat-icon.stat-approved {
-      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    }
-
-    .stat-icon.stat-rejected {
-      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-    }
-
-    /* Enhanced Table */
-    .table-section {
-      animation: slideInUp 0.8s ease-out;
-    }
-
-    tbody tr {
-      transition: all 0.3s ease;
-      position: relative;
-    }
-
-    tbody tr::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      height: 100%;
-      width: 4px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      transform: scaleY(0);
-      transition: transform 0.3s ease;
-    }
-
-    tbody tr:hover::before {
-      transform: scaleY(1);
-    }
-
-    tbody tr:hover {
-      background: linear-gradient(90deg, rgba(102, 126, 234, 0.05) 0%, transparent 100%);
-      transform: translateX(4px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-    }
-
-    /* Motorcycle Thumbnail */
-    .motorcycle-thumb {
-      width: 80px;
-      height: 60px;
-      border-radius: 12px;
-      object-fit: cover;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      cursor: pointer;
-      transition: all 0.3s ease;
-      border: 3px solid #f0f0f0;
-    }
-
-    .motorcycle-thumb:hover {
-      transform: scale(1.15) rotate(2deg);
-      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
-      border-color: #667eea;
-    }
-
-    /* Enhanced Status Badges */
-    .status-badge {
-      padding: 6px 16px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .status-badge::before {
-      content: '';
-      position: absolute;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      left: 8px;
-      animation: pulse 2s infinite;
-    }
-
-    .status-badge.pending {
-      background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
-      color: #664d03;
-    }
-
-    .status-badge.pending::before {
-      background: #ffc107;
-    }
-
-    .status-badge.approved {
-      background: linear-gradient(135deg, #d1e7dd 0%, #a3cfbb 100%);
-      color: #0f5132;
-    }
-
-    .status-badge.approved::before {
-      background: #198754;
-    }
-
-    .status-badge.rejected {
-      background: linear-gradient(135deg, #f8d7da 0%, #f1aeb5 100%);
-      color: #842029;
-    }
-
-    .status-badge.rejected::before {
-      background: #dc3545;
-    }
-
-    /* Enhanced Action Buttons */
     .action-btn {
-      position: relative;
-      overflow: hidden;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .action-btn::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 0;
-      height: 0;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.5);
-      transform: translate(-50%, -50%);
-      transition: width 0.6s, height 0.6s;
-    }
-
-    .action-btn:hover::after {
-      width: 300px;
-      height: 300px;
-    }
-
-    .action-btn.approve {
-      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
-    }
-
-    .action-btn.approve:hover {
-      box-shadow: 0 6px 25px rgba(79, 172, 254, 0.5);
-      transform: translateY(-3px);
-    }
-
-    .action-btn.reject {
-      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-      box-shadow: 0 4px 15px rgba(250, 112, 154, 0.3);
-    }
-
-    .action-btn.reject:hover {
-      box-shadow: 0 6px 25px rgba(250, 112, 154, 0.5);
-      transform: translateY(-3px);
-    }
-
-    /* Enhanced Document Buttons */
-    .doc-btn {
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 11px;
-      font-weight: 700;
-      text-decoration: none;
-      display: inline-block;
-      margin-right: 6px;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .doc-btn::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-      transition: left 0.4s;
-    }
-
-    .doc-btn:hover::before {
-      left: 100%;
-    }
-
-    .doc-btn.or {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
-    }
-
-    .doc-btn.or:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.5);
-    }
-
-    .doc-btn.cr {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-      box-shadow: 0 3px 10px rgba(240, 147, 251, 0.3);
-    }
-
-    .doc-btn.cr:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(240, 147, 251, 0.5);
-    }
-
-    /* Enhanced Search Section */
-    .search-section {
-      animation: slideInUp 0.7s ease-out;
-      background: white;
-      border-radius: 20px;
-      padding: 25px 30px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      margin-bottom: 30px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .search-section::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 4px;
-      background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-    }
-
-    /* Enhanced Empty State */
-    .empty-state {
-      padding: 80px 20px;
-      text-align: center;
-    }
-
-    .empty-state i {
-      font-size: 80px;
-      color: #e0e0e0;
-      margin-bottom: 20px;
-      animation: pulse 2s infinite;
-    }
-
-    .empty-state h4 {
-      font-size: 24px;
-      font-weight: 700;
-      color: #666;
-      margin-bottom: 12px;
-    }
-
-    .empty-state p {
-      font-size: 14px;
-      color: #999;
-    }
-
-    /* Enhanced Modals */
-    .modal-content {
-      border-radius: 20px;
-      border: none;
-      overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-
-    .modal-header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: none;
-      padding: 20px 30px;
-    }
-
-    .modal-header.bg-danger {
-      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%) !important;
-    }
-
-    .modal-title {
-      font-weight: 700;
-      color: white;
-    }
-
-    .modal-body {
-      padding: 30px;
-    }
-
-    .modal-footer {
-      border: none;
-      padding: 20px 30px;
-      background: #f8f9fa;
-    }
-
-    /* Loading State */
-    .loading-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(255, 255, 255, 0.95);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-    }
-
-    .loading-overlay.active {
-      display: flex;
-    }
-
-    .loading-spinner {
-      width: 60px;
-      height: 60px;
-      border: 5px solid #f0f0f0;
-      border-top: 5px solid #667eea;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    /* Tooltip Enhancement */
-    [data-tooltip] {
-      position: relative;
-      cursor: pointer;
-    }
-
-    [data-tooltip]::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%) translateY(-8px);
-      padding: 8px 12px;
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      font-size: 12px;
-      border-radius: 6px;
+      width: auto !important;
+      height: auto !important;
+      min-width: unset !important;
+      padding: 6px 14px !important;
       white-space: nowrap;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s, transform 0.3s;
-      z-index: 1000;
+      font-size: 12px;
     }
-
-    [data-tooltip]:hover::after {
-      opacity: 1;
-      transform: translateX(-50%) translateY(-4px);
-    }
-
-    /* Responsive Enhancements */
-    @media (max-width: 768px) {
-      .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
-      }
-
-      .stat-value {
-        font-size: 2rem;
-      }
-
-      .motorcycle-thumb {
-        width: 60px;
-        height: 45px;
-      }
-
-      .action-btn {
-        padding: 8px 12px;
-        font-size: 11px;
-      }
-    }
+    .action-btn i { font-size: 13px; }
   </style>
 </head>
 <body>
 
 <div class="dashboard-wrapper">
   <?php include('include/sidebar.php'); ?>
+    <?php include('include/admin_profile.php'); ?>
 
+  <!-- Main Content -->
   <main class="main-content">
-    <!-- Enhanced Top Bar -->
-    <div class="top-bar fade-in">
+    <!-- Top Bar -->
+    <div class="top-bar">
       <h1 class="page-title">
         <i class="bi bi-bicycle"></i>
-        Motorcycle Management
+        Motorcycle Approval Management
       </h1>
       <div class="user-profile">
     <div class="notification-dropdown">
@@ -552,89 +130,61 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
     </div>
 
-    <!-- Enhanced Stats Cards -->
+    <!-- Stats Cards -->
     <div class="stats-grid">
-      <div class="stat-card" data-tooltip="View all motorcycles">
-        <div class="stat-header">
-          <div class="stat-icon stat-total">
-            <i class="bi bi-bicycle"></i>
-          </div>
-          <div class="stat-trend">
-            <i class="bi bi-graph-up"></i>
-            100%
-          </div>
-        </div>
-        <div class="stat-value"><?= $stats['total'] ?></div>
+      <div class="stat-card">
         <div class="stat-label">Total Motorcycles</div>
-        <div class="stat-detail">All registered motorcycles</div>
+        <div class="stat-value"><?= $stats['total'] ?></div>
+        <div class="stat-icon stat-total">
+          <i class="bi bi-bicycle"></i>
+        </div>
       </div>
 
-      <div class="stat-card" data-tooltip="Motorcycles awaiting approval">
-        <div class="stat-header">
-          <div class="stat-icon stat-pending">
-            <i class="bi bi-clock-history"></i>
-          </div>
-          <div class="stat-trend">
-            <i class="bi bi-exclamation-circle"></i>
-            Review
-          </div>
-        </div>
+      <div class="stat-card">
+        <div class="stat-label">Pending</div>
         <div class="stat-value"><?= $stats['pending'] ?></div>
-        <div class="stat-label">Pending Approval</div>
-        <div class="stat-detail">Needs your attention</div>
+        <div class="stat-icon stat-pending">
+          <i class="bi bi-clock-history"></i>
+        </div>
       </div>
 
-      <div class="stat-card" data-tooltip="Active motorcycles">
-        <div class="stat-header">
-          <div class="stat-icon stat-approved">
-            <i class="bi bi-check-circle"></i>
-          </div>
-          <div class="stat-trend">
-            <i class="bi bi-arrow-up"></i>
-            Active
-          </div>
-        </div>
-        <div class="stat-value"><?= $stats['approved'] ?></div>
+      <div class="stat-card">
         <div class="stat-label">Approved</div>
-        <div class="stat-detail">Ready for rental</div>
+        <div class="stat-value"><?= $stats['approved'] ?></div>
+        <div class="stat-icon stat-approved">
+          <i class="bi bi-check-circle"></i>
+        </div>
       </div>
 
-      <div class="stat-card" data-tooltip="Rejected submissions">
-        <div class="stat-header">
-          <div class="stat-icon stat-rejected">
-            <i class="bi bi-x-circle"></i>
-          </div>
-          <div class="stat-trend down">
-            <i class="bi bi-arrow-down"></i>
-            Declined
-          </div>
-        </div>
-        <div class="stat-value"><?= $stats['rejected'] ?></div>
+      <div class="stat-card">
         <div class="stat-label">Rejected</div>
-        <div class="stat-detail">Did not meet criteria</div>
+        <div class="stat-value"><?= $stats['rejected'] ?></div>
+        <div class="stat-icon stat-rejected">
+          <i class="bi bi-x-circle"></i>
+        </div>
       </div>
     </div>
 
-    <!-- Enhanced Search Section -->
+    <!-- Search Section -->
     <div class="search-section">
       <form method="GET" class="search-form">
         <input 
           type="text" 
           name="search" 
           class="search-input" 
-          placeholder="🔍 Search by owner, brand, model, or plate number..." 
+          placeholder="Search by owner, brand, model, or plate number..." 
           value="<?= htmlspecialchars($search) ?>">
         
         <select name="status" class="filter-select">
-          <option value="all" <?= $status === 'all' ? 'selected' : '' ?>>📋 All Status</option>
-          <option value="pending" <?= $status === 'pending' ? 'selected' : '' ?>>⏳ Pending</option>
-          <option value="approved" <?= $status === 'approved' ? 'selected' : '' ?>>✅ Approved</option>
-          <option value="rejected" <?= $status === 'rejected' ? 'selected' : '' ?>>❌ Rejected</option>
+          <option value="all" <?= $status === 'all' ? 'selected' : '' ?>>All Status</option>
+          <option value="pending" <?= $status === 'pending' ? 'selected' : '' ?>>Pending</option>
+          <option value="approved" <?= $status === 'approved' ? 'selected' : '' ?>>Approved</option>
+          <option value="rejected" <?= $status === 'rejected' ? 'selected' : '' ?>>Rejected</option>
         </select>
 
         <button type="submit" class="search-btn">
@@ -647,257 +197,308 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
       </form>
     </div>
 
-    <!-- Enhanced Table Section -->
+    <!-- Motorcycles Table -->
     <div class="table-section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <i class="bi bi-list-ul me-2"></i>
-          Motorcycle Listings
-        </h2>
-        <div class="table-controls">
-          <a href="?status=all" class="table-btn <?= $status === 'all' ? 'active' : '' ?>">
-            All (<?= $stats['total'] ?>)
-          </a>
-          <a href="?status=pending" class="table-btn <?= $status === 'pending' ? 'active' : '' ?>">
-            Pending (<?= $stats['pending'] ?>)
-          </a>
-          <a href="?status=approved" class="table-btn <?= $status === 'approved' ? 'active' : '' ?>">
-            Active (<?= $stats['approved'] ?>)
-          </a>
-        </div>
-      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Owner</th>
+            <th>Motorcycle Details</th>
+            <th>Plate Number</th>
+            <th>Status</th>
+            <th>Image</th>
+            <th>Documents</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php 
+          if ($query->num_rows === 0) {
+            echo '<tr><td colspan="8" class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <h4>No motorcycles found</h4>
+                    <p>Try adjusting your search or filter criteria</p>
+                  </td></tr>';
+          }
 
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th><i class="bi bi-person me-1"></i>Owner</th>
-              <th><i class="bi bi-bicycle me-1"></i>Motorcycle Details</th>
-              <th><i class="bi bi-credit-card me-1"></i>Plate</th>
-              <th><i class="bi bi-shield-check me-1"></i>Status</th>
-              <th><i class="bi bi-image me-1"></i>Image</th>
-              <th><i class="bi bi-file-earmark me-1"></i>Docs</th>
-              <th><i class="bi bi-gear me-1"></i>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php 
-            if ($query->num_rows === 0) {
-              echo '<tr><td colspan="8" class="empty-state">
-                      <i class="bi bi-bicycle"></i>
-                      <h4>No motorcycles found</h4>
-                      <p>Try adjusting your search or filter criteria</p>
-                    </td></tr>';
-            }
-
-            $num =  1;
-            while($row = $query->fetch_assoc()) { ?>
-            <tr>
-              <td>
-                <strong class="text-primary">#<?= $num++ ?></strong>
-              </td>
-              <td>
-                <div class="user-cell">
-                  <div class="user-avatar-small">
-                    <img src="https://ui-avatars.com/api/?name=<?= urlencode($row['fullname']) ?>&background=667eea&color=fff">
-                  </div>
-                  <span><?= htmlspecialchars($row['fullname']) ?></span>
+          $num = $offset + 1;
+          while($row = $query->fetch_assoc()) { ?>
+          <tr>
+            <td><?= $num++ ?></td>
+            <td><strong><?= htmlspecialchars($row['fullname']) ?></strong></td>
+            <td>
+              <strong><?= htmlspecialchars($row['brand']) ?></strong><br>
+              <small class="text-muted"><?= htmlspecialchars($row['model']) ?></small>
+            </td>
+            <td><strong><?= htmlspecialchars($row['plate_number']) ?></strong></td>
+            <td>
+              <span class="status-badge <?= $row['status'] ?>">
+                <?= ucfirst($row['status']) ?>
+              </span>
+            </td>
+            <td>
+              <?php 
+              $extraImages = !empty($row['extra_images']) ? json_decode($row['extra_images'], true) : [];
+              $allImages = array_filter(array_merge(
+                [$row['image'] ?? ''], 
+                is_array($extraImages) ? $extraImages : []
+              ));
+              
+              if(!empty($allImages)) { 
+                $mainImage = $allImages[0];
+              ?>
+                <div style="position: relative; display: inline-block;">
+                  <img src="<?= htmlspecialchars($mainImage) ?>" 
+                    class="motorcycle-thumb"
+                    onclick="viewCarGallery(<?= htmlspecialchars(json_encode($allImages)) ?>, '<?= htmlspecialchars($row['brand'].' '.$row['model']) ?>', 0)"
+                    alt="Motorcycle"
+                    style="cursor: pointer;">
+                  <?php if(count($allImages) > 1) { ?>
+                    <span style="position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">
+                      +<?= count($allImages) - 1 ?>
+                    </span>
+                  <?php } ?>
                 </div>
-              </td>
-              <td>
-                <strong><?= htmlspecialchars($row['brand']) ?></strong><br>
-                <small class="text-muted">
-                  <i class="bi bi-geo-alt-fill me-1"></i><?= htmlspecialchars($row['model']) ?> • <?= $row['motorcycle_year'] ?>
-                </small><br>
-                <span class="badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-size: 10px;">
-                  <i class="bi bi-speedometer me-1"></i><?= htmlspecialchars($row['engine_displacement'] ?? 'N/A') ?>
-                </span>
-              </td>
-              <td>
-                <strong style="font-family: monospace;"><?= htmlspecialchars($row['plate_number']) ?></strong>
-              </td>
-              <td>
-                <span class="status-badge <?= $row['status'] ?>">
-                  <?= ucfirst($row['status']) ?>
-                </span>
-              </td>
-              <td>
-                <?php if(!empty($row['image'])) { ?>
-                  <img src="<?= htmlspecialchars($row['image']) ?>" 
-                       class="motorcycle-thumb"
-                       onclick="viewCarImage('<?= htmlspecialchars($row['image']) ?>', '<?= htmlspecialchars($row['brand'].' '.$row['model']) ?>')"
-                       alt="Motorcycle">
-                <?php } else { ?>
-                  <span class="text-muted">
-                    <i class="bi bi-image-fill"></i> No Image
-                  </span>
-                <?php } ?>
-              </td>
-              <td>
-                <a href="javascript:void(0)"
-                   class="doc-btn or"
-                   onclick="viewDocument('<?= htmlspecialchars($row['official_receipt']) ?>','Official Receipt')"
-                   data-tooltip="View Official Receipt">
-                   <i class="bi bi-file-earmark-text me-1"></i>OR
-                </a>
-                <a href="javascript:void(0)"
-                   class="doc-btn cr"
-                   onclick="viewDocument('<?= htmlspecialchars($row['certificate_of_registration']) ?>','Certificate of Registration')"
-                   data-tooltip="View CR">
-                   <i class="bi bi-file-earmark-check me-1"></i>CR
-                </a>
-              </td>
-              <td>
-                <div class="action-buttons">
-                  <form method="POST" action="update_motorcycle_status.php" >
-                    <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                    
-                    <?php if($row['status'] !== 'approved') { ?>
-                      <button name="status" value="approved" class="action-btn approve" data-tooltip="Approve this motorcycle">
-                        <i class="bi bi-check-lg"></i>
-                      </button>
-                    <?php } ?>
+              <?php } else { ?>
+                <span class="text-muted">No Image</span>
+              <?php } ?>
+            </td>
+            <td>
+              <a href="javascript:void(0)"
+                 class="doc-btn or"
+                 onclick="viewDocument('<?= htmlspecialchars($row['official_receipt']) ?>','Official Receipt')">
+                 OR
+              </a>
+              <a href="javascript:void(0)"
+                 class="doc-btn cr"
+                 onclick="viewDocument('<?= htmlspecialchars($row['certificate_of_registration']) ?>','Certificate of Registration')">
+                 CR
+              </a>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <button class="action-btn view" onclick="viewMotoDetails(<?= $row['id'] ?>)" title="View Details">
+                  <i class="bi bi-eye"></i> View
+                </button>
+                <form method="POST" action="update_motorcycle_status.php" style="display: contents;">
+                  <input type="hidden" name="id" value="<?= $row['id'] ?>">
 
-                    <?php if($row['status'] !== 'rejected') { ?>
-                      <button type="button" 
-                              class="action-btn reject rejectBtn" 
-                              data-id="<?= $row['id'] ?>"
-                              data-tooltip="Reject this motorcycle">
-                        <i class="bi bi-x-lg"></i>
-                      </button>
-                    <?php } ?>
-                  </form>
-                </div>
-              </td>
-            </tr>
-            <?php } ?>
-          </tbody>
-        </table>
-      </div>
+                  <?php if($row['status'] !== 'approved') { ?>
+                    <button name="status" value="approved" class="action-btn approve">
+                      <i class="bi bi-check-lg"></i> Approve
+                    </button>
+                  <?php } ?>
 
-      <!-- Enhanced Pagination -->
+                  <?php if($row['status'] !== 'rejected') { ?>
+                    <button type="button"
+                            class="action-btn reject rejectBtn"
+                            data-id="<?= $row['id'] ?>">
+                      <i class="bi bi-x-lg"></i> Reject
+                    </button>
+                  <?php } ?>
+                </form>
+              </div>
+            </td>
+          </tr>
+          <?php } ?>
+        </tbody>
+      </table>
+
+      <!-- Pagination -->
       <?php if ($totalPages > 1): ?>
-      <div class="pagination-section">
-        <div class="pagination-info">
-          <i class="bi bi-info-circle me-2"></i>
-          Showing <strong><?= $offset + 1 ?></strong> - <strong><?= min($offset + $limit, $totalRows) ?></strong> of <strong><?= $totalRows ?></strong> motorcycles
-        </div>
-        <div class="pagination-controls">
-          <?php if($page > 1): ?>
-            <a href="?page=<?= $page - 1 ?>&search=<?= urlencode($search) ?>&status=<?= $status ?>" class="page-btn">
+      <div class="pagination-wrapper">
+        <ul class="pagination">
+          <!-- Previous Button -->
+          <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+            <a class="page-link" href="?page=<?= $page - 1 ?>&search=<?= urlencode($search) ?>&status=<?= $status ?>">
               <i class="bi bi-chevron-left"></i>
             </a>
-          <?php endif; ?>
+          </li>
 
+          <!-- Page Numbers -->
           <?php 
           $start = max(1, $page - 2);
           $end = min($totalPages, $page + 2);
           
           for ($i = $start; $i <= $end; $i++): ?>
-            <a href="?page=<?= $i ?>&search=<?= urlencode($search) ?>&status=<?= $status ?>" 
-               class="page-btn <?= $i == $page ? 'active' : '' ?>">
-              <?= $i ?>
-            </a>
+            <li class="page-item <?= $i == $page ? 'active' : '' ?>">
+              <a class="page-link" href="?page=<?= $i ?>&search=<?= urlencode($search) ?>&status=<?= $status ?>">
+                <?= $i ?>
+              </a>
+            </li>
           <?php endfor; ?>
 
-          <?php if($page < $totalPages): ?>
-            <a href="?page=<?= $page + 1 ?>&search=<?= urlencode($search) ?>&status=<?= $status ?>" class="page-btn">
+          <!-- Next Button -->
+          <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+            <a class="page-link" href="?page=<?= $page + 1 ?>&search=<?= urlencode($search) ?>&status=<?= $status ?>">
               <i class="bi bi-chevron-right"></i>
             </a>
-          <?php endif; ?>
-        </div>
+          </li>
+        </ul>
       </div>
       <?php endif; ?>
     </div>
   </main>
 </div>
 
-<!-- Loading Overlay -->
-<div class="loading-overlay" id="loadingOverlay">
-  <div class="loading-spinner"></div>
-</div>
-
-<!-- Enhanced Reject Modal -->
+<!-- Reject Modal -->
 <div class="modal fade" id="rejectModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <form class="modal-content" method="POST" action="update_motorcycle_status.php">
-      <div class="modal-header bg-danger">
+      <div class="modal-header">
         <h5 class="modal-title">
-          <i class="bi bi-x-circle-fill me-2"></i>Reject Motorcycle Listing
+          <i class="bi bi-x-circle text-danger"></i> Reject Motorcycle Listing
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <input type="hidden" name="id" id="rejectCarId">
-        <div class="alert alert-warning">
-          <i class="bi bi-exclamation-triangle-fill me-2"></i>
-          <strong>Important:</strong> The owner will be notified of this rejection.
-        </div>
-        <label class="form-label fw-bold">
-          <i class="bi bi-pencil-square me-2"></i>Reason for Rejection
-        </label>
+        <p class="text-muted mb-3">Provide a clear reason so the owner understands why their motorcycle was rejected.</p>
         <textarea 
           class="form-control" 
           name="remarks" 
-          placeholder="Please provide a clear reason for rejection..." 
-          style="height:140px;" 
+          placeholder="Enter rejection reason..." 
+          style="height:120px;" 
           required></textarea>
-        <small class="text-muted mt-2 d-block">
-          <i class="bi bi-info-circle me-1"></i>
-          Be specific about what needs to be corrected or improved.
-        </small>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-          <i class="bi bi-x-lg me-2"></i>Cancel
-        </button>
-        <button type="submit" name="status" value="rejected" class="btn btn-danger">
-          <i class="bi bi-send-fill me-2"></i>Submit Rejection
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" name="status" value="rejected" class="btn btn-danger ">
+          <i class="bi bi-x-lg"></i> Confirm Rejection
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Enhanced Image Modal -->
+<!-- Image Gallery Modal -->
 <div class="image-modal" id="imageModal">
   <div class="image-modal-content">
     <div class="image-modal-header">
-      <button class="modal-action-btn download" onclick="downloadImage()" data-tooltip="Download Image">
-        <i class="bi bi-download"></i>
-      </button>
-      <button class="modal-action-btn close" onclick="closeImageModal()" data-tooltip="Close (ESC)">
-        <i class="bi bi-x-lg"></i>
-      </button>
-    </div>
-    <img id="modalImage" src="" alt="Motorcycle Image">
-    <div class="image-modal-footer" id="modalCaption"></div>
-  </div>
-</div>
-
-<!-- Enhanced Document Modal -->
-<div class="doc-modal" id="docModal">
-  <div class="doc-modal-content">
-    <div class="doc-modal-header">
-      <h3 class="doc-modal-title" id="docModalTitle">
-        <i class="bi bi-file-earmark-text me-2"></i>Document Viewer
-      </h3>
-      <div class="doc-modal-actions">
-        <a id="docDownloadBtn" class="doc-modal-btn download" download data-tooltip="Download Document">
+      <span id="imageCounter" style="color: white; font-weight: 600; font-size: 14px;"></span>
+      <div>
+        <button class="modal-action-btn download" onclick="downloadImage()" title="Download Image">
           <i class="bi bi-download"></i>
-        </a>
-        <button class="doc-modal-btn close" onclick="closeDocModal()" data-tooltip="Close (ESC)">
+        </button>
+        <button class="modal-action-btn close" onclick="closeImageModal()" title="Close">
           <i class="bi bi-x-lg"></i>
         </button>
       </div>
     </div>
-    <div class="doc-modal-body" id="docModalBody">
-      <div class="text-center">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
+    
+    <!-- Navigation Arrows -->
+    <button class="gallery-nav prev" onclick="navigateGallery(-1)" id="prevBtn" style="display: none;">
+      <i class="bi bi-chevron-left"></i>
+    </button>
+    <button class="gallery-nav next" onclick="navigateGallery(1)" id="nextBtn" style="display: none;">
+      <i class="bi bi-chevron-right"></i>
+    </button>
+    
+    <img id="modalImage" src="" alt="Motorcycle Image">
+    <div class="image-modal-footer" id="modalCaption"></div>
+    
+    <!-- Thumbnail Strip -->
+    <div class="thumbnail-strip" id="thumbnailStrip" style="display: none;"></div>
+  </div>
+</div>
+
+<style>
+.gallery-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.3s;
+  z-index: 1001;
+}
+
+.gallery-nav:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.gallery-nav.prev {
+  left: 20px;
+}
+
+.gallery-nav.next {
+  right: 20px;
+}
+
+.thumbnail-strip {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  margin-top: 15px;
+  overflow-x: auto;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.thumbnail-strip img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.3s;
+  border: 2px solid transparent;
+}
+
+.thumbnail-strip img:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.thumbnail-strip img.active {
+  opacity: 1;
+  border-color: #fff;
+}
+</style>
+
+<!-- Document Modal -->
+<div class="doc-modal" id="docModal">
+  <div class="doc-modal-content">
+    <div class="doc-modal-header">
+      <h3 class="doc-modal-title" id="docModalTitle">Document Viewer</h3>
+      <div class="doc-modal-actions">
+        <a id="docDownloadBtn" class="doc-modal-btn download" download>
+          <i class="bi bi-download"></i>
+        </a>
+        <button class="doc-modal-btn close" onclick="closeDocModal()">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="doc-modal-body" id="docModalBody"></div>
+  </div>
+</div>
+
+<!-- Motorcycle Details Modal -->
+<div class="modal fade" id="motoDetailsModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-bicycle me-2"></i>Motorcycle Listing Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="motoDetailsBody">
+        <div class="text-center py-5">
+          <div class="spinner-border" role="status"></div>
+          <p class="mt-2 text-muted">Loading details...</p>
         </div>
-        <p class="mt-3 text-muted">Loading document...</p>
       </div>
     </div>
   </div>
@@ -905,50 +506,248 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-  let currentImageUrl = '';
+  function viewMotoDetails(motoId) {
+    const modal = new bootstrap.Modal(document.getElementById('motoDetailsModal'));
+    document.getElementById('motoDetailsBody').innerHTML = `
+      <div class="text-center py-5">
+        <div class="spinner-border" role="status"></div>
+        <p class="mt-2 text-muted">Loading details...</p>
+      </div>`;
+    modal.show();
 
-  // Reject Modal
+    fetch(`api/get_motorcycle_details.php?id=${motoId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.status !== 'success') {
+          document.getElementById('motoDetailsBody').innerHTML = `<div class="alert alert-danger">${data.message || 'Failed to load.'}</div>`;
+          return;
+        }
+        const m = data.motorcycle;
+        const reviews = data.reviews || [];
+
+        // Helpers
+        const stars = n => { n = Math.min(5, Math.round(parseFloat(n)||0)); return '★'.repeat(n)+'☆'.repeat(5-n); };
+        const row   = (label, val) => `<div class="col-md-4 mb-3"><small class="text-muted d-block">${label}</small><strong>${val || '—'}</strong></div>`;
+        const money = v => v ? '&#8369;' + parseFloat(v).toLocaleString('en-PH',{minimumFractionDigits:2}) : '—';
+
+        // JSON fields are already decoded by the API
+        const features    = Array.isArray(m.features)       ? m.features       : [];
+        const rules       = Array.isArray(m.rules)          ? m.rules          : [];
+        const delivery    = Array.isArray(m.delivery_types) ? m.delivery_types : [];
+        const extraImages = Array.isArray(m.extra_images)   ? m.extra_images   : [];
+
+        const allImages = [m.image, ...extraImages].filter(Boolean);
+        const vName = ((m.brand||'')+' '+(m.model||'')).replace(/'/g,'');
+
+        const thumbs = allImages.map((img, i) =>
+          `<img src="${img}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid #eee;"
+            onclick="viewCarGallery(${JSON.stringify(allImages)},'${vName}',${i})">`
+        ).join('');
+
+        const reviewsHtml = reviews.length ? reviews.map(rv =>
+          `<div class="border rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong>${rv.reviewer_name||'Renter'}</strong>
+              <span class="text-warning">${stars(rv.rating)} <small class="text-muted">${parseFloat(rv.rating).toFixed(1)}</small></span>
+            </div>
+            <p class="mb-0 small text-muted">${rv.review||'<em>No comment</em>'}</p>
+            <small class="text-muted">${new Date(rv.created_at).toLocaleDateString()}</small>
+          </div>`).join('') : '<p class="text-muted">No reviews yet.</p>';
+
+        const statusBadge = `<span class="status-badge ${m.status}">${(m.status||'').charAt(0).toUpperCase()+(m.status||'').slice(1)}</span>`;
+        const mileage = m.has_unlimited_mileage == 1 ? 'Unlimited' : 'Limited';
+
+        document.getElementById('motoDetailsBody').innerHTML = `
+          <div class="row g-0">
+            ${allImages.length ? `<div class="col-12 mb-4"><div class="d-flex gap-2 flex-wrap">${thumbs}</div></div>` : ''}
+
+            <div class="col-12 mb-3"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-info-circle me-1"></i>Basic Information</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Brand', m.brand)}
+              ${row('Model', m.model)}
+              ${row('Year', m.motorcycle_year)}
+              ${row('Plate Number', m.plate_number)}
+              ${row('Body Style', m.body_style)}
+              ${row('Color', m.color)}
+              ${row('Status', statusBadge)}
+            </div></div>
+
+            <div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-gear me-1"></i>Specifications</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Engine Displacement', m.engine_displacement ? m.engine_displacement+' cc' : '—')}
+            </div></div>
+
+            <div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-cash me-1"></i>Pricing & Trip Settings</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Price per Day', money(m.price_per_day))}
+              ${row('Min Trip Duration', m.min_trip_duration ? m.min_trip_duration+' day(s)' : '—')}
+              ${row('Max Trip Duration', m.max_trip_duration ? m.max_trip_duration+' day(s)' : '—')}
+              ${row('Advance Notice', m.advance_notice ? m.advance_notice+' hr(s)' : '—')}
+              ${row('Mileage', mileage)}
+            </div></div>
+
+            <div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-geo-alt me-1"></i>Location & Delivery</h6></div>
+            <div class="col-12"><div class="row">
+              ${row('Location', m.location)}
+              ${row('Delivery Types', delivery.length ? delivery.join(', ') : '—')}
+            </div></div>
+
+            ${m.description ? `<div class="col-12 mb-3 mt-2"><h6 class="fw-bold border-bottom pb-2"><i class="bi bi-file-text me-1"></i>Description</h6><p class="text-muted">${m.description}</p></div>` : ''}
+
+            <div class="col-md-6 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-star me-1"></i>Features</h6>
+              ${features.length ? `<div class="d-flex flex-wrap gap-1">${features.map(f=>`<span class="badge bg-light text-dark border">${f}</span>`).join('')}</div>` : '<p class="text-muted small">None listed.</p>'}
+            </div>
+            <div class="col-md-6 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-shield-check me-1"></i>Rules</h6>
+              ${rules.length ? `<ul class="list-unstyled mb-0">${rules.map(r=>`<li><i class="bi bi-dot"></i>${r}</li>`).join('')}</ul>` : '<p class="text-muted small">No rules listed.</p>'}
+            </div>
+
+            <div class="col-12 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-star-half me-1"></i>Rating & Reviews</h6>
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <span class="fs-3 fw-bold">${parseFloat(m.average_rating||0).toFixed(1)}</span>
+                <div><span class="text-warning fs-5">${stars(m.average_rating||0)}</span><br>
+                  <small class="text-muted">${m.review_count||0} review(s)</small></div>
+              </div>
+              ${reviewsHtml}
+            </div>
+
+            <div class="col-12 mb-3 mt-2">
+              <h6 class="fw-bold border-bottom pb-2"><i class="bi bi-person me-1"></i>Owner</h6>
+              <div class="d-flex align-items-center gap-3">
+                ${m.owner_image ? `<img src="${m.owner_image}" style="width:50px;height:50px;border-radius:50%;object-fit:cover;" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(m.owner_name||'O')}&background=1a1a1a&color=fff'">` : ''}
+                <div><strong>${m.owner_name||'—'}</strong><br><small class="text-muted">${m.phone||'No phone'}</small></div>
+              </div>
+            </div>
+
+            <div class="col-12 mt-2">
+              <small class="text-muted">Listed on: ${m.created_at ? new Date(m.created_at).toLocaleString() : '—'}</small>
+            </div>
+          </div>`;
+      })
+      .catch(() => {
+        document.getElementById('motoDetailsBody').innerHTML = '<div class="alert alert-danger">Error loading motorcycle details.</div>';
+      });
+  }
+
+document.addEventListener("DOMContentLoaded", function () {
+
+  let currentImageUrl = '';
+  let currentDocUrl = '';
+
+  /* ===============================
+     REJECT MODAL
+  =============================== */
   document.querySelectorAll(".rejectBtn").forEach(btn => {
     btn.addEventListener("click", function () {
       const input = document.getElementById("rejectCarId");
       const modalEl = document.getElementById("rejectModal");
+
       if (!input || !modalEl) return;
+
       input.value = btn.dataset.id;
       new bootstrap.Modal(modalEl).show();
     });
   });
 
-  // Loading overlay for form submissions
-  document.querySelectorAll('form').forEach(form => {
-    form.addEventListener('submit', function() {
-      document.getElementById('loadingOverlay').classList.add('active');
-    });
-  });
-
-  // Image Modal
-  window.viewCarImage = function (imageUrl, motorcycleName) {
+  /* ===============================
+     IMAGE GALLERY MODAL
+  =============================== */
+  let galleryImages = [];
+  let currentGalleryIndex = 0;
+  
+  window.viewCarGallery = function (images, vehicleName, startIndex = 0) {
     const modal = document.getElementById("imageModal");
     const img = document.getElementById("modalImage");
     const caption = document.getElementById("modalCaption");
+    const counter = document.getElementById("imageCounter");
+    const thumbnailStrip = document.getElementById("thumbnailStrip");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+
     if (!modal || !img) return;
+
+    galleryImages = Array.isArray(images) ? images : [images];
+    currentGalleryIndex = startIndex;
     
-    currentImageUrl = imageUrl;
-    img.src = imageUrl;
-    caption.innerHTML = `<i class="bi bi-bicycle me-2"></i>${motorcycleName || "Motorcycle Image"}`;
+    // Show navigation only if multiple images
+    if (galleryImages.length > 1) {
+      prevBtn.style.display = "block";
+      nextBtn.style.display = "block";
+      thumbnailStrip.style.display = "flex";
+      
+      // Build thumbnails
+      thumbnailStrip.innerHTML = galleryImages.map((imgUrl, idx) => 
+        `<img src="${imgUrl}" onclick="jumpToImage(${idx})" class="${idx === currentGalleryIndex ? 'active' : ''}" />`
+      ).join('');
+    } else {
+      prevBtn.style.display = "none";
+      nextBtn.style.display = "none";
+      thumbnailStrip.style.display = "none";
+    }
+    
+    updateGalleryImage();
+    caption.textContent = vehicleName || "Motorcycle Image";
     modal.classList.add("active");
     document.body.style.overflow = "hidden";
+  };
+  
+  window.navigateGallery = function(direction) {
+    currentGalleryIndex += direction;
+    
+    if (currentGalleryIndex < 0) {
+      currentGalleryIndex = galleryImages.length - 1;
+    } else if (currentGalleryIndex >= galleryImages.length) {
+      currentGalleryIndex = 0;
+    }
+    
+    updateGalleryImage();
+  };
+  
+  window.jumpToImage = function(index) {
+    currentGalleryIndex = index;
+    updateGalleryImage();
+  };
+  
+  function updateGalleryImage() {
+    const img = document.getElementById("modalImage");
+    const counter = document.getElementById("imageCounter");
+    const thumbnailStrip = document.getElementById("thumbnailStrip");
+    
+    currentImageUrl = galleryImages[currentGalleryIndex];
+    img.src = currentImageUrl;
+    
+    if (galleryImages.length > 1) {
+      counter.textContent = `${currentGalleryIndex + 1} / ${galleryImages.length}`;
+      
+      // Update active thumbnail
+      thumbnailStrip.querySelectorAll('img').forEach((thumb, idx) => {
+        thumb.classList.toggle('active', idx === currentGalleryIndex);
+      });
+    } else {
+      counter.textContent = '';
+    }
+  }
+  
+  // Legacy support for single image
+  window.viewCarImage = function (imageUrl, vehicleName) {
+    viewCarGallery([imageUrl], vehicleName, 0);
   };
 
   window.closeImageModal = function () {
     const modal = document.getElementById("imageModal");
     if (!modal) return;
+
     modal.classList.remove("active");
     document.body.style.overflow = "auto";
+    galleryImages = [];
+    currentGalleryIndex = 0;
   };
 
   window.downloadImage = function () {
     if (!currentImageUrl) return;
+
     const a = document.createElement("a");
     a.href = currentImageUrl;
     a.download = currentImageUrl.split("/").pop() || "motorcycle.jpg";
@@ -957,69 +756,41 @@ document.addEventListener("DOMContentLoaded", function () {
     document.body.removeChild(a);
   };
 
-  // Document Modal
+  /* ===============================
+     DOCUMENT MODAL (OR / CR)
+  =============================== */
   window.viewDocument = function (docUrl, docType) {
     const modal = document.getElementById("docModal");
     const body = document.getElementById("docModalBody");
     const title = document.getElementById("docModalTitle");
     const downloadBtn = document.getElementById("docDownloadBtn");
+
     if (!modal || !body || !downloadBtn) return;
-    
-    title.innerHTML = `<i class="bi bi-file-earmark-text me-2"></i>${docType}`;
+
+    currentDocUrl = docUrl;
+    title.textContent = docType;
     downloadBtn.href = docUrl;
     downloadBtn.download = docUrl.split("/").pop();
-    
-    body.innerHTML = `
-      <div class="text-center">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <p class="mt-3 text-muted">Loading ${docType.toLowerCase()}...</p>
-      </div>
-    `;
-    
+
+    body.innerHTML = "";
+
     const ext = docUrl.split(".").pop().toLowerCase();
-    
+
     if (ext === "pdf") {
       const iframe = document.createElement("iframe");
       iframe.src = docUrl;
       iframe.style.width = "100%";
       iframe.style.height = "100%";
       iframe.style.border = "none";
-      iframe.onload = () => body.innerHTML = '';
-      iframe.onerror = () => {
-        body.innerHTML = `
-          <div class="alert alert-danger">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            Failed to load PDF. Please download to view.
-          </div>
-        `;
-      };
-      setTimeout(() => {
-        body.innerHTML = '';
-        body.appendChild(iframe);
-      }, 500);
+      body.appendChild(iframe);
     } else {
       const img = document.createElement("img");
       img.src = docUrl;
       img.style.maxWidth = "100%";
       img.style.borderRadius = "8px";
-      img.onload = () => {
-        setTimeout(() => {
-          body.innerHTML = '';
-          body.appendChild(img);
-        }, 300);
-      };
-      img.onerror = () => {
-        body.innerHTML = `
-          <div class="alert alert-danger">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            Failed to load image.
-          </div>
-        `;
-      };
+      body.appendChild(img);
     }
-    
+
     modal.classList.add("active");
     document.body.style.overflow = "hidden";
   };
@@ -1027,42 +798,43 @@ document.addEventListener("DOMContentLoaded", function () {
   window.closeDocModal = function () {
     const modal = document.getElementById("docModal");
     if (!modal) return;
+
     modal.classList.remove("active");
     document.body.style.overflow = "auto";
   };
 
-  // Click outside to close
-  document.getElementById("imageModal")?.addEventListener("click", e => {
-    if (e.target.id === "imageModal") closeImageModal();
-  });
-  
-  document.getElementById("docModal")?.addEventListener("click", e => {
-    if (e.target.id === "docModal") closeDocModal();
-  });
+  const imageModal = document.getElementById("imageModal");
+  if (imageModal) {
+    imageModal.addEventListener("click", e => {
+      if (e.target === imageModal) closeImageModal();
+    });
+  }
 
-  // ESC key close
+  const docModal = document.getElementById("docModal");
+  if (docModal) {
+    docModal.addEventListener("click", e => {
+      if (e.target === docModal) closeDocModal();
+    });
+  }
+
+  /* ===============================
+     KEYBOARD NAVIGATION
+  =============================== */
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") {
-      closeImageModal();
+    const imageModal = document.getElementById("imageModal");
+    if (imageModal && imageModal.classList.contains("active")) {
+      if (e.key === "ArrowLeft") {
+        navigateGallery(-1);
+      } else if (e.key === "ArrowRight") {
+        navigateGallery(1);
+      } else if (e.key === "Escape") {
+        closeImageModal();
+      }
+    } else if (e.key === "Escape") {
       closeDocModal();
     }
   });
 
-  // Animate number counters
-  document.querySelectorAll('.stat-value').forEach(stat => {
-    const finalValue = parseInt(stat.textContent);
-    let currentValue = 0;
-    const increment = Math.ceil(finalValue / 30);
-    const timer = setInterval(() => {
-      currentValue += increment;
-      if (currentValue >= finalValue) {
-        stat.textContent = finalValue;
-        clearInterval(timer);
-      } else {
-        stat.textContent = currentValue;
-      }
-    }, 30);
-  });
 });
 </script>
 <script src="include/notifications.js"></script>

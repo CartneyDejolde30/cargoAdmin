@@ -162,7 +162,14 @@ try {
             $new_status = 'approved';
             $message = 'Refund approved successfully';
             
-            // TODO: Send notification to renter
+            // Notify renter about approval
+            $notify_sql = "
+                INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+                VALUES (?, 'Refund Approved ✓', CONCAT('Your refund request of ₱', ?, ' has been approved and will be processed shortly.'), 'refund_approved', 'unread', NOW())
+            ";
+            $stmt = $conn->prepare($notify_sql);
+            $stmt->bind_param("id", $refund['renter_id'], $refund['refund_amount']);
+            $stmt->execute();
             
             break;
 
@@ -219,7 +226,14 @@ try {
             $new_status = 'rejected';
             $message = 'Refund rejected - User can submit a new request';
             
-            // TODO: Send notification to renter with rejection reason
+            // Notify renter about rejection with reason
+            $notify_sql = "
+                INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+                VALUES (?, 'Refund Request Rejected ✗', CONCAT('Your refund request has been rejected. Reason: ', ?), 'refund_rejected', 'unread', NOW())
+            ";
+            $stmt = $conn->prepare($notify_sql);
+            $stmt->bind_param("is", $refund['renter_id'], $rejection_reason);
+            $stmt->execute();
             
             break;
 
@@ -255,15 +269,60 @@ try {
             $stmt->bind_param("ssii", $reference, $reference, $admin_id, $refund_id);
             $stmt->execute();
 
-            // Update booking refund status
+            // **FIX: Update booking with BOTH refund_status AND escrow_status**
             $update_booking = "
                 UPDATE bookings 
-                SET refund_status = 'completed'
+                SET 
+                    refund_status = 'completed',
+                    escrow_status = 'refunded',
+                    escrow_refunded_at = NOW()
                 WHERE id = ?
             ";
             $stmt = $conn->prepare($update_booking);
             $stmt->bind_param("i", $refund['booking_id']);
             $stmt->execute();
+
+            // **FIX: Update payment status to refunded**
+            if (!empty($refund['payment_id'])) {
+                $update_payment = "
+                    UPDATE payments 
+                    SET payment_status = 'refunded'
+                    WHERE id = ?
+                ";
+                $stmt = $conn->prepare($update_payment);
+                $stmt->bind_param("i", $refund['payment_id']);
+                $stmt->execute();
+            }
+
+            // **FIX: Update escrow table if it exists**
+            $check_escrow_table = $conn->query("SHOW TABLES LIKE 'escrow'");
+            if ($check_escrow_table->num_rows > 0) {
+                $update_escrow = "
+                    UPDATE escrow 
+                    SET 
+                        status = 'refunded',
+                        refunded_at = NOW(),
+                        refund_reason = CONCAT('Refund completed - ', ?),
+                        processed_by = ?
+                    WHERE booking_id = ? AND status = 'held'
+                ";
+                $stmt = $conn->prepare($update_escrow);
+                $stmt->bind_param("sii", $reference, $admin_id, $refund['booking_id']);
+                $stmt->execute();
+            }
+
+            // **FIX: Log in escrow_logs if table exists**
+            $check_logs_table = $conn->query("SHOW TABLES LIKE 'escrow_logs'");
+            if ($check_logs_table->num_rows > 0) {
+                $log_escrow = "
+                    INSERT INTO escrow_logs 
+                    (booking_id, action, previous_status, new_status, admin_id, notes, created_at)
+                    VALUES (?, 'refund', 'held', 'refunded', ?, CONCAT('Refund completed via process_refund.php - Reference: ', ?), NOW())
+                ";
+                $stmt = $conn->prepare($log_escrow);
+                $stmt->bind_param("iis", $refund['booking_id'], $admin_id, $reference);
+                $stmt->execute();
+            }
 
             // Log transaction
             $final_amount = floatval($refund['refund_amount']) - floatval($refund['deduction_amount']);
@@ -287,7 +346,14 @@ try {
             $new_status = 'completed';
             $message = 'Refund completed and funds transferred';
             
-            // TODO: Send notification to renter
+            // Notify renter about completion
+            $notify_sql = "
+                INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+                VALUES (?, 'Refund Completed 💵', CONCAT('Your refund of ₱', FORMAT(?, 2), ' has been processed. Reference: ', ?), 'refund_completed', 'unread', NOW())
+            ";
+            $stmt = $conn->prepare($notify_sql);
+            $stmt->bind_param("ids", $refund['renter_id'], $final_amount, $reference);
+            $stmt->execute();
             
             break;
     }

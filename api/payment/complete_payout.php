@@ -209,6 +209,7 @@ try {
             status = 'completed',
             completion_reference = ?,
             payout_account = ?,
+            transfer_proof = ?,
             processed_at = NOW(),
             processed_by = ?
         WHERE id = ?
@@ -221,19 +222,14 @@ try {
     $gcashToUse = $gcashNumber ?: $booking['owner_gcash'];
     
     $stmt->bind_param(
-        "ssii",
+        "sssii",
         $payoutReference,
         $gcashToUse,
+        $proofPath,
         $adminId,
         $payoutId
     );
     $stmt->execute();
-    
-    // Store proof path in metadata if provided
-    if ($proofPath) {
-        // We can log this in the transaction logger metadata
-        // or store it in a separate payout_proofs table if needed in the future
-    }
     
     // Step 5: Update booking payout status
     $stmt = $conn->prepare("

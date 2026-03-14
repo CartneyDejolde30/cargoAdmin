@@ -22,7 +22,7 @@ if (!isset($_GET['owner_id'])) {
 
 $owner_id = intval($_GET['owner_id']);
 
-// SQL Query
+// SQL Query - Support both cars and motorcycles
 $sql = "
 SELECT 
     b.id AS booking_id,
@@ -30,6 +30,7 @@ SELECT
     b.pickup_date,
     b.return_date,
     b.status,
+    b.vehicle_type,
     b.cancellation_reason,
     b.cancelled_at,
     b.refund_status,
@@ -37,66 +38,49 @@ SELECT
     b.refund_amount,
     u.fullname AS renter_name,
     u.phone AS renter_contact,
-    c.brand,
-    c.model,
-    c.image AS car_image,
-    CONCAT(c.brand, ' ', c.model) AS car_full_name
+    COALESCE(c.brand, m.brand) AS brand,
+    COALESCE(c.model, m.model) AS model,
+    COALESCE(c.image, m.image) AS car_image,
+    CONCAT(COALESCE(c.brand, m.brand), ' ', COALESCE(c.model, m.model)) AS car_full_name
 FROM bookings b
 INNER JOIN users u ON b.user_id = u.id
-INNER JOIN cars c ON b.car_id = c.id
-WHERE c.owner_id = ?
+LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+WHERE b.owner_id = ?
 AND b.status = 'cancelled'
 ORDER BY b.cancelled_at DESC
 ";
 
-// Prepare
+# Prepare and execute
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $owner_id);
 $stmt->execute();
-
-// Bind results (portable across servers)
-$stmt->bind_result(
-    $booking_id,
-    $total_amount,
-    $pickup_date,
-    $return_date,
-    $status,
-    $cancellation_reason,
-    $cancelled_at,
-    $refund_status,
-    $refund_requested,
-    $refund_amount,
-    $renter_name,
-    $renter_contact,
-    $brand,
-    $model,
-    $car_image,
-    $car_full_name
-);
+$result = $stmt->get_result();
 
 $bookings = [];
 
-// Fetch rows
-while ($stmt->fetch()) {
-    $imagePath = !empty($car_image)
-        ? $car_image               // e.g. uploads/car_123.jpg
+// Fetch rows using get_result() for better compatibility
+while ($row = $result->fetch_assoc()) {
+    $imagePath = !empty($row['car_image'])
+        ? $row['car_image']
         : "uploads/default_car.png";
 
     $bookings[] = [
-        "booking_id" => $booking_id,
-        "total_amount" => $total_amount,
-        "pickup_date" => $pickup_date,
-        "return_date" => $return_date,
-        "status" => $status,
-        "cancellation_reason" => $cancellation_reason,
-        "cancelled_at" => $cancelled_at,
-        "renter_name" => $renter_name,
-        "renter_contact" => $renter_contact,
+        "booking_id" => $row['booking_id'],
+        "total_amount" => $row['total_amount'],
+        "pickup_date" => $row['pickup_date'],
+        "return_date" => $row['return_date'],
+        "status" => $row['status'],
+        "vehicle_type" => $row['vehicle_type'],
+        "cancellation_reason" => $row['cancellation_reason'],
+        "cancelled_at" => $row['cancelled_at'],
+        "renter_name" => $row['renter_name'],
+        "renter_contact" => $row['renter_contact'],
         "car_image" => $imagePath,
-        "car_full_name" => $car_full_name,
-        "refund_status" => $refund_status ?? 'not_requested',
-        "refund_requested" => (int)($refund_requested ?? 0),
-        "refund_amount" => (float)($refund_amount ?? 0)
+        "car_full_name" => $row['car_full_name'],
+        "refund_status" => $row['refund_status'] ?? 'not_requested',
+        "refund_requested" => (int)($row['refund_requested'] ?? 0),
+        "refund_amount" => (float)($row['refund_amount'] ?? 0)
     ];
 }
 

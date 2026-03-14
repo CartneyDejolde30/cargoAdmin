@@ -1,6 +1,7 @@
 <?php
 session_start();
 include "include/db.php";
+include "include/admin_profile.php";
 
 /* =========================================================
    PAYMENT STATISTICS
@@ -29,14 +30,20 @@ $escrowed = mysqli_fetch_assoc(mysqli_query($conn,
     "SELECT SUM(amount) AS total FROM payments WHERE payment_status='verified'"
 ))['total'] ?? 0;
 
-// Pending payouts (escrow released but payout not completed)
-$pendingPayouts = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COUNT(*) AS c FROM bookings WHERE escrow_status='released_to_owner' AND payout_status='pending'"
+// Total verified payments this month
+$verifiedThisMonth = mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COUNT(*) AS c FROM payments 
+     WHERE payment_status='verified' 
+     AND MONTH(created_at) = MONTH(NOW()) 
+     AND YEAR(created_at) = YEAR(NOW())"
 ))['c'];
 
-// Completed payouts
-$completedPayouts = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT SUM(owner_payout) AS total FROM bookings WHERE payout_status='completed'"
+// Total payment amount this month
+$totalPaymentsThisMonth = mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COALESCE(SUM(amount), 0) AS total FROM payments 
+     WHERE payment_status IN ('verified', 'released')
+     AND MONTH(created_at) = MONTH(NOW()) 
+     AND YEAR(created_at) = YEAR(NOW())"
 ))['total'] ?? 0;
 
 /* =========================================================
@@ -149,6 +156,11 @@ if ($paymentType === 'late_fee') {
     b.pickup_date,
     b.return_date,
     b.vehicle_type,
+    b.price_per_day,
+    b.rental_period,
+    b.insurance_premium,
+    b.security_deposit_amount,
+    b.total_amount AS booking_rental_total,
 
     /* ================= USERS ================= */
     u1.id AS renter_id,
@@ -227,6 +239,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
   <link href="include/notifications.css" rel="stylesheet">
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
   <style>
     /* Modern Black & White Payment Dashboard */
     body {
@@ -775,228 +788,188 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
     }
 
     /* Modern Modal */
-    .modern-modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(8px);
-      z-index: 9999;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      animation: fadeIn 0.2s ease;
+    /* Force contact-modal design overrides - Enhanced with icons & larger text */
+    .modal-dialog {
+      max-width: 900px !important;
     }
 
-    .modern-modal.active {
-      display: flex;
+    .modal-dialog-scrollable .modal-content {
+      max-height: 90vh !important;
     }
 
-    .modern-modal-content {
-      background: white;
-      border-radius: 16px;
-      max-width: 900px;
-      width: 100%;
-      max-height: 90vh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    .modal-header {
+      background: #ffffff !important;
+      color: #111827 !important;
+      padding: 40px 40px 32px 40px !important;
+      border-bottom: none !important;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+    .modal-header h3,
+    .modal-header h5,
+    .modal-header .modal-title {
+      font-size: 32px !important;
+      font-weight: 700 !important;
+      color: #111827 !important;
+      letter-spacing: -0.5px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 14px !important;
     }
 
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    .modal-header .modal-title i,
+    .modal-header h3 i,
+    .modal-header h5 i {
+      font-size: 34px !important;
+      color: #6b7280 !important;
     }
 
-    .modern-modal-header {
-      padding: 1.75rem 2rem;
-      border-bottom: 1px solid #e5e5e5;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .modal-header .btn-close,
+    .modal-header .btn-close-white {
+      width: 40px !important;
+      height: 40px !important;
+      background: #f3f4f6 !important;
+      border-radius: 10px !important;
+      opacity: 1 !important;
+      filter: none !important;
+      padding: 0 !important;
+      background-image: none !important;
+      position: relative !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
 
-    .modern-modal-title {
-      font-size: 1.25rem;
-      font-weight: 800;
-      color: #000;
-      letter-spacing: -0.01em;
+    .modal-header .btn-close::after,
+    .modal-header .btn-close-white::after {
+      content: '✕' !important;
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      font-size: 20px !important;
+      color: #6b7280 !important;
+      font-weight: 400 !important;
+      line-height: 1 !important;
     }
 
-    .modern-modal-close {
-      width: 36px;
-      height: 36px;
-      background: #f5f5f5;
-      border: none;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-size: 20px;
-      color: #666;
+    .modal-header .btn-close:hover,
+    .modal-header .btn-close-white:hover {
+      background: #e5e7eb !important;
+      transform: scale(1.05) !important;
     }
 
-    .modern-modal-close:hover {
-      background: #000;
-      color: white;
+    .modal-header .btn-close:hover::after,
+    .modal-header .btn-close-white:hover::after {
+      color: #111827 !important;
     }
 
-    .modern-modal-body {
-      padding: 2rem;
-      overflow-y: auto;
+    .modal-body {
+      padding: 40px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 18px !important;
+      line-height: 1.7 !important;
     }
 
-    .modal-section-modern {
-      margin-bottom: 2rem;
+    .modal-body p {
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+      margin-bottom: 14px !important;
     }
 
-    .modal-section-title-modern {
-      font-size: 0.875rem;
-      font-weight: 700;
-      color: #000;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 1.25rem;
-      padding-bottom: 0.75rem;
-      border-bottom: 2px solid #000;
+    .modal-body .text-muted,
+    .modal-body small {
+      font-size: 16px !important;
+      color: #6b7280 !important;
     }
 
-    .info-grid-modern {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1.5rem;
+    .modal-body strong {
+      font-weight: 600 !important;
+      color: #111827 !important;
     }
 
-    .info-item-modern {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
+    .modal-body h6,
+    .modal-body .section-title {
+      font-size: 20px !important;
+      font-weight: 650 !important;
+      color: #111827 !important;
+      margin-bottom: 16px !important;
+      margin-top: 28px !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
     }
 
-    .info-label-modern {
-      font-size: 0.6875rem;
-      color: #999;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
+    .modal-body h6:first-child,
+    .modal-body .section-title:first-child {
+      margin-top: 0 !important;
     }
 
-    .info-value-modern {
-      font-size: 0.9375rem;
-      font-weight: 600;
-      color: #000;
+    .modal-body h6 i,
+    .modal-body .section-title i {
+      font-size: 22px !important;
+      color: #9ca3af !important;
     }
 
-    .modern-alert {
-      padding: 1.25rem;
-      border-radius: 8px;
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: start;
-      gap: 1rem;
-      border: 1px solid #e5e5e5;
-      background: #fafafa;
+    .modal-footer {
+      padding: 28px 40px 40px 40px !important;
+      border-top: 1px solid #f0f0f0 !important;
+      background: #ffffff !important;
+      gap: 14px !important;
     }
 
-    .modern-alert.error {
-      background: #fee;
-      border-color: #fcc;
+    .modal-footer .btn {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      padding: 16px 32px !important;
+      border-radius: 12px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 10px !important;
     }
 
-    .modern-alert i {
-      font-size: 1.25rem;
-      color: #666;
+    .modal-footer .btn i {
+      font-size: 18px !important;
     }
 
-    .modern-alert.error i {
-      color: #c00;
+    /* Info Grid - Contact Modal Style */
+    .info-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 0 !important;
+      border: 1px solid #f0f0f0 !important;
+      border-radius: 14px !important;
+      overflow: hidden !important;
+      margin-bottom: 24px !important;
     }
 
-    .modern-alert-content {
-      flex: 1;
+    .info-item {
+      padding: 20px 24px !important;
+      background: #ffffff !important;
+      border-radius: 0 !important;
+      border-right: 1px solid #f0f0f0 !important;
+      border-bottom: 1px solid #f0f0f0 !important;
     }
 
-    .modern-alert-title {
-      font-weight: 700;
-      color: #000;
-      margin-bottom: 0.25rem;
-      font-size: 0.9375rem;
+    .info-item:nth-child(2n) {
+      border-right: none !important;
     }
 
-    .modern-alert.error .modern-alert-title {
-      color: #c00;
+    .info-label {
+      font-size: 15px !important;
+      color: #9ca3af !important;
+      font-weight: 500 !important;
+      margin-bottom: 6px !important;
+      letter-spacing: 0.01em !important;
+      text-transform: none !important;
     }
 
-    .modern-alert-text {
-      font-size: 0.8125rem;
-      color: #666;
-      margin: 0;
-    }
-
-    .modern-form-group {
-      margin-bottom: 1.5rem;
-    }
-
-    .modern-form-label {
-      display: block;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: #000;
-      margin-bottom: 0.5rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .modern-form-control {
-      width: 100%;
-      padding: 0.875rem 1rem;
-      border: 1px solid #e5e5e5;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      transition: all 0.2s ease;
-      background: #fafafa;
-    }
-
-    .modern-form-control:focus {
-      outline: none;
-      border-color: #000;
-      background: white;
-      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
-    }
-
-    .modern-modal-actions {
-      padding: 1.5rem 2rem;
-      border-top: 1px solid #e5e5e5;
-      display: flex;
-      gap: 0.75rem;
-      justify-content: flex-end;
-      background: #fafafa;
-    }
-
-    /* Empty State */
-    .modern-empty-state {
-      text-align: center;
-      padding: 5rem 2rem;
-      background: white;
-      border: 1px solid #e5e5e5;
-      border-radius: 12px;
+    .info-value {
+      font-size: 18px !important;
+      color: #111827 !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.2px !important;
     }
 
     .modern-empty-state i {
@@ -1110,7 +1083,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
     </div>
@@ -1163,23 +1136,23 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         <div class="modern-stat-card">
           <div class="stat-header-modern">
             <div class="stat-icon-modern">
-              <i class="bi bi-hourglass-split"></i>
+              <i class="bi bi-check-circle-fill"></i>
             </div>
-            <span class="stat-badge">Processing</span>
+            <span class="stat-badge">This Month</span>
           </div>
-          <div class="stat-value-modern"><?= $pendingPayouts ?></div>
-          <div class="stat-label-modern">Pending Payouts</div>
+          <div class="stat-value-modern"><?= $verifiedThisMonth ?></div>
+          <div class="stat-label-modern">Verified Payments</div>
         </div>
 
         <div class="modern-stat-card">
           <div class="stat-header-modern">
             <div class="stat-icon-modern">
-              <i class="bi bi-check-circle"></i>
+              <span class="currency-symbol">₱</span>
             </div>
-            <span class="stat-badge">+18%</span>
+            <span class="stat-badge">Revenue</span>
           </div>
-          <div class="stat-value-modern">₱<?= number_format($completedPayouts, 2) ?></div>
-          <div class="stat-label-modern">Total Payouts</div>
+          <div class="stat-value-modern">₱<?= number_format($totalPaymentsThisMonth, 2) ?></div>
+          <div class="stat-label-modern">Total This Month</div>
         </div>
       </div>
 
@@ -1253,6 +1226,28 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
           $bookingId = "#BK-" . str_pad($row['booking_id'], 4, "0", STR_PAD_LEFT);
           $vehicleType = ucfirst($row['vehicle_type'] ?? 'car');
           $carName = $row['brand'] . " " . $row['model'] . " " . $row['car_year'];
+          
+          // Calculate payment breakdown (mirrors create_booking.php logic)
+          $amount = (float)$row['amount']; // grand total paid (rental + security deposit)
+          $bPpd    = floatval($row['price_per_day'] ?? 0);
+          $bDays   = max(1, (int)((strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400) + 1);
+          $bBase   = round($bPpd * $bDays, 2);
+          $bIns    = floatval($row['insurance_premium'] ?? 0);
+          $bPeriod = $row['rental_period'] ?? 'Day';
+          $bDisc   = 0.0;
+          if ($bPeriod === 'Weekly' && $bDays >= 7)       $bDisc = $bBase * 0.12;
+          elseif ($bPeriod === 'Monthly' && $bDays >= 30) $bDisc = $bBase * 0.25;
+          $bDiscounted = $bBase - $bDisc;
+          $bSvcFee = round(($bDiscounted + $bIns) * 0.05, 2);
+          $bRentalTotal = floatval($row['booking_rental_total'] ?? 0);
+          $bSecDep = floatval($row['security_deposit_amount'] ?? 0);
+          $bGrand  = round($bRentalTotal + $bSecDep, 2);
+          $platformFee = ($row['platform_fee'] && $row['platform_fee'] > 0)
+                          ? (float)$row['platform_fee']
+                          : round($bRentalTotal * 0.10, 2);
+          $ownerPayout = ($row['owner_payout'] && $row['owner_payout'] > 0)
+                          ? (float)$row['owner_payout']
+                          : round($bRentalTotal - $platformFee, 2);
         ?>
         <div class="modern-payment-card">
           <div class="payment-card-header">
@@ -1262,16 +1257,24 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
               <div class="payment-meta"><?= $carName ?> <small>(<?= $vehicleType ?>)</small></div>
             </div>
             <div class="payment-amount-section">
-              <div class="payment-amount-modern">₱<?= number_format($row['amount'], 2) ?></div>
+              <div class="payment-amount-modern">₱<?= number_format($bGrand, 2) ?></div>
               <div class="payment-fee-breakdown">
-                <div class="fee-item">
-                  <span>Fee:</span>
-                  <strong>₱<?= number_format($row['platform_fee'], 2) ?></strong>
-                </div>
-                <div class="fee-item">
-                  <span>Owner:</span>
-                  <strong>₱<?= number_format($row['owner_payout'], 2) ?></strong>
-                </div>
+                <?php if ($bBase > 0): ?>
+                <div class="fee-item"><span>Base Rental:</span><strong>₱<?= number_format($bBase, 2) ?></strong></div>
+                <?php endif; ?>
+                <?php if ($bDisc > 0): ?>
+                <div class="fee-item"><span><?= $bPeriod ?> Discount:</span><strong class="text-success">-₱<?= number_format($bDisc, 2) ?></strong></div>
+                <?php endif; ?>
+                <?php if ($bIns > 0): ?>
+                <div class="fee-item"><span>Insurance:</span><strong>₱<?= number_format($bIns, 2) ?></strong></div>
+                <?php endif; ?>
+                <div class="fee-item"><span>Service Fee (5%):</span><strong>₱<?= number_format($bSvcFee, 2) ?></strong></div>
+                <div class="fee-item"><span>Rental Total:</span><strong>₱<?= number_format($bRentalTotal, 2) ?></strong></div>
+                <?php if ($bSecDep > 0): ?>
+                <div class="fee-item"><span>Security Deposit:</span><strong class="text-warning">₱<?= number_format($bSecDep, 2) ?></strong></div>
+                <?php endif; ?>
+                <div class="fee-item"><span>Platform Fee (10%):</span><strong>₱<?= number_format($platformFee, 2) ?></strong></div>
+                <div class="fee-item"><span>Owner Payout:</span><strong>₱<?= number_format($ownerPayout, 2) ?></strong></div>
               </div>
             </div>
           </div>
@@ -1357,31 +1360,18 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             <?php endif; ?>
 
             <?php 
-            // Show Release Escrow button when:
-            // - Payment is verified
-            // - Escrow is held
-            // - Booking is completed
-            if ($row['payment_status'] === 'verified' && 
-                $row['escrow_status'] === 'held' && 
-                $row['booking_status'] === 'completed'): 
+            // Show info badges for next steps after verification
+            if ($row['payment_status'] === 'verified'): 
             ?>
-            <button class="action-btn-modern primary" onclick="releaseEscrow(<?= $row['booking_id'] ?>)">
-              <i class="bi bi-unlock"></i>
-              Release Escrow
-            </button>
-            <?php endif; ?>
-
-            <?php 
-            // Show Complete Payout button when:
-            // - Escrow is released to owner
-            // - Payout status is pending
-            if ($row['escrow_status'] === 'released_to_owner' && 
-                $row['payout_status'] === 'pending'): 
-            ?>
-            <button class="action-btn-modern primary" onclick='completePayout(<?= $row['booking_id'] ?>)'>
-              <i class="bi bi-cash-coin"></i>
-              Complete Payout
-            </button>
+              <?php if ($row['escrow_status'] === 'held' && $row['booking_status'] === 'completed'): ?>
+                <span class="modern-badge" style="background: #e8f5e9; color: #2e7d32; border: 1px solid #81c784;">
+                  ✓ Ready for escrow release
+                </span>
+              <?php elseif ($row['escrow_status'] === 'released_to_owner'): ?>
+                <span class="modern-badge" style="background: #fff3e0; color: #e65100; border: 1px solid #ffb74d;">
+                  → Go to Payouts page to complete
+                </span>
+              <?php endif; ?>
             <?php endif; ?>
           </div>
         </div>
@@ -1422,70 +1412,25 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 </div>
 
 <!-- Payment Details Modal -->
-<div class="modern-modal" id="paymentModal">
-  <div class="modern-modal-content">
-    <div class="modern-modal-header">
-      <h2 class="modern-modal-title">Payment Details</h2>
-      <button class="modern-modal-close" onclick="closeModal()">×</button>
-    </div>
-    <div class="modern-modal-body" id="modalBody">
-      <!-- Content will be loaded dynamically -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cash-stack"></i> Payment Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Content will be loaded dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="bi bi-x-lg"></i> Close
+        </button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Payout Modal - IMPROVED WITH ERROR HANDLING -->
-<div class="modern-modal" id="payoutModal">
-  <div class="modern-modal-content">
-    <div class="modern-modal-header">
-      <h2 class="modern-modal-title">Complete Payout</h2>
-      <button class="modern-modal-close" onclick="closePayoutModal()">×</button>
-    </div>
-    <div class="modern-modal-body">
-      <!-- Error Alert (hidden by default) -->
-      <div id="payoutError" class="modern-alert error" style="display: none;">
-        <i class="bi bi-exclamation-circle"></i>
-        <div class="modern-alert-content">
-          <div class="modern-alert-title">Error</div>
-          <p class="modern-alert-text" id="payoutErrorMessage"></p>
-        </div>
-      </div>
-
-      <div class="modern-alert">
-        <i class="bi bi-exclamation-triangle"></i>
-        <div class="modern-alert-content">
-          <div class="modern-alert-title">Manual Transfer Required</div>
-          <p class="modern-alert-text">Complete the GCash transfer manually and enter the reference number below.</p>
-        </div>
-      </div>
-
-      <form id="payoutForm" onsubmit="submitPayout(event)">
-        <input type="hidden" id="payout_booking_id" name="booking_id">
-        
-        <div class="modern-form-group">
-          <label class="modern-form-label">Transfer Reference Number</label>
-          <input type="text" class="modern-form-control" id="payout_reference" name="reference" required placeholder="Enter GCash reference number">
-        </div>
-
-        <div class="modern-form-group">
-          <label class="modern-form-label">Transfer Proof (Optional)</label>
-          <input type="file" class="modern-form-control" id="payout_proof" name="proof" accept="image/*">
-          <small style="color: #999; font-size: 0.75rem; margin-top: 0.25rem; display: block;">
-            Upload screenshot of the transfer confirmation
-          </small>
-        </div>
-
-        <div class="modern-modal-actions">
-          <button type="button" class="modern-btn modern-btn-secondary" onclick="closePayoutModal()">Cancel</button>
-          <button type="submit" class="modern-btn modern-btn-primary" id="payoutSubmitBtn">
-            <i class="bi bi-check-circle"></i>
-            Complete Payout
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -1505,115 +1450,106 @@ function filterPayments(status) {
 }
 
 function viewPaymentDetails(payment) {
-    const modal = document.getElementById('paymentModal');
     const modalBody = document.getElementById('modalBody');
-    
-    const escrowBadge = payment.escrow_status ? `<span class="modern-badge ${payment.escrow_status}">${payment.escrow_status === 'held' ? '🔒 Escrow Held' : (payment.escrow_status === 'released_to_owner' ? '🔓 Released to Owner' : payment.escrow_status)}</span>` : '';
-    const payoutBadge = payment.payout_status ? `<span class="modern-badge ${payment.payout_status}">${payment.payout_status === 'pending' ? '⏳ Payout Pending' : (payment.payout_status === 'completed' ? '✅ Completed' : payment.payout_status)}</span>` : '';
-    
+
+    // ── Payment Breakdown (mirrors create_booking.php logic) ──
+    const ppd    = parseFloat(payment.price_per_day) || 0;
+    const pickup = new Date(payment.pickup_date);
+    const ret    = new Date(payment.return_date);
+    const days   = Math.max(1, Math.ceil((ret - pickup) / 86400000));
+    const base   = Math.round(ppd * days * 100) / 100;
+    const ins    = parseFloat(payment.insurance_premium) || 0;
+    const period = payment.rental_period || 'Day';
+    let disc = 0;
+    if (period === 'Weekly'  && days >= 7)  disc = Math.round(base * 0.12 * 100) / 100;
+    if (period === 'Monthly' && days >= 30) disc = Math.round(base * 0.25 * 100) / 100;
+    const discounted = base - disc;
+    const svcFee     = Math.round((discounted + ins) * 0.05 * 100) / 100;
+    const rentalTotal = parseFloat(payment.booking_rental_total) || 0;
+    const secDep     = parseFloat(payment.security_deposit_amount) || 0;
+    const grandTotal = Math.round((rentalTotal + secDep) * 100) / 100;
+    const platformFee = (payment.platform_fee && payment.platform_fee > 0)
+                        ? parseFloat(payment.platform_fee)
+                        : Math.round(rentalTotal * 0.10 * 100) / 100;
+    const ownerPayout = (payment.owner_payout && payment.owner_payout > 0)
+                        ? parseFloat(payment.owner_payout)
+                        : Math.round((rentalTotal - platformFee) * 100) / 100;
+
+    const fmt = v => '₱' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const escrowBadge = payment.escrow_status ? `<span class="badge bg-warning">${payment.escrow_status === 'held' ? '🔒 Escrow Held' : (payment.escrow_status === 'released_to_owner' ? '🔓 Released to Owner' : payment.escrow_status)}</span>` : '';
+    const payoutBadge = payment.payout_status ? `<span class="badge bg-info">${payment.payout_status === 'pending' ? '⏳ Payout Pending' : (payment.payout_status === 'completed' ? '✅ Completed' : payment.payout_status)}</span>` : '';
+
     modalBody.innerHTML = `
-      <div class="modal-section-modern">
-        <div class="modal-section-title-modern">Payment Information</div>
-        <div class="info-grid-modern">
-          <div class="info-item-modern">
-            <span class="info-label-modern">Payment ID</span>
-            <span class="info-value-modern">#PAY-${String(payment.id).padStart(4, '0')}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Booking ID</span>
-            <span class="info-value-modern">#BK-${String(payment.booking_id).padStart(4, '0')}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Amount</span>
-            <span class="info-value-modern">₱${parseFloat(payment.amount).toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Payment Method</span>
-            <span class="info-value-modern">${payment.payment_method.toUpperCase()}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Reference Number</span>
-            <span class="info-value-modern" style="font-family: monospace; font-size: 0.75rem;">${payment.payment_reference || 'N/A'}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Status</span>
-            <span class="info-value-modern">${payment.payment_status.toUpperCase()}</span>
-          </div>
+      <h6><i class="bi bi-cash"></i> Payment Information</h6>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-label">Payment ID</div>
+          <div class="info-value">#PAY-${String(payment.id).padStart(4, '0')}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Grand Total Paid</div>
+          <div class="info-value"><strong>${fmt(grandTotal)}</strong></div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Payment Method</div>
+          <div class="info-value">GCASH</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Payment Status</div>
+          <div class="info-value"><span class="badge bg-${payment.payment_status === 'verified' ? 'success' : 'warning'}">${payment.payment_status.toUpperCase()}</span></div>
         </div>
       </div>
 
-      <div class="modal-section-modern">
-        <div class="modal-section-title-modern">Fee Breakdown</div>
-        <div class="info-grid-modern">
-          <div class="info-item-modern">
-            <span class="info-label-modern">Platform Fee (10%)</span>
-            <span class="info-value-modern">₱${parseFloat(payment.platform_fee).toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Owner Payout</span>
-            <span class="info-value-modern">₱${parseFloat(payment.owner_payout).toLocaleString('en-PH', {minimumFractionDigits: 2})}</span>
-          </div>
+      <h6><i class="bi bi-calculator"></i> Price Breakdown</h6>
+      <table class="table table-sm table-borderless mb-3" style="font-size:13px;">
+        <tbody>
+          <tr><td class="text-muted">Base Rental (${days} day${days > 1 ? 's' : ''} × ${fmt(ppd)})</td><td class="text-end">${fmt(base)}</td></tr>
+          ${disc > 0 ? `<tr><td class="text-muted">${period} Discount</td><td class="text-end text-success">-${fmt(disc)}</td></tr>` : ''}
+          ${ins > 0  ? `<tr><td class="text-muted">Insurance Premium</td><td class="text-end">${fmt(ins)}</td></tr>` : ''}
+          <tr><td class="text-muted">Service Fee (5%)</td><td class="text-end">${fmt(svcFee)}</td></tr>
+          <tr class="border-top"><td><strong>Rental Total</strong></td><td class="text-end"><strong>${fmt(rentalTotal)}</strong></td></tr>
+          ${secDep > 0 ? `<tr><td class="text-muted text-warning">Security Deposit (20%)</td><td class="text-end text-warning">${fmt(secDep)}</td></tr>` : ''}
+          <tr class="border-top"><td><strong class="text-success">Grand Total</strong></td><td class="text-end"><strong class="text-success">${fmt(grandTotal)}</strong></td></tr>
+          <tr class="border-top"><td class="text-muted">Platform Fee (10%)</td><td class="text-end">${fmt(platformFee)}</td></tr>
+          <tr><td class="text-muted">Owner Payout</td><td class="text-end">${fmt(ownerPayout)}</td></tr>
+        </tbody>
+      </table>
+
+      <h6><i class="bi bi-calendar-event"></i> Rental Details</h6>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-label">Booking ID</div>
+          <div class="info-value">#BK-${String(payment.booking_id).padStart(4, '0')}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Vehicle</div>
+          <div class="info-value">${payment.brand} ${payment.model} ${payment.car_year}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Renter</div>
+          <div class="info-value">${payment.renter_name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Owner</div>
+          <div class="info-value">${payment.owner_name}</div>
         </div>
       </div>
 
-      <div class="modal-section-modern">
-        <div class="modal-section-title-modern">Rental Details</div>
-        <div class="info-grid-modern">
-          <div class="info-item-modern">
-            <span class="info-label-modern">Renter</span>
-            <span class="info-value-modern">${payment.renter_name}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Renter Email</span>
-            <span class="info-value-modern">${payment.renter_email}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Owner</span>
-            <span class="info-value-modern">${payment.owner_name}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Owner Email</span>
-            <span class="info-value-modern">${payment.owner_email}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Vehicle</span>
-            <span class="info-value-modern">${payment.brand} ${payment.model} ${payment.car_year}</span>
-          </div>
-          <div class="info-item-modern">
-            <span class="info-label-modern">Plate Number</span>
-            <span class="info-value-modern">${payment.plate_number}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-section-modern">
-        <div class="modal-section-title-modern">Status Badges</div>
-        <div class="modern-badges">
-          <span class="modern-badge ${payment.payment_status}">${payment.payment_status.toUpperCase()}</span>
-          ${escrowBadge}
-          ${payoutBadge}
-        </div>
+      <h6><i class="bi bi-tags"></i> Status Badges</h6>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;">
+        <span class="badge bg-${payment.payment_status === 'verified' ? 'success' : payment.payment_status === 'pending' ? 'warning' : 'danger'}" style="font-size: 14px; padding: 8px 16px;">
+          ${payment.payment_status.toUpperCase()}
+        </span>
+        ${escrowBadge}
+        ${payoutBadge}
       </div>
     `;
     
-    modal.classList.add('active');
+    const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
+    modal.show();
 }
 
-function closeModal() {
-    document.getElementById('paymentModal').classList.remove('active');
-}
-
-function completePayout(bookingId) {
-    document.getElementById('payout_booking_id').value = bookingId;
-    document.getElementById('payoutError').style.display = 'none';
-    document.getElementById('payoutModal').classList.add('active');
-}
-
-function closePayoutModal() {
-    document.getElementById('payoutModal').classList.remove('active');
-    document.getElementById('payoutForm').reset();
-    document.getElementById('payoutError').style.display = 'none';
-}
+// Modal functions removed - using Bootstrap 5 modals now
 
 function submitPayout(e) {
     e.preventDefault();
@@ -1701,7 +1637,25 @@ function verifyPayment(paymentId, action, paymentType = 'regular') {
         method: 'POST',
         body: formData
     })
-    .then(r => r.json())
+    .then(r => {
+        // Log the response for debugging
+        console.log('Response status:', r.status);
+        console.log('Response headers:', r.headers);
+        
+        // Get the response text first
+        return r.text().then(text => {
+            console.log('Response text:', text);
+            
+            // Try to parse as JSON
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('JSON parse error:', e);
+                console.error('Response was:', text);
+                throw new Error('Server returned invalid JSON. Check console for details.');
+            }
+        });
+    })
     .then(data => {
         alert(data.message);
         if (data.success) location.reload();

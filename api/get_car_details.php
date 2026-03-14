@@ -17,7 +17,11 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 }
 
 $carId = intval($_GET['id']);
-$baseUrl = "http://10.77.127.2/carGOAdmin/";
+// Load config for BASE_URL
+if (!defined('BASE_URL')) {
+    require_once __DIR__ . '/../include/config.php';
+}
+$baseUrl = BASE_URL . "/";
 
 /* --------------------------------------------
    Fetch Car + Owner Information
@@ -102,9 +106,11 @@ $reviewStmt->execute();
 $reviewResult = $reviewStmt->get_result();
 
 while ($row = $reviewResult->fetch_assoc()) {
+    $row['rating'] = floatval($row['rating']);
+    // ✅ FIX: Profile images are stored in profile_images subdirectory
     $row['reviewer_image'] = !empty($row['reviewer_image'])
-        ? $baseUrl . "uploads/" . $row['reviewer_image']
-        : "";
+        ? $baseUrl . "uploads/profile_images/" . $row['reviewer_image']
+        : "https://ui-avatars.com/api/?name=" . urlencode($row['reviewer_name'] ?? 'User');
 
     $totalRating += floatval($row['rating']);
     $reviews[] = $row;
@@ -115,7 +121,7 @@ while ($row = $reviewResult->fetch_assoc()) {
 $car["review_count"] = count($reviews);
 $car["average_rating"] = count($reviews) > 0
     ? round($totalRating / count($reviews), 1)
-    : 5.0;
+    : 0.0;
 
 /* --------------------------------------------
    Final Output (ALWAYS JSON)

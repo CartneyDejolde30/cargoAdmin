@@ -17,6 +17,24 @@ $bodyStyle = isset($_GET['bodyStyle']) ? $_GET['bodyStyle'] : '';
 $brand = isset($_GET['brand']) ? $_GET['brand'] : '';
 $year = isset($_GET['year']) ? $_GET['year'] : '';
 
+// Get sorting parameters
+$sortBy = isset($_GET['sortBy']) ? $_GET['sortBy'] : 'created_at';
+$sortOrder = isset($_GET['sortOrder']) ? $_GET['sortOrder'] : 'DESC';
+
+// Validate sortOrder (security)
+$sortOrder = strtoupper($sortOrder) === 'ASC' ? 'ASC' : 'DESC';
+
+// Map sortBy to actual column names
+$validSortColumns = [
+    'price_per_day' => 'cars.price_per_day',
+    'rating' => 'rating',
+    'car_year' => 'cars.car_year',
+    'created_at' => 'cars.created_at'
+];
+
+// Default to created_at if invalid sortBy
+$orderByColumn = isset($validSortColumns[$sortBy]) ? $validSortColumns[$sortBy] : 'cars.created_at';
+
 // Build WHERE clause dynamically
 $whereConditions = ["cars.status = 'approved'"];
 $params = [];
@@ -33,7 +51,7 @@ if ($minPrice > 0 || $maxPrice < 999999) {
 
 // Location filter
 if (!empty($location)) {
-    $whereConditions[] = "(users.address LIKE ? OR cars.address LIKE ? OR users.fullname LIKE ?)";
+    $whereConditions[] = "(users.address LIKE ? OR cars.location LIKE ? OR users.fullname LIKE ?)";
     $locationPattern = "%$location%";
     $params[] = $locationPattern;
     $params[] = $locationPattern;
@@ -110,18 +128,17 @@ $sql = "
         cars.fuel_type,
         cars.body_style,
         cars.color,
-        cars.address,
         cars.latitude,
         cars.longitude,
         cars.delivery_types,
         users.fullname AS owner_name,
-        users.address AS location,
-        COALESCE(cars.rating, 5) AS rating,
-        COALESCE(cars.seat, 4) AS seats
+        cars.location,
+        users.address AS owner_address,
+        COALESCE(cars.rating, 5) AS rating
     FROM cars
     JOIN users ON users.id = cars.owner_id
     WHERE $whereClause
-    ORDER BY cars.created_at DESC
+    ORDER BY $orderByColumn $sortOrder
 ";
 
 // Prepare and execute statement
@@ -131,12 +148,26 @@ if (!empty($params)) {
     $stmt->bind_param($types, ...$params);
 }
 
-$stmt->execute();
+if (!$stmt->execute()) {
+    echo json_encode(["status" => "error", "message" => "Query failed: " . $stmt->error]);
+    exit;
+}
 $result = $stmt->get_result();
 
 $cars = [];
 
 while ($row = $result->fetch_assoc()) {
+    // Resolve location: prefer car's own location, fall back to owner's address
+    $carLoc   = trim($row['location']      ?? '');
+    $ownerLoc = trim($row['owner_address'] ?? '');
+    $row['location'] = !empty($carLoc) ? $carLoc : (!empty($ownerLoc) ? $ownerLoc : '');
+    unset($row['owner_address']);
+
+    // Normalize seat count: treat 0 or missing as default 4
+    $seatVal = intval($row['seat'] ?? 0);
+    $row['seat']  = $seatVal > 0 ? $seatVal : 4;
+    $row['seats'] = $row['seat'];
+
     // Handle empty images
     if (empty($row['image'])) {
         $row['image'] = "https://via.placeholder.com/400x250?text=No+Image";
@@ -169,7 +200,9 @@ echo json_encode([
         "bodyStyle" => $bodyStyle,
         "brand" => $brand,
         "year" => $year,
-        "deliveryMethod" => $deliveryMethod
+        "deliveryMethod" => $deliveryMethod,
+        "sortBy" => $sortBy,
+        "sortOrder" => $sortOrder
     ]
 ]);
 

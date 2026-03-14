@@ -1,9 +1,9 @@
 <?php
-ini_set('display_errors',1);
-ini_set('display_startup_errors',1);
-error_reporting(E_ALL);
+session_start();
+// Configuration loaded via header.php
 
 require_once "include/db.php";
+require_once "include/admin_profile.php";
 
 
 $countPending = mysqli_fetch_assoc(mysqli_query($conn, 
@@ -63,7 +63,9 @@ if ($search !== "") {
             u1.fullname LIKE '%$searchEsc%' OR
             u2.fullname LIKE '%$searchEsc%' OR
             c.brand LIKE '%$searchEsc%' OR
-            c.model LIKE '%$searchEsc%'
+            c.model LIKE '%$searchEsc%' OR
+            m.brand LIKE '%$searchEsc%' OR
+            m.model LIKE '%$searchEsc%'
         )
     ";
 }
@@ -82,7 +84,11 @@ SELECT
     COALESCE(c.price_per_day, m.price_per_day) AS price_per_day,
 
     u1.fullname AS renter_name,
-    u2.fullname AS owner_name
+    u2.fullname AS owner_name,
+    
+    -- Payment info
+    p.payment_status,
+    p.id AS payment_id
 
 FROM bookings b
 
@@ -94,6 +100,7 @@ LEFT JOIN motorcycles m
 
 LEFT JOIN users u1 ON b.user_id = u1.id
 LEFT JOIN users u2 ON b.owner_id = u2.id
+LEFT JOIN payments p ON b.id = p.booking_id
 
 $where
 ORDER BY b.created_at DESC
@@ -114,6 +121,7 @@ $countSql = "
 SELECT COUNT(*) AS total
 FROM bookings b
 LEFT JOIN cars c ON b.car_id = c.id
+LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
 LEFT JOIN users u1 ON b.user_id = u1.id
 LEFT JOIN users u2 ON b.owner_id = u2.id
 $where
@@ -146,9 +154,11 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 <link rel="icon" type="image/svg+xml" href="/carGOAdmin/<?php echo $icon; ?>">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
   <link href="include/notifications.css" rel="stylesheet">
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
 </head>
 <body>
 
@@ -172,7 +182,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
     </div>
@@ -307,7 +317,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
               <th>Booking ID</th>
               <th>Renter</th>
               <th>Owner</th>
-              <th>Car Details</th>
+              <th>Vehicle Details</th>
               <th>Rental Period</th>
               <th>Pickup Info</th>
               <th>Amount</th>
@@ -338,7 +348,7 @@ while ($row = mysqli_fetch_assoc($result)):
     // Calculate days
     $pickup = strtotime($row['pickup_date']);
     $return = strtotime($row['return_date']);
-    $days = max(1, ceil(($return - $pickup) / 86400));
+    $days = max(1, (int)(($return - $pickup) / 86400) + 1);
 
     // Status color classes
     $statusClass = [
@@ -350,7 +360,21 @@ while ($row = mysqli_fetch_assoc($result)):
         "cancelled" => "cancelled"
     ][$row["status"]] ?? "pending";
 
+    // Determine payment status and class
+    $paymentStatus = $row['payment_status'] ?? 'unpaid';
     $paymentClass = "unpaid"; // default
+    $paymentLabel = "Unpaid";
+    
+    if ($paymentStatus === 'verified' || $paymentStatus === 'paid') {
+        $paymentClass = "paid";
+        $paymentLabel = "Paid";
+    } elseif ($paymentStatus === 'pending') {
+        $paymentClass = "pending";
+        $paymentLabel = "Pending";
+    } elseif ($paymentStatus === 'refunded') {
+        $paymentClass = "refunded";
+        $paymentLabel = "Refunded";
+    }
 ?>
     <tr>
         <td>
@@ -410,7 +434,7 @@ while ($row = mysqli_fetch_assoc($result)):
 
         <!-- Payment -->
         <td>
-            <span class="payment-badge <?= $paymentClass ?>">Unpaid</span>
+            <span class="payment-badge <?= $paymentClass ?>"><?= $paymentLabel ?></span>
         </td>
 
         <!-- Actions -->
@@ -424,21 +448,6 @@ while ($row = mysqli_fetch_assoc($result)):
                     title="View Details">
                     <i class="bi bi-eye"></i>
                 </button>
-
-                <?php if ($row['status'] == "pending") : ?>
-                <button class="action-btn approve" 
-                        onclick="updateStatus(<?= $row['id'] ?>,'approved')"
-                        title="Approve Booking">
-                    <i class="bi bi-check-lg"></i>
-                </button>
-
-                <button class="action-btn reject" 
-                        onclick="updateStatus(<?= $row['id'] ?>,'rejected')"
-                        title="Reject Booking">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-                <?php endif; ?>
-
             </div>
         </td>
     </tr>
@@ -626,6 +635,181 @@ function exportBookings() {
 
 .filter-dropdown:focus, .search-box input:focus {
   box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+}
+
+/* Force contact-modal design overrides - Enhanced with icons & larger text */
+.modal-dialog {
+  max-width: 800px !important;
+}
+
+.modal-dialog-scrollable .modal-content {
+  max-height: 85vh !important;
+}
+
+.modal-header {
+  background: #ffffff !important;
+  color: #111827 !important;
+  padding: 40px 40px 32px 40px !important;
+  border-bottom: none !important;
+}
+
+.modal-header h3,
+.modal-header h5,
+.modal-header .modal-title {
+  font-size: 32px !important;
+  font-weight: 700 !important;
+  color: #111827 !important;
+  letter-spacing: -0.5px !important;
+  font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+}
+
+.modal-header .modal-title i,
+.modal-header h3 i,
+.modal-header h5 i {
+  font-size: 34px !important;
+  color: #6b7280 !important;
+}
+
+.modal-header .btn-close {
+  width: 40px !important;
+  height: 40px !important;
+  background: #f3f4f6 !important;
+  border-radius: 10px !important;
+  opacity: 1 !important;
+  filter: none !important;
+  padding: 0 !important;
+  background-image: none !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.modal-header .btn-close::after {
+  content: '✕' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  font-size: 20px !important;
+  color: #6b7280 !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+}
+
+.modal-header .btn-close:hover {
+  background: #e5e7eb !important;
+}
+
+.modal-header .btn-close:hover::after {
+  color: #111827 !important;
+}
+
+.modal-body {
+  padding: 40px !important;
+  font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 18px !important;
+  line-height: 1.7 !important;
+}
+
+.modal-body p {
+  font-size: 18px !important;
+  line-height: 1.7 !important;
+  margin-bottom: 14px !important;
+}
+
+.modal-body .text-muted,
+.modal-body small {
+  font-size: 16px !important;
+  color: #6b7280 !important;
+}
+
+.modal-body strong {
+  font-weight: 600 !important;
+  color: #111827 !important;
+}
+
+.modal-body h6,
+.modal-body .section-title {
+  font-size: 20px !important;
+  font-weight: 650 !important;
+  color: #111827 !important;
+  margin-bottom: 16px !important;
+  margin-top: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.modal-body h6:first-child,
+.modal-body .section-title:first-child {
+  margin-top: 0 !important;
+}
+
+.modal-body h6 i,
+.modal-body .section-title i {
+  font-size: 22px !important;
+  color: #9ca3af !important;
+}
+
+.modal-footer {
+  padding: 28px 40px 40px 40px !important;
+  border-top: 1px solid #f0f0f0 !important;
+  background: #ffffff !important;
+  gap: 14px !important;
+}
+
+.modal-footer .btn {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  padding: 16px 32px !important;
+  border-radius: 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.modal-footer .btn i {
+  font-size: 18px !important;
+}
+
+.info-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 0 !important;
+  border: 1px solid #f0f0f0 !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  margin-bottom: 24px !important;
+}
+
+.info-item {
+  padding: 20px 24px !important;
+  background: #ffffff !important;
+  border-radius: 0 !important;
+  border-right: 1px solid #f0f0f0 !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.info-item:nth-child(2n) {
+  border-right: none !important;
+}
+
+.info-label {
+  font-size: 15px !important;
+  color: #9ca3af !important;
+  font-weight: 500 !important;
+  margin-bottom: 6px !important;
+}
+
+.info-value {
+  font-size: 18px !important;
+  color: #111827 !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
 }
 </style>
 <script src="include/notifications.js"></script>

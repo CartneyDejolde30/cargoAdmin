@@ -27,7 +27,7 @@ if (!isset($_GET['owner_id'])) {
 
 $owner_id = intval($_GET['owner_id']);
 
-// SQL Query (IMPORTANT: filter by c.owner_id, not b.owner_id)
+// SQL Query - Support both cars and motorcycles
 $sql = "
 SELECT 
     b.id AS booking_id,
@@ -35,21 +35,24 @@ SELECT
     b.pickup_date,
     b.return_date,
     b.status,
+    b.vehicle_type,
     b.rejection_reason,
     b.rejected_at,
     b.refund_status,
     b.refund_requested,
     b.refund_amount,
+    b.escrow_status,
     u.fullname AS renter_name,
     u.phone AS renter_contact,
-    c.brand,
-    c.model,
-    c.image AS car_image,
-    CONCAT(c.brand, ' ', c.model) AS car_full_name
+    COALESCE(c.brand, m.brand) AS brand,
+    COALESCE(c.model, m.model) AS model,
+    COALESCE(c.image, m.image) AS car_image,
+    CONCAT(COALESCE(c.brand, m.brand), ' ', COALESCE(c.model, m.model)) AS car_full_name
 FROM bookings b
 INNER JOIN users u ON b.user_id = u.id
-INNER JOIN cars c ON b.car_id = c.id
-WHERE c.owner_id = ?
+LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+WHERE b.owner_id = ?
 AND b.status = 'rejected'
 ORDER BY b.rejected_at DESC
 ";
@@ -66,11 +69,13 @@ $stmt->bind_result(
     $pickup_date,
     $return_date,
     $status,
+    $vehicle_type,
     $rejection_reason,
     $rejected_at,
     $refund_status,
     $refund_requested,
     $refund_amount,
+    $escrow_status,
     $renter_name,
     $renter_contact,
     $brand,
@@ -94,6 +99,7 @@ while ($stmt->fetch()) {
         "pickup_date" => $pickup_date,
         "return_date" => $return_date,
         "status" => $status,
+        "vehicle_type" => $vehicle_type,
         "rejection_reason" => $rejection_reason,
         "rejected_at" => $rejected_at,
         "renter_name" => $renter_name,
@@ -102,7 +108,8 @@ while ($stmt->fetch()) {
         "car_full_name" => $car_full_name,
         "refund_status" => $refund_status ?? 'not_requested',
         "refund_requested" => (int)($refund_requested ?? 0),
-        "refund_amount" => (float)($refund_amount ?? 0)
+        "refund_amount" => (float)($refund_amount ?? 0),
+        "escrow_status" => $escrow_status ?? null
     ];
 }
 

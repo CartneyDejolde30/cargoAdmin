@@ -14,6 +14,7 @@ header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
 
 require_once '../../include/db.php';
+require_once __DIR__ . '/../security/suspension_guard.php';
 
 // Check if notification_helper.php exists, if not, skip it
 if (file_exists('../../include/notification_helper.php')) {
@@ -52,6 +53,9 @@ if (!$bookingId || !$userId || !$gcashNumber || !$referenceNumber || !$totalAmou
     exit();
 }
 
+// Block suspended users
+require_not_suspended($conn, intval($userId));
+
 // Start transaction
 mysqli_begin_transaction($conn);
 
@@ -76,14 +80,25 @@ try {
         throw new Exception('Booking not found or not authorized');
     }
     
-    // Check if booking has late fee (can pay even after returned)
-    if ($booking['late_fee_amount'] <= 0) {
-        throw new Exception('This booking has no late fee to pay');
-    }
-    
     // Check if late fee already paid
     if ($booking['late_fee_charged'] == 1) {
         throw new Exception('Late fee has already been paid for this booking');
+    }
+    
+    // Validate that the submitted late fee amount is reasonable
+    // Don't check database late_fee_amount because it might be 0 if cron hasn't run yet
+    // Instead, validate that the submitted amount is positive
+    if ($lateFeeAmount <= 0) {
+        throw new Exception('Invalid late fee amount. Late fee must be greater than 0.');
+    }
+    
+    // Calculate if booking is actually overdue (real-time check)
+    $returnDateTime = strtotime($booking['return_date'] . ' ' . $booking['return_time']);
+    $currentTime = time();
+    $isActuallyOverdue = $currentTime > $returnDateTime;
+    
+    if (!$isActuallyOverdue) {
+        throw new Exception('This booking is not overdue yet. No late fee required.');
     }
     
     // Determine if rental is already paid
@@ -154,27 +169,29 @@ try {
     
     $paymentId = mysqli_insert_id($conn);
     
-    // 5. Update booking with late fee payment status
-    // Mark that a late fee payment has been submitted
+    // 5. Update booking with late fee amount and payment status
+    // Record the late fee amount in the database so cron doesn't recalculate it
     if ($isRentalPaid) {
-        // Rental already paid, only update late_fee_payment_status
+        // Rental already paid, update late_fee_amount and late_fee_payment_status
         $updateBookingQuery = "UPDATE bookings 
-                              SET late_fee_payment_status = 'pending',
-                                  updated_at = NOW()
-                              WHERE id = ?";
-        
-        $stmt = mysqli_prepare($conn, $updateBookingQuery);
-        mysqli_stmt_bind_param($stmt, "i", $bookingId);
-    } else {
-        // Rental not paid yet, update both payment_status and late_fee_payment_status
-        $updateBookingQuery = "UPDATE bookings 
-                              SET payment_status = 'pending',
+                              SET late_fee_amount = ?,
                                   late_fee_payment_status = 'pending',
                                   updated_at = NOW()
                               WHERE id = ?";
         
         $stmt = mysqli_prepare($conn, $updateBookingQuery);
-        mysqli_stmt_bind_param($stmt, "i", $bookingId);
+        mysqli_stmt_bind_param($stmt, "di", $lateFeeAmount, $bookingId);
+    } else {
+        // Rental not paid yet, update both payment_status and late_fee fields
+        $updateBookingQuery = "UPDATE bookings 
+                              SET late_fee_amount = ?,
+                                  payment_status = 'pending',
+                                  late_fee_payment_status = 'pending',
+                                  updated_at = NOW()
+                              WHERE id = ?";
+        
+        $stmt = mysqli_prepare($conn, $updateBookingQuery);
+        mysqli_stmt_bind_param($stmt, "di", $lateFeeAmount, $bookingId);
     }
     
     if (!mysqli_stmt_execute($stmt)) {

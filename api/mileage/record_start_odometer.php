@@ -47,13 +47,36 @@ if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
     
     // Create directory if it doesn't exist
     if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0777, true);
+        mkdir($upload_dir, 0755, true);
     }
-    
-    $file_extension = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
-    $file_name = "odometer_start_{$booking_id}_" . time() . "." . $file_extension;
+    $mime = $_FILES['photo']['type'] ?? '';
+    $size = $_FILES['photo']['size'] ?? 0;
+    $allowed = defined('ALLOWED_IMAGE_TYPES') ? ALLOWED_IMAGE_TYPES : ['image/jpeg','image/jpg','image/png','image/gif'];
+    $maxSize = defined('MAX_UPLOAD_SIZE') ? MAX_UPLOAD_SIZE : 5242880;
+    if (!in_array($mime, $allowed, true)) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Invalid image type"
+        ]);
+        exit;
+    }
+    if ($size > $maxSize) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Image too large"
+        ]);
+        exit;
+    }
+    $ext = strtolower(pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg','jpeg','png','gif'], true)) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Unsupported image extension"
+        ]);
+        exit;
+    }
+    $file_name = "odometer_start_{$booking_id}_" . time() . "." . $ext;
     $target_file = $upload_dir . $file_name;
-    
     if (move_uploaded_file($_FILES['photo']['tmp_name'], $target_file)) {
         $photo_path = "uploads/odometer/" . $file_name;
     } else {
@@ -67,9 +90,13 @@ if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
 
 // Check if booking exists and is in valid state
 $check_stmt = $conn->prepare("
-    SELECT id, status, odometer_start, vehicle_type, car_id 
-    FROM bookings 
-    WHERE id = ?
+    SELECT 
+        b.id, b.status, b.odometer_start, b.vehicle_type, b.car_id,
+        COALESCE(c.has_unlimited_mileage, m.has_unlimited_mileage) AS has_unlimited_mileage
+    FROM bookings b
+    LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+    LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+    WHERE b.id = ?
 ");
 $check_stmt->bind_param("i", $booking_id);
 $check_stmt->execute();
@@ -84,6 +111,20 @@ if ($result->num_rows === 0) {
 }
 
 $booking = $result->fetch_assoc();
+
+// If vehicle has unlimited mileage, odometer tracking is not required
+$isUnlimited = !empty($booking['has_unlimited_mileage']) && intval($booking['has_unlimited_mileage']) === 1;
+if ($isUnlimited) {
+    echo json_encode([
+        "status" => "success",
+        "message" => "Odometer tracking not required for unlimited mileage vehicle",
+        "data" => [
+            "booking_id" => $booking_id,
+            "odometer_required" => false
+        ]
+    ]);
+    exit;
+}
 
 // Check if odometer already recorded
 if (!empty($booking['odometer_start'])) {

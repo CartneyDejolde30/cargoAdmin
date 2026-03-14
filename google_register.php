@@ -54,10 +54,13 @@ try {
     if ($conn->query($sql) === TRUE) {
         $userId = $conn->insert_id;
         
-        $getUserSql = "SELECT id, fullname, email, role, municipality, 
-                              profile_image, phone, address, google_uid, 
-                              auth_provider, fcm_token
-                       FROM users WHERE id = $userId";
+        $getUserSql = "SELECT u.id, u.fullname, u.email, u.role, u.municipality, 
+                              u.profile_image, u.phone, u.address, u.google_uid, 
+                              u.auth_provider, u.fcm_token,
+                              CASE WHEN uv.status = 'approved' THEN 1 ELSE 0 END AS is_verified
+                       FROM users u
+                       LEFT JOIN user_verifications uv ON u.id = uv.user_id
+                       WHERE u.id = $userId";
         
         $userResult = $conn->query($getUserSql);
         $user = $userResult->fetch_assoc();

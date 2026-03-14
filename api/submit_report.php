@@ -5,6 +5,8 @@ header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
 require_once "../include/db.php";
+require_once "../include/smtp_mailer.php";
+require_once __DIR__ . "/security/suspension_guard.php";
 
 // ---------------------------
 // ALLOW POST ONLY
@@ -75,6 +77,10 @@ if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 // GET INPUTS
 // ---------------------------
 $reporterId = intval($_POST['reporter_id'] ?? 0);
+
+// Block suspended users
+require_not_suspended($conn, $reporterId);
+
 $reportType = strtolower(trim($_POST['report_type'] ?? ""));
 $reportedId = trim($_POST['reported_id'] ?? ""); // Keep as string for flexibility
 $reason     = trim($_POST['reason'] ?? "");
@@ -279,21 +285,20 @@ try {
     // INSERT REPORT
     // ---------------------------
     $stmt = $conn->prepare("
-       INSERT INTO reports 
-(reporter_id, report_type, reported_id, reason, details, image_path, status, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
-
+        INSERT INTO reports 
+        (reporter_id, report_type, reported_id, reason, details, image_path, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
     ");
 
     $stmt->bind_param(
-    "isssss",
-    $reporterId,
-    $reportType,
-    $reportedId,
-    $reason,
-    $details,
-    $imagePath
-);
+        "isssss",
+        $reporterId,
+        $reportType,
+        $reportedId,
+        $reason,
+        $details,
+        $imagePath
+    );
 
     if (!$stmt->execute()) {
         throw new Exception("Failed to insert report: " . $stmt->error);
@@ -352,22 +357,63 @@ VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
     // ---------------------------
     // SEND EMAIL NOTIFICATION TO ADMIN (optional)
     // ---------------------------
-    // Uncomment if you want email notifications
-    /*
-    $adminEmail = "admin@cargo.com";
-    $subject = "New Report Submitted - CarGo";
-    $message = "
-        A new report has been submitted.
+    // Send email notification to admin via SMTP
+    // ---------------------------
+    try {
+        $adminEmail = SMTP_FROM_EMAIL; // Send to admin email
+        $subject = "🚨 New Report Submitted - #$reportId";
         
-        Report ID: $reportId
-        Type: $reportType
-        Reason: $reason
-        Reporter: {$reporter['fullname']} ({$reporter['email']})
+        $htmlBody = "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: #d32f2f; color: white; padding: 20px; text-align: center; }
+                .content { padding: 20px; background: #f9f9f9; border: 1px solid #ddd; }
+                .info-row { padding: 10px 0; border-bottom: 1px solid #eee; }
+                .label { font-weight: bold; color: #555; }
+                .footer { text-align: center; padding: 20px; color: #999; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h1>⚠️ New Report Submitted</h1>
+                    <p>CarGO Admin Alert</p>
+                </div>
+                <div class='content'>
+                    <h2>Report Details</h2>
+                    <div class='info-row'>
+                        <span class='label'>Report ID:</span> #$reportId
+                    </div>
+                    <div class='info-row'>
+                        <span class='label'>Type:</span> $reportType
+                    </div>
+                    <div class='info-row'>
+                        <span class='label'>Reason:</span> $reason
+                    </div>
+                    <div class='info-row'>
+                        <span class='label'>Reporter:</span> {$reporter['fullname']} ({$reporter['email']})
+                    </div>
+                    <p style='margin-top: 20px;'>
+                        <strong>Action Required:</strong> Please review this report within 24-48 hours.
+                    </p>
+                </div>
+                <div class='footer'>
+                    <p>This is an automated notification from CarGO Admin System</p>
+                    <p>&copy; " . date('Y') . " CarGO. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
         
-        Please review at: http://yourdomain.com/admin/manage_reports.php?id=$reportId
-    ";
-    mail($adminEmail, $subject, $message);
-    */
+        send_smtp_email($adminEmail, $subject, $htmlBody);
+    } catch (Exception $mailErr) {
+        // Log error but don't fail the report submission
+        error_log("Failed to send report notification email: " . $mailErr->getMessage());
+    }
 
     // ---------------------------
     // SUCCESS RESPONSE

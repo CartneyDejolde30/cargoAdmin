@@ -15,6 +15,16 @@ if (!$policyId) {
     exit;
 }
 
+// Auto-expire policies before fetching
+$expireStmt = $conn->prepare("
+    UPDATE insurance_policies 
+    SET status = 'expired' 
+    WHERE status = 'active' 
+    AND policy_end < NOW()
+");
+$expireStmt->execute();
+$expireStmt->close();
+
 try {
     $query = "
         SELECT 
@@ -27,8 +37,6 @@ try {
             b.return_date,
             b.total_amount as booking_amount,
             b.status as booking_status,
-            b.pickup_location,
-            b.return_location,
             u.id as renter_id,
             u.fullname AS renter_name,
             u.email as renter_email,
@@ -37,22 +45,46 @@ try {
             o.fullname AS owner_name,
             o.email as owner_email,
             o.phone as owner_contact,
-            CASE 
-                WHEN ip.vehicle_type = 'car' THEN c.brand
-                WHEN ip.vehicle_type = 'motorcycle' THEN m.brand
-            END as vehicle_brand,
-            CASE 
-                WHEN ip.vehicle_type = 'car' THEN c.model
-                WHEN ip.vehicle_type = 'motorcycle' THEN m.model
-            END as vehicle_model,
-            CASE 
-                WHEN ip.vehicle_type = 'car' THEN c.year
-                WHEN ip.vehicle_type = 'motorcycle' THEN m.year
-            END as vehicle_year,
-            CASE 
-                WHEN ip.vehicle_type = 'car' THEN c.plate_number
-                WHEN ip.vehicle_type = 'motorcycle' THEN m.plate_number
-            END as vehicle_plate,
+            COALESCE(
+                CASE 
+                    WHEN ip.vehicle_type = 'car' OR (ip.vehicle_type = '' AND b.vehicle_type = 'car') THEN c.brand
+                    WHEN ip.vehicle_type = 'motorcycle' OR (ip.vehicle_type = '' AND b.vehicle_type = 'motorcycle') THEN m.brand
+                END,
+                CASE 
+                    WHEN b.vehicle_type = 'car' THEN bc.brand
+                    WHEN b.vehicle_type = 'motorcycle' THEN bm.brand
+                END
+            ) as vehicle_brand,
+            COALESCE(
+                CASE 
+                    WHEN ip.vehicle_type = 'car' OR (ip.vehicle_type = '' AND b.vehicle_type = 'car') THEN c.model
+                    WHEN ip.vehicle_type = 'motorcycle' OR (ip.vehicle_type = '' AND b.vehicle_type = 'motorcycle') THEN m.model
+                END,
+                CASE 
+                    WHEN b.vehicle_type = 'car' THEN bc.model
+                    WHEN b.vehicle_type = 'motorcycle' THEN bm.model
+                END
+            ) as vehicle_model,
+            COALESCE(
+                CASE 
+                    WHEN ip.vehicle_type = 'car' OR (ip.vehicle_type = '' AND b.vehicle_type = 'car') THEN c.car_year
+                    WHEN ip.vehicle_type = 'motorcycle' OR (ip.vehicle_type = '' AND b.vehicle_type = 'motorcycle') THEN m.motorcycle_year
+                END,
+                CASE 
+                    WHEN b.vehicle_type = 'car' THEN bc.car_year
+                    WHEN b.vehicle_type = 'motorcycle' THEN bm.motorcycle_year
+                END
+            ) as vehicle_year,
+            COALESCE(
+                CASE 
+                    WHEN ip.vehicle_type = 'car' OR (ip.vehicle_type = '' AND b.vehicle_type = 'car') THEN c.plate_number
+                    WHEN ip.vehicle_type = 'motorcycle' OR (ip.vehicle_type = '' AND b.vehicle_type = 'motorcycle') THEN m.plate_number
+                END,
+                CASE 
+                    WHEN b.vehicle_type = 'car' THEN bc.plate_number
+                    WHEN b.vehicle_type = 'motorcycle' THEN bm.plate_number
+                END
+            ) as vehicle_plate,
             DATEDIFF(ip.policy_end, NOW()) AS days_remaining,
             CASE 
                 WHEN NOW() > ip.policy_end THEN 1
@@ -68,6 +100,8 @@ try {
         JOIN users o ON ip.owner_id = o.id
         LEFT JOIN cars c ON ip.vehicle_id = c.id AND ip.vehicle_type = 'car'
         LEFT JOIN motorcycles m ON ip.vehicle_id = m.id AND ip.vehicle_type = 'motorcycle'
+        LEFT JOIN cars bc ON b.car_id = bc.id AND b.vehicle_type = 'car'
+        LEFT JOIN motorcycles bm ON b.car_id = bm.id AND b.vehicle_type = 'motorcycle'
         WHERE ip.id = ?
     ";
     
@@ -125,9 +159,7 @@ try {
             'status' => $row['booking_status'],
             'amount' => floatval($row['booking_amount']),
             'pickup_date' => $row['pickup_date'],
-            'return_date' => $row['return_date'],
-            'pickup_location' => $row['pickup_location'],
-            'return_location' => $row['return_location']
+            'return_date' => $row['return_date']
         ],
         'claims_summary' => [
             'total_claims' => intval($row['total_claims']),

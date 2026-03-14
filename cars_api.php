@@ -1,8 +1,7 @@
 <?php
 // Enable error logging
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
+// Load configuration
+require_once __DIR__ . '/include/config.php';
 error_log("=== Cars API Started ===");
 
 // DON'T use output buffering yet - let's see the actual error
@@ -25,7 +24,7 @@ if ($action === "fetch") {
     /* -------- FETCH CARS -------- */
     error_log("Preparing car query...");
     $carStmt = $conn->prepare("
-        SELECT 
+        SELECT
             id,
             owner_id,
             brand,
@@ -38,6 +37,10 @@ if ($action === "fetch") {
             location,
             status,
             created_at,
+            car_year,
+            fuel_type,
+            transmission,
+            seat,
             'car' AS vehicle_type
         FROM cars
         WHERE owner_id = ?
@@ -63,7 +66,7 @@ if ($action === "fetch") {
     /* -------- FETCH MOTORCYCLES -------- */
     error_log("Preparing motorcycle query...");
     $motorStmt = $conn->prepare("
-        SELECT 
+        SELECT
             id,
             owner_id,
             brand,
@@ -71,11 +74,14 @@ if ($action === "fetch") {
             color,
             body_style,
             plate_number,
-            price_per_day AS price_per_day,
+            price_per_day,
             image,
             location,
             status,
             created_at,
+            motorcycle_year,
+            engine_displacement,
+            transmission_type,
             'motorcycle' AS vehicle_type
         FROM motorcycles
         WHERE owner_id = ?
@@ -137,29 +143,34 @@ if ($action === "fetch") {
 
 // ========== INSERT CAR ==========
 if ($action === "insert") {
-    $owner_id = $_POST['owner_id'] ?? 0;
-    $status = $_POST['status'] ?? 'pending';
-    $brand = $_POST['brand'] ?? '';
-    $model = $_POST['model'] ?? '';
-    $body_style = $_POST['body_style'] ?? '';
-    $plate_number = $_POST['plate_number'] ?? '';
-    $color = $_POST['color'] ?? '';
-    $description = $_POST['description'] ?? '';
-    $advance_notice = $_POST['advance_notice'] ?? '';
-    $min_trip_duration = $_POST['min_trip_duration'] ?? '';
-    $max_trip_duration = $_POST['max_trip_duration'] ?? '';
-    $delivery_types = $_POST['delivery_types'] ?? '[]';
-    $features = $_POST['features'] ?? '[]';
-    $rules = $_POST['rules'] ?? '[]';
-    $has_unlimited_mileage = $_POST['has_unlimited_mileage'] ?? '1';
-    $price_per_day = $_POST['price_per_day'] ?? 0;
-    $location = $_POST['location'] ?? '';
-    $latitude = $_POST['latitude'] ?? 0;
-    $longitude = $_POST['longitude'] ?? 0;
-    
+    require_once __DIR__ . '/include/vehicle_validation.php';
+
+    $common = vv_validate_common_insert_fields();
+    $car = vv_validate_car_fields();
+
+    $owner_id = $common['owner_id'];
+    $status = $common['status'];
+    $brand = $common['brand'];
+    $model = $common['model'];
+    $body_style = $common['body_style'];
+    $plate_number = $common['plate_number'];
+    $color = $common['color'];
+    $description = $common['description'];
+    $advance_notice = $common['advance_notice'];
+    $min_trip_duration = $common['min_trip_duration'];
+    $max_trip_duration = $common['max_trip_duration'];
+    $delivery_types = $common['delivery_types'];
+    $features = $common['features'];
+    $rules = $common['rules'];
+    $has_unlimited_mileage = (string)$common['has_unlimited_mileage'];
+    $price_per_day = $common['price_per_day'];
+    $location = $common['location'];
+    $latitude = $common['latitude'];
+    $longitude = $common['longitude'];
+
     // Car-specific fields
-    $car_year = $_POST['year'] ?? '';
-    $trim = $_POST['trim'] ?? '';
+    $car_year = $car['car_year'];
+    $trim = $car['trim'];
 
     // -------- UPLOAD FILES --------
     $uploadDir = "uploads/";
@@ -256,6 +267,162 @@ if ($action === "insert") {
     exit;
 }
 
-error_log("Invalid action reached");
-echo json_encode(["success" => false, "message" => "Invalid action"]);
+// ========== DELETE VEHICLE (CAR OR MOTORCYCLE) ==========
+if ($action === "delete") {
+    error_log("=== DELETE ACTION TRIGGERED ===");
+    
+    $id = $_POST['id'] ?? $_GET['id'] ?? 0;
+    $vehicle_type = $_POST['vehicle_type'] ?? $_GET['vehicle_type'] ?? null;
+    $owner_id = $_POST['owner_id'] ?? $_GET['owner_id'] ?? null;
+    
+    error_log("Delete request - ID: $id, Type: $vehicle_type, Owner: $owner_id");
+    
+    if (!$id) {
+        error_log("Delete failed: Missing vehicle ID");
+        echo json_encode(["success" => false, "message" => "Vehicle ID is required"]);
+        exit;
+    }
+    
+    // Auto-detect vehicle type if not provided
+    if (!$vehicle_type) {
+        // Check in cars table first
+        $checkCar = $conn->prepare("SELECT id FROM cars WHERE id = ?");
+        $checkCar->bind_param("i", $id);
+        $checkCar->execute();
+        if ($checkCar->get_result()->num_rows > 0) {
+            $vehicle_type = 'car';
+        } else {
+            // Check in motorcycles table
+            $checkMotor = $conn->prepare("SELECT id FROM motorcycles WHERE id = ?");
+            $checkMotor->bind_param("i", $id);
+            $checkMotor->execute();
+            if ($checkMotor->get_result()->num_rows > 0) {
+                $vehicle_type = 'motorcycle';
+            }
+        }
+        error_log("Auto-detected vehicle type: $vehicle_type");
+    }
+    
+    if (!$vehicle_type) {
+        error_log("Delete failed: Vehicle not found in either table");
+        echo json_encode(["success" => false, "message" => "Vehicle not found"]);
+        exit;
+    }
+    
+    // Determine table name
+    $table = ($vehicle_type === 'motorcycle') ? 'motorcycles' : 'cars';
+    
+    // Verify ownership if owner_id is provided
+    if ($owner_id) {
+        $verifyStmt = $conn->prepare("SELECT id FROM $table WHERE id = ? AND owner_id = ?");
+        $verifyStmt->bind_param("ii", $id, $owner_id);
+        $verifyStmt->execute();
+        if ($verifyStmt->get_result()->num_rows === 0) {
+            error_log("Delete failed: Ownership verification failed");
+            echo json_encode(["success" => false, "message" => "Unauthorized: You do not own this vehicle"]);
+            exit;
+        }
+    }
+    
+    // Check if vehicle is currently rented
+    $bookingCheck = $conn->prepare("
+        SELECT id FROM bookings 
+        WHERE car_id = ? 
+        AND vehicle_type = ? 
+        AND status IN ('pending', 'approved')
+        AND return_date >= CURDATE()
+    ");
+    $bookingCheck->bind_param("is", $id, $vehicle_type);
+    $bookingCheck->execute();
+    
+    if ($bookingCheck->get_result()->num_rows > 0) {
+        error_log("Delete failed: Vehicle has active bookings");
+        echo json_encode([
+            "success" => false, 
+            "message" => "Cannot delete vehicle with active or pending bookings"
+        ]);
+        exit;
+    }
+    
+    // Get vehicle details before deletion (for cleanup and logging)
+    $getVehicle = $conn->prepare("SELECT image, official_receipt, certificate_of_registration, extra_images FROM $table WHERE id = ?");
+    $getVehicle->bind_param("i", $id);
+    $getVehicle->execute();
+    $vehicleData = $getVehicle->get_result()->fetch_assoc();
+    
+    // Begin transaction
+    $conn->begin_transaction();
+    
+    try {
+        // Delete related records first (to maintain referential integrity)
+        
+        // 1. Delete from vehicle_availability
+        $deleteAvailability = $conn->prepare("DELETE FROM vehicle_availability WHERE vehicle_id = ? AND vehicle_type = ?");
+        $deleteAvailability->bind_param("is", $id, $vehicle_type);
+        $deleteAvailability->execute();
+        error_log("Deleted availability records");
+        
+        // 2. Delete from favorites
+        $deleteFavorites = $conn->prepare("DELETE FROM favorites WHERE vehicle_id = ? AND vehicle_type = ?");
+        $deleteFavorites->bind_param("is", $id, $vehicle_type);
+        $deleteFavorites->execute();
+        error_log("Deleted favorites records");
+        
+        // 3. Delete the vehicle
+        $deleteVehicle = $conn->prepare("DELETE FROM $table WHERE id = ?");
+        $deleteVehicle->bind_param("i", $id);
+        
+        if ($deleteVehicle->execute()) {
+            error_log("Vehicle deleted from database");
+            
+            // Commit transaction
+            $conn->commit();
+            
+            // Optional: Delete uploaded files (uncomment if you want to delete files)
+            // if ($vehicleData) {
+            //     $filesToDelete = [
+            //         $vehicleData['image'],
+            //         $vehicleData['official_receipt'],
+            //         $vehicleData['certificate_of_registration']
+            //     ];
+            //     
+            //     // Add extra images
+            //     if ($vehicleData['extra_images']) {
+            //         $extraImages = json_decode($vehicleData['extra_images'], true);
+            //         if (is_array($extraImages)) {
+            //             $filesToDelete = array_merge($filesToDelete, $extraImages);
+            //         }
+            //     }
+            //     
+            //     foreach ($filesToDelete as $file) {
+            //         if ($file && file_exists($file)) {
+            //             unlink($file);
+            //             error_log("Deleted file: $file");
+            //         }
+            //     }
+            // }
+            
+            echo json_encode([
+                "success" => true, 
+                "message" => "Vehicle deleted successfully"
+            ]);
+        } else {
+            throw new Exception("Failed to delete vehicle: " . $conn->error);
+        }
+        
+    } catch (Exception $e) {
+        $conn->rollback();
+        error_log("Delete failed: " . $e->getMessage());
+        echo json_encode([
+            "success" => false, 
+            "message" => "Failed to delete vehicle: " . $e->getMessage()
+        ]);
+    }
+    
+    $conn->close();
+    exit;
+}
+
+error_log("Invalid action reached: $action");
+echo json_encode(["success" => false, "message" => "Invalid action: $action"]);
 ?>

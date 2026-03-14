@@ -4,6 +4,7 @@ header("Access-Control-Allow-Origin: *");
 
 error_reporting(0);
 require_once "../include/db.php";
+require_once __DIR__ . "/security/suspension_guard.php";
 
 /* ---------- INPUT ---------- */
 $user_id    = (int)($_POST['user_id'] ?? 0);
@@ -26,6 +27,9 @@ if ($user_id <= 0 || $booking_id <= 0 || $car_id <= 0 || $owner_id <= 0) {
     exit;
 }
 
+// Block suspended users
+require_not_suspended($conn, $user_id);
+
 if ($car_rating <= 0 || $owner_rating <= 0) {
     echo json_encode(["success"=>false,"message"=>"Rating required"]);
     exit;
@@ -36,25 +40,40 @@ if ($car_review === '' || $owner_review === '') {
     exit;
 }
 
-/* ---------- ELIGIBILITY (TEMP: ALLOW ALL) ---------- */
+/* ---------- ELIGIBILITY CHECK ---------- */
+// Check if booking exists and belongs to user
 $check = $conn->prepare("
-    SELECT id FROM bookings
+    SELECT id, status, IFNULL(is_reviewed,0) as is_reviewed
+    FROM bookings
     WHERE id = ?
       AND user_id = ?
-      AND IFNULL(is_reviewed,0) = 0
     LIMIT 1
 ");
 $check->bind_param("ii", $booking_id, $user_id);
 $check->execute();
-$check->store_result();
+$result = $check->get_result();
 
-if ($check->num_rows === 0) {
+if ($result->num_rows === 0) {
     echo json_encode([
         "success"=>false,
-        "message"=>"Booking already reviewed or invalid"
+        "message"=>"Booking not found or you don't have permission"
     ]);
     exit;
 }
+
+$booking = $result->fetch_assoc();
+
+// Check if already reviewed
+if ($booking['is_reviewed'] == 1) {
+    echo json_encode([
+        "success"=>false,
+        "message"=>"You have already reviewed this booking"
+    ]);
+    exit;
+}
+
+// Allow reviews for completed bookings (and any other status if needed)
+// Remove status restriction to allow reviews anytime after booking
 $check->close();
 
 /* ---------- PREPARE DATA ---------- */

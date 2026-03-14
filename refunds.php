@@ -8,6 +8,7 @@
 
 session_start();
 require_once 'include/db.php';
+require_once 'include/admin_profile.php';
 
 // Auth check
 if (!isset($_SESSION['admin_id'])) {
@@ -61,6 +62,37 @@ $totalRefunded = $completedData['total_refunded'];
 // ============================================================================
 // FILTERS & PAGINATION
 // ============================================================================
+
+// Optional admin debug (does not expose credentials)
+$debugMode = (isset($_GET['debug']) && $_GET['debug'] === '1');
+$debugInfo = [];
+if ($debugMode) {
+    // Show which DB we are connected to and if refunds table has data
+    $dbNameRes = @mysqli_query($conn, 'SELECT DATABASE() AS db');
+    $dbNameRow = $dbNameRes ? mysqli_fetch_assoc($dbNameRes) : null;
+
+    $debugInfo['connected_database'] = $dbNameRow['db'] ?? null;
+    $debugInfo['php_host'] = $_SERVER['HTTP_HOST'] ?? null;
+
+    // Check table existence
+    $tableRes = @mysqli_query($conn, "SHOW TABLES LIKE 'refunds'");
+    $debugInfo['refunds_table_exists'] = ($tableRes && mysqli_num_rows($tableRes) > 0);
+
+    if ($debugInfo['refunds_table_exists']) {
+        $cntRes = @mysqli_query($conn, 'SELECT COUNT(*) AS cnt FROM refunds');
+        $cntRow = $cntRes ? mysqli_fetch_assoc($cntRes) : null;
+        $debugInfo['refunds_row_count'] = (int)($cntRow['cnt'] ?? 0);
+
+        $sampleRes = @mysqli_query($conn, "SELECT id, refund_id, status, booking_id, user_id, created_at FROM refunds ORDER BY id DESC LIMIT 5");
+        $samples = [];
+        if ($sampleRes) {
+            while ($s = mysqli_fetch_assoc($sampleRes)) {
+                $samples[] = $s;
+            }
+        }
+        $debugInfo['refunds_latest_5'] = $samples;
+    }
+}
 
 $statusFilter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
@@ -191,6 +223,149 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="include/admin-styles.css" rel="stylesheet">
     <link href="include/notifications.css" rel="stylesheet">
+    <link href="include/modal-theme-standardized.css" rel="stylesheet">
+    <style>
+    /* Force contact-modal design overrides - Enhanced with icons & larger text */
+    .modal-dialog {
+      max-width: 700px !important;
+    }
+
+    .modal-dialog-scrollable .modal-content {
+      max-height: 85vh !important;
+    }
+
+    .modal-header {
+      background: #ffffff !important;
+      color: #111827 !important;
+      padding: 40px 40px 32px 40px !important;
+      border-bottom: none !important;
+    }
+
+    .modal-header h3,
+    .modal-header h5,
+    .modal-header .modal-title {
+      font-size: 32px !important;
+      font-weight: 700 !important;
+      color: #111827 !important;
+      letter-spacing: -0.5px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 14px !important;
+    }
+
+    .modal-header .modal-title i,
+    .modal-header h3 i,
+    .modal-header h5 i {
+      font-size: 34px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-header .btn-close {
+      width: 40px !important;
+      height: 40px !important;
+      background: #f3f4f6 !important;
+      border-radius: 10px !important;
+      opacity: 1 !important;
+      filter: none !important;
+      padding: 0 !important;
+      background-image: none !important;
+      position: relative !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    .modal-header .btn-close::after {
+      content: '✕' !important;
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      font-size: 20px !important;
+      color: #6b7280 !important;
+      font-weight: 400 !important;
+      line-height: 1 !important;
+    }
+
+    .modal-header .btn-close:hover {
+      background: #e5e7eb !important;
+      transform: scale(1.05) !important;
+    }
+
+    .modal-header .btn-close:hover::after {
+      color: #111827 !important;
+    }
+
+    .modal-body {
+      padding: 40px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+    }
+
+    .modal-body p {
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+      margin-bottom: 14px !important;
+    }
+
+    .modal-body .text-muted,
+    .modal-body small {
+      font-size: 16px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-body strong {
+      font-weight: 600 !important;
+      color: #111827 !important;
+    }
+
+    .modal-body h6,
+    .modal-body .section-title {
+      font-size: 20px !important;
+      font-weight: 650 !important;
+      color: #111827 !important;
+      margin-bottom: 16px !important;
+      margin-top: 28px !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-body h6:first-child,
+    .modal-body .section-title:first-child {
+      margin-top: 0 !important;
+    }
+
+    .modal-body h6 i,
+    .modal-body .section-title i {
+      font-size: 22px !important;
+      color: #9ca3af !important;
+    }
+
+    .modal-footer {
+      padding: 28px 40px 40px 40px !important;
+      border-top: 1px solid #f0f0f0 !important;
+      background: #ffffff !important;
+      gap: 14px !important;
+    }
+
+    .modal-footer .btn {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      padding: 16px 32px !important;
+      border-radius: 12px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-footer .btn i {
+      font-size: 18px !important;
+    }
+    </style>
 </head>
 <body>
 
@@ -212,10 +387,18 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
         </div>
+
+        <?php if ($debugMode): ?>
+            <div class="alert alert-warning" style="margin: 16px 0;">
+                <strong>Refunds Debug</strong>
+                <pre style="white-space: pre-wrap; margin: 8px 0 0;"><?= htmlspecialchars(json_encode($debugInfo, JSON_PRETTY_PRINT), ENT_QUOTES, 'UTF-8') ?></pre>
+                <div style="font-size: 12px; color:#666;">Tip: remove <code>?debug=1</code> from the URL when done.</div>
+            </div>
+        <?php endif; ?>
 
         <!-- Stats Grid -->
         <div class="stats-grid">

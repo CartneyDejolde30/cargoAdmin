@@ -1,9 +1,17 @@
 <?php
 /**
- * Export Insurance Providers to CSV
+ * ============================================================================
+ * EXPORT INSURANCE PROVIDERS TO CSV - Admin Download
+ * ============================================================================
  */
 
+session_start();
 require_once __DIR__ . '/../../../include/db.php';
+
+// Check admin authentication
+if (!isset($_SESSION['admin_id'])) {
+    die('Unauthorized access');
+}
 
 try {
     $query = "
@@ -21,12 +29,23 @@ try {
     
     $result = $conn->query($query);
     
+    if (!$result) {
+        throw new Exception('Query error: ' . mysqli_error($conn));
+    }
+    
     // Set headers for CSV download
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="insurance_providers_' . date('Y-m-d') . '.csv"');
+    $filename = 'insurance_providers_' . date('Y-m-d_His') . '.csv';
+    
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
     
     // Output CSV header
     $output = fopen('php://output', 'w');
+    
+    // UTF-8 BOM for Excel compatibility
+    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
     fputcsv($output, [
         'Provider Name',
         'Contact Phone',
@@ -51,11 +70,12 @@ try {
     }
     
     fclose($output);
+    mysqli_close($conn);
+    exit;
     
 } catch (Exception $e) {
     header('Content-Type: application/json');
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    exit;
 }
-
-$conn->close();
 ?>

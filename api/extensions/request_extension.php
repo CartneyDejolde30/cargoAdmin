@@ -9,6 +9,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 
 require_once '../../include/db.php';
+require_once __DIR__ . '/../security/suspension_guard.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
@@ -25,6 +26,9 @@ if (!$bookingId || !$userId || !$requestedReturnDate) {
     echo json_encode(['success' => false, 'message' => 'Missing required parameters']);
     exit;
 }
+
+// Block suspended users
+require_not_suspended($conn, intval($userId));
 
 // Get booking details
 $bookingSql = "SELECT 

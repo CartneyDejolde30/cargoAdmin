@@ -4,7 +4,22 @@ require_once __DIR__ . "/include/db.php";
 header("Content-Type: application/json; charset=utf-8");
 
 // Validate user ID
-if (!isset($_GET['user_id']) || !is_numeric($_GET['user_id'])) {
+$input = json_decode(file_get_contents('php://input'), true) ?? [];
+$userIdRaw = $_GET['user_id'] ?? $input['user_id'] ?? $_GET['id'] ?? $input['id'] ?? $_GET['uid'] ?? $input['uid'] ?? $_GET['userId'] ?? $input['userId'] ?? $_GET['owner_id'] ?? $input['owner_id'] ?? $_GET['renter_id'] ?? $input['renter_id'] ?? null;
+$emailRaw = $_GET['email'] ?? $input['email'] ?? $_GET['emailAddress'] ?? $input['emailAddress'] ?? null;
+if ($userIdRaw === null || !is_numeric($userIdRaw)) {
+    if ($emailRaw !== null) {
+        $lookup = $conn->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+        $lookup->bind_param("s", $emailRaw);
+        $lookup->execute();
+        $res = $lookup->get_result()->fetch_assoc();
+        $lookup->close();
+        if (!empty($res['id'])) {
+            $userIdRaw = $res['id'];
+        }
+    }
+}
+if ($userIdRaw === null || !is_numeric($userIdRaw)) {
     echo json_encode([
         "status" => "error",
         "message" => "Missing or invalid user_id"
@@ -12,7 +27,7 @@ if (!isset($_GET['user_id']) || !is_numeric($_GET['user_id'])) {
     exit;
 }
 
-$user_id = intval($_GET['user_id']);
+$user_id = intval($userIdRaw);
 
 // Fetch notifications
 $stmt = $conn->prepare("

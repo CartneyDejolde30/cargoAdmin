@@ -11,6 +11,89 @@
       position: fixed;
       height: 100vh;
       overflow-y: auto;
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+
+    /* Mobile Menu Toggle Button */
+    .mobile-menu-toggle {
+      display: none;
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 1001;
+      background: #1a1a1a;
+      color: white;
+      border: none;
+      width: 45px;
+      height: 45px;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transition: all 0.3s ease;
+    }
+
+    .mobile-menu-toggle:hover {
+      background: #333;
+      transform: scale(1.05);
+    }
+
+    .mobile-menu-toggle i {
+      font-size: 20px;
+    }
+
+    /* Sidebar Overlay for Mobile */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .sidebar-overlay.active {
+      opacity: 1;
+    }
+
+    /* Mobile Responsive Styles */
+    @media (max-width: 992px) {
+      .mobile-menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar.active {
+        transform: translateX(0);
+      }
+
+      .sidebar-overlay.active {
+        display: block;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 280px;
+        padding: 20px 15px;
+      }
+
+      .logo-section {
+        margin-bottom: 30px;
+      }
+
+      .menu-section {
+        margin-bottom: 25px;
+      }
     }
 
     .logo-section {
@@ -115,7 +198,15 @@
     }
 </style>
 
-<aside class="sidebar">
+<!-- Mobile Menu Toggle Button -->
+<button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle Menu">
+  <i class="bi bi-list"></i>
+</button>
+
+<!-- Sidebar Overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<aside class="sidebar" id="sidebar">
   <div class="logo-section">
     <div class="logo-icon">C</div>
     <div class="logo-text">CARGO</div>
@@ -315,6 +406,42 @@
       }
       ?>
     </a>
+
+    <a href="security_deposits.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'security_deposits.php' ? 'active' : ''; ?>">
+      <i class="bi bi-shield-check"></i>
+      <span>Security Deposits</span>
+      <?php
+      // Get held security deposits count
+      if (isset($conn)) {
+        $deposits_query = "SELECT COUNT(*) as count FROM bookings WHERE security_deposit_status = 'held' AND status = 'completed'";
+        $deposits_result = mysqli_query($conn, $deposits_query);
+        if ($deposits_result) {
+          $deposits_data = mysqli_fetch_assoc($deposits_result);
+          if ($deposits_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $deposits_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
+
+    <a href="damage_reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'damage_reports.php' ? 'active' : ''; ?>">
+      <i class="bi bi-tools"></i>
+      <span>Damage Reports</span>
+      <?php
+      if (isset($conn)) {
+        $dr_query = "SELECT COUNT(*) as count FROM damage_reports WHERE status = 'pending'";
+        $dr_result = mysqli_query($conn, $dr_query);
+        if ($dr_result) {
+          $dr_data = mysqli_fetch_assoc($dr_result);
+          if ($dr_data['count'] > 0) {
+            echo '<span class="menu-badge">' . $dr_data['count'] . '</span>';
+          }
+        }
+      }
+      ?>
+    </a>
+
     <a href="insurance.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'insurance.php' ? 'active' : ''; ?>">
       <i class="bi bi-shield-check"></i>
       <span>Insurance Management</span>
@@ -400,6 +527,77 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+// Mobile Sidebar Toggle Functionality
+(function() {
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+    // Toggle sidebar on button click
+    if (mobileMenuToggle) {
+        mobileMenuToggle.addEventListener('click', function() {
+            sidebar.classList.toggle('active');
+            sidebarOverlay.classList.toggle('active');
+            
+            // Change icon based on state
+            const icon = this.querySelector('i');
+            if (sidebar.classList.contains('active')) {
+                icon.classList.remove('bi-list');
+                icon.classList.add('bi-x');
+            } else {
+                icon.classList.remove('bi-x');
+                icon.classList.add('bi-list');
+            }
+        });
+    }
+
+    // Close sidebar when clicking overlay
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', function() {
+            sidebar.classList.remove('active');
+            sidebarOverlay.classList.remove('active');
+            
+            // Reset icon
+            const icon = mobileMenuToggle.querySelector('i');
+            icon.classList.remove('bi-x');
+            icon.classList.add('bi-list');
+        });
+    }
+
+    // Close sidebar when clicking a menu item on mobile
+    const menuItems = sidebar.querySelectorAll('.menu-item');
+    menuItems.forEach(item => {
+        item.addEventListener('click', function() {
+            if (window.innerWidth <= 992) {
+                sidebar.classList.remove('active');
+                sidebarOverlay.classList.remove('active');
+                
+                // Reset icon
+                const icon = mobileMenuToggle.querySelector('i');
+                icon.classList.remove('bi-x');
+                icon.classList.add('bi-list');
+            }
+        });
+    });
+
+    // Handle window resize
+    let resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+            if (window.innerWidth > 992) {
+                sidebar.classList.remove('active');
+                sidebarOverlay.classList.remove('active');
+                
+                // Reset icon
+                const icon = mobileMenuToggle.querySelector('i');
+                icon.classList.remove('bi-x');
+                icon.classList.add('bi-list');
+            }
+        }, 250);
+    });
+})();
+
 // Real-time badge update system
 (function() {
     const BADGE_UPDATE_INTERVAL = 30000; // Update every 30 seconds
@@ -415,6 +613,7 @@
         'refunds': 'refunds.php',
         'payouts': 'payouts.php',
         'escrow': 'escrow.php',
+        'escrow_releases': 'escrow_release_manager.php',
         'insurance': 'insurance.php',
         'reports': 'reports.php',
         'notifications': 'notifications.php'

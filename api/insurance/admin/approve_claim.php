@@ -31,7 +31,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $input = json_decode(file_get_contents('php://input'), true);
 
 $claimId = isset($input['claim_id']) ? intval($input['claim_id']) : 0;
-$approvedAmount = isset($input['approved_amount']) ? floatval($input['approved_amount']) : 0;
+$approvedAmountRaw = $input['approved_amount'] ?? null;
+$approvedAmount = 0;
+if (is_numeric($approvedAmountRaw)) {
+    $approvedAmount = floatval($approvedAmountRaw);
+} elseif (is_string($approvedAmountRaw)) {
+    $normalized = preg_replace('/[^\d\.]/', '', $approvedAmountRaw);
+    $approvedAmount = $normalized !== '' ? floatval($normalized) : 0;
+}
 $reviewNotes = $input['review_notes'] ?? '';
 $adminId = isset($input['admin_id']) ? intval($input['admin_id']) : 1; // TODO: Get from session
 
@@ -60,6 +67,15 @@ try {
     
     if ($claim['status'] !== 'submitted' && $claim['status'] !== 'under_review') {
         throw new Exception('Claim cannot be approved in current status');
+    }
+    
+    if ($approvedAmount > floatval($claim['claimed_amount'])) {
+        throw new Exception('Approved amount cannot exceed claimed amount');
+    }
+    
+    $evidenceList = json_decode($claim['evidence_photos'] ?? '[]', true);
+    if (!is_array($evidenceList) || count($evidenceList) === 0) {
+        throw new Exception('Evidence photos are required before approval');
     }
     
     // Calculate payout (approved amount minus deductible)

@@ -22,9 +22,13 @@ SELECT
     b.pickup_time,
     b.return_time,
     b.total_amount,
+    b.price_per_day,
+    b.insurance_premium,
+    b.security_deposit_amount,
     b.status,
     b.rental_period,
     b.created_at,
+    b.vehicle_type,
     b.full_name AS renter_name,
     b.email AS renter_email,
     b.contact AS renter_contact,
@@ -34,19 +38,21 @@ SELECT
     b.refund_requested,
     b.refund_amount,
     
-    -- Car Details
-    c.brand,
-    c.model,
-    c.car_year,
-    c.image AS car_image,
-    c.location,
-    c.price_per_day,
-    c.seat
+    -- Vehicle Details (Car or Motorcycle)
+    COALESCE(c.brand, m.brand) AS brand,
+    COALESCE(c.model, m.model) AS model,
+    COALESCE(c.car_year, m.motorcycle_year) AS car_year,
+    COALESCE(c.image, m.image) AS car_image,
+    COALESCE(c.location, m.location) AS location,
+    COALESCE(c.price_per_day, m.price_per_day) AS price_per_day,
+    COALESCE(c.seat, 2) AS seat
     
 FROM bookings b
-LEFT JOIN cars c ON b.car_id = c.id
+LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
 WHERE b.owner_id = ?
 AND b.status = 'pending'
+AND b.payment_status = 'paid'
 ORDER BY b.created_at DESC
 ";
 
@@ -61,12 +67,31 @@ while ($row = $result->fetch_assoc()) {
     
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
+        // Load config if not already loaded
+        if (!defined('BASE_URL')) {
+            require_once __DIR__ . '/../../include/config.php';
+        }
+        $carImage = BASE_URL . '/' . $carImage;
     }
     
     // Calculate rental days
-    $days = max(1, (strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400);
-    
+    $days = max(1, (int)((strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400) + 1);
+
+    // Compute price breakdown
+    $pricePerDay   = (float)($row['price_per_day'] ?? 0);
+    $baseRental    = $pricePerDay * $days;
+    $insurance     = (float)($row['insurance_premium'] ?? 0);
+    $periodType    = $row['rental_period'] ?? 'Day';
+    $discount      = 0.0;
+    if ($periodType === 'Weekly' && $days >= 7) {
+        $discount = $baseRental * 0.12;
+    } elseif ($periodType === 'Monthly' && $days >= 30) {
+        $discount = $baseRental * 0.25;
+    }
+    $discountedRental = $baseRental - $discount;
+    $serviceFee    = ($discountedRental + $insurance) * 0.05;
+    $secDeposit    = (float)($row['security_deposit_amount'] ?? 0);
+
     $requests[] = [
         'booking_id' => $row['booking_id'],
         'car_name' => $carName,
@@ -84,6 +109,15 @@ while ($row = $result->fetch_assoc()) {
         'return_time' => date('h:i A', strtotime($row['return_time'])),
         'total_amount' => number_format($row['total_amount'], 0),
         'rental_period' => $days . ' day' . ($days > 1 ? 's' : ''),
+        // Price breakdown fields
+        'price_per_day'     => $pricePerDay,
+        'base_rental'       => round($baseRental, 2),
+        'discount'          => round($discount, 2),
+        'insurance_premium' => round($insurance, 2),
+        'service_fee'       => round($serviceFee, 2),
+        'security_deposit'  => round($secDeposit, 2),
+        'grand_total'       => round((float)$row['total_amount'] + $secDeposit, 2),
+        'rental_days'       => (int)$days,
         'status' => 'pending',
         'created_at' => date('M d, Y - h:i A', strtotime($row['created_at'])),
         

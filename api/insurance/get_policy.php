@@ -38,6 +38,16 @@ if (($bookingId <= 0 && $policyId <= 0) || $userId <= 0) {
     exit;
 }
 
+// Auto-expire policies before fetching
+$expireStmt = $conn->prepare("
+    UPDATE insurance_policies 
+    SET status = 'expired' 
+    WHERE status = 'active' 
+    AND policy_end < NOW()
+");
+$expireStmt->execute();
+$expireStmt->close();
+
 try {
     $query = "
         SELECT 

@@ -60,6 +60,7 @@ try {
             p.created_at,
             p.processed_at,
             p.completion_reference,
+            p.transfer_proof,
             b.car_id,
             CONCAT(c.brand, ' ', c.model) as car_name
         FROM payouts p

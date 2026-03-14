@@ -1,5 +1,17 @@
 <?php
+/**
+ * ============================================================================
+ * EXPORT BOOKINGS TO CSV - Admin Download
+ * ============================================================================
+ */
+
+session_start();
 require_once "include/db.php";
+
+// Check admin authentication
+if (!isset($_SESSION['admin_id'])) {
+    die('Unauthorized access');
+}
 
 // Read filters (same as bookings_table.php)
 $search  = $_GET["search"] ?? "";
@@ -62,12 +74,23 @@ ORDER BY b.id DESC
 
 $result = mysqli_query($conn, $sql);
 
+if (!$result) {
+    die('Query error: ' . mysqli_error($conn));
+}
+
 // CSV Headers
+$filename = 'bookings_export_' . date('Y-m-d_His') . '.csv';
+
 header('Content-Type: text/csv; charset=utf-8');
-header('Content-Disposition: attachment; filename=bookings_export_' . date("Y-m-d") . '.csv');
+header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Cache-Control: no-cache, must-revalidate');
+header('Expires: 0');
 
 // Output buffer
 $output = fopen('php://output', 'w');
+
+// UTF-8 BOM for Excel compatibility
+fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
 
 // CSV Title Row
 fputcsv($output, [
@@ -95,4 +118,5 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 fclose($output);
+mysqli_close($conn);
 exit;

@@ -20,7 +20,8 @@ $query = "
         u.fullname AS owner_name,
         u.phone AS phone,
         u.profile_image AS owner_image,
-        COALESCE(AVG(r.rating), 5.0) AS rating
+        COALESCE(AVG(r.rating), 0.0) AS average_rating,
+        COUNT(r.id) AS review_count
     FROM motorcycles m
     LEFT JOIN users u ON u.id = m.owner_id
     LEFT JOIN reviews r ON r.car_id = m.id
@@ -55,13 +56,20 @@ $motorcycle['location'] = $motorcycle['location'] ?: 'Unknown';
 $motorcycle['owner_name'] = $motorcycle['owner_name'] ?: 'Unknown';
 $motorcycle['phone'] = $motorcycle['phone'] ?: '';
 
+// Load config for BASE_URL (for reviewer avatars)
+if (!defined('BASE_URL')) {
+    require_once __DIR__ . '/../include/config.php';
+}
+$baseUrl = BASE_URL . "/";
+
 /* Fetch reviews */
 $reviewsQuery = "
     SELECT
         r.rating,
-        r.review AS comment,
+        r.review AS review,
         r.created_at,
-        u.fullname
+        u.fullname AS reviewer_name,
+        u.profile_image AS reviewer_image
     FROM reviews r
     LEFT JOIN users u ON u.id = r.renter_id
     WHERE r.car_id = ?
@@ -75,6 +83,12 @@ $reviewsResult = $reviewsStmt->get_result();
 
 $reviews = [];
 while ($row = $reviewsResult->fetch_assoc()) {
+    $row['rating'] = floatval($row['rating']);
+    // ✅ FIX: Profile images are stored in profile_images subdirectory
+    $row['reviewer_image'] = !empty($row['reviewer_image'])
+        ? $baseUrl . "uploads/profile_images/" . $row['reviewer_image']
+        : "https://ui-avatars.com/api/?name=" . urlencode($row['reviewer_name'] ?? 'User');
+
     $reviews[] = $row;
 }
 

@@ -111,11 +111,17 @@ if (!$result) {
 
 // Set headers for CSV download
 $filename = 'escrow_report_' . date('Y-m-d_His') . '.csv';
-header('Content-Type: text/csv');
+
+header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Cache-Control: no-cache, must-revalidate');
+header('Expires: 0');
 
 // Open output stream
 $output = fopen('php://output', 'w');
+
+// UTF-8 BOM for Excel compatibility
+fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
 
 // Write CSV headers
 fputcsv($output, [

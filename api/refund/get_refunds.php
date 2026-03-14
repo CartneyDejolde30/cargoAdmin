@@ -109,13 +109,17 @@ try {
     $carName = trim($row['car_brand'] . ' ' . $row['car_model'] . ' ' . $row['car_year']);
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
+        // Load config if not already loaded
+        if (!defined('BASE_URL')) {
+            require_once __DIR__ . '/../../include/config.php';
+        }
+        $carImage = BASE_URL . '/' . $carImage;
     }
     
     // Calculate rental duration
     $pickupDate = strtotime($row['pickup_date']);
     $returnDate = strtotime($row['return_date']);
-    $rentalDays = max(1, ceil(($returnDate - $pickupDate) / 86400));
+    $rentalDays = max(1, (int)(($returnDate - $pickupDate) / 86400) + 1);
     
     // Calculate refund percentage
     $refundPercentage = $row['booking_total'] > 0 

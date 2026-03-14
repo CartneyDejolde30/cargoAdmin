@@ -18,7 +18,7 @@ $query = $conn->query("
         cars.has_unlimited_mileage,
         users.fullname AS owner_name,
         users.address AS location,
-        COALESCE(cars.rating, 5) AS rating,
+        COALESCE(cars.rating, 0) AS rating,
         COALESCE(cars.seat, 4) AS seats
     FROM cars
     JOIN users ON users.id = cars.owner_id

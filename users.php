@@ -1,6 +1,6 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
+session_start();
+// Configuration loaded via header.php
 /**
  * ============================================================================ 
  * UNIFIED USER MANAGEMENT & VERIFICATION SYSTEM
@@ -14,25 +14,69 @@ ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/error_log.txt');
 
 include 'include/db.php';
+include 'include/admin_profile.php';
 
 
 function fixPath($path) {
-    // Remove Windows absolute path
+    if (empty($path)) return '';
+    
+    // Remove Windows absolute path and normalize slashes
     $path = str_replace('\\', '/', $path);
-
-    // Remove C:/xampp/.../carGOAdmin
-    if (strpos($path, 'carGOAdmin') !== false) {
-        $path = substr($path, strpos($path, 'carGOAdmin'));
+    
+    // Remove any absolute paths (C:/xampp/..., /var/www/..., etc.)
+    // Look for common patterns and extract relative path
+    if (strpos($path, 'cargoAdmin') !== false) {
+        // Extract everything after 'cargoAdmin/'
+        $path = substr($path, strpos($path, 'cargoAdmin') + 11); // 11 = strlen('cargoAdmin/')
+    } elseif (strpos($path, 'carGOAdmin') !== false) {
+        // Handle old naming convention
+        $path = substr($path, strpos($path, 'carGOAdmin') + 11);
     }
-
-    // Remove "api/../"
+    
+    // Remove "api/../" patterns
     $path = str_replace('api/../', '', $path);
-
-    // Ensure starts with /
+    
+    // If path starts with 'uploads/', it's already relative - make it absolute from web root
+    if (strpos($path, 'uploads/') === 0) {
+        // For web access, we need to prepend 'cargoAdmin/'
+        $path = 'cargoAdmin/' . $path;
+    }
+    
+    // Ensure starts with / for absolute web path
     if ($path[0] !== '/') {
         $path = '/' . $path;
     }
+    
+    return $path;
+}
 
+// Helper function for profile images (simpler, just handles relative paths)
+function fixProfileImagePath($path) {
+    if (empty($path)) return '';
+    
+    // Normalize slashes
+    $path = str_replace('\\', '/', $path);
+    
+    // If it's already a full URL (http/https), return as-is
+    if (preg_match('/^https?:\/\//', $path)) {
+        return $path;
+    }
+    
+    // Remove any absolute file system paths
+    if (strpos($path, 'cargoAdmin') !== false) {
+        $path = substr($path, strpos($path, 'cargoAdmin') + 11);
+    }
+    
+    // If already starts with uploads/, just return it (relative path)
+    if (strpos($path, 'uploads/') === 0) {
+        return $path;
+    }
+    
+    // If starts with /uploads/, remove leading slash
+    if (strpos($path, '/uploads/') === 0) {
+        return substr($path, 1);
+    }
+    
     return $path;
 }
 
@@ -142,6 +186,97 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['approve']) || isset(
 }
 
 // ============================================================================
+// SECTION 1B: HANDLE USER SUSPENSION (Suspend/Unsuspend)
+// ============================================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['suspend_user']) || isset($_POST['unsuspend_user']))) {
+    // Basic auth guard
+    if (!isset($_SESSION['admin_id'])) {
+        header('Location: index.php?error=unauthorized');
+        exit;
+    }
+
+    $user_id = intval($_POST['user_id'] ?? 0);
+    if ($user_id <= 0) {
+        header('Location: users.php?error=invalid_request');
+        exit;
+    }
+
+    // Fetch user
+    $userStmt = $conn->prepare("SELECT id, fullname, is_suspended FROM users WHERE id = ? LIMIT 1");
+    $userStmt->bind_param('i', $user_id);
+    $userStmt->execute();
+    $uRes = $userStmt->get_result();
+    $user = $uRes ? $uRes->fetch_assoc() : null;
+    $userStmt->close();
+
+    if (!$user) {
+        header('Location: users.php?error=user_not_found');
+        exit;
+    }
+
+    $isCurrentlySuspended = !empty($user['is_suspended']) && intval($user['is_suspended']) === 1;
+
+    if (isset($_POST['suspend_user'])) {
+        if ($isCurrentlySuspended) {
+            header('Location: users.php?error=already_suspended');
+            exit;
+        }
+
+        $reason = trim($_POST['reason'] ?? '');
+        if ($reason === '') {
+            header('Location: users.php?error=suspension_reason_required');
+            exit;
+        }
+
+        $stmt = $conn->prepare("UPDATE users SET is_suspended = 1, suspended_at = NOW(), suspension_reason = ?, api_token = NULL WHERE id = ?");
+        $stmt->bind_param('si', $reason, $user_id);
+
+        if ($stmt->execute()) {
+            // Notify user
+            $title = 'Account Suspended';
+            $message = "Your account has been suspended. Reason: {$reason}. If you believe this is a mistake, please contact support.";
+            $notif = $conn->prepare("INSERT INTO notifications (user_id, title, message, read_status, created_at) VALUES (?, ?, ?, 'unread', NOW())");
+            $notif->bind_param('iss', $user_id, $title, $message);
+            $notif->execute();
+            $notif->close();
+
+            header('Location: users.php?success=suspended&user=' . urlencode($user['fullname']));
+        } else {
+            header('Location: users.php?error=suspend_failed&details=' . urlencode($stmt->error));
+        }
+
+        $stmt->close();
+        exit;
+    }
+
+    if (isset($_POST['unsuspend_user'])) {
+        if (!$isCurrentlySuspended) {
+            header('Location: users.php?error=not_suspended');
+            exit;
+        }
+
+        $stmt = $conn->prepare("UPDATE users SET is_suspended = 0, suspended_at = NULL, suspension_reason = NULL WHERE id = ?");
+        $stmt->bind_param('i', $user_id);
+
+        if ($stmt->execute()) {
+            $title = 'Account Reactivated';
+            $message = 'Your account suspension has been lifted. You may now log in again.';
+            $notif = $conn->prepare("INSERT INTO notifications (user_id, title, message, read_status, created_at) VALUES (?, ?, ?, 'unread', NOW())");
+            $notif->bind_param('iss', $user_id, $title, $message);
+            $notif->execute();
+            $notif->close();
+
+            header('Location: users.php?success=unsuspended&user=' . urlencode($user['fullname']));
+        } else {
+            header('Location: users.php?error=unsuspend_failed&details=' . urlencode($stmt->error));
+        }
+
+        $stmt->close();
+        exit;
+    }
+}
+
+// ============================================================================
 // SECTION 2: DETERMINE VIEW MODE
 // ============================================================================
 $viewMode = $_GET['view'] ?? 'management';
@@ -183,6 +318,8 @@ if ($verificationFilter === 'verified') {
     $whereConditions[] = "user_verifications.id IS NULL";
 } elseif ($verificationFilter === 'rejected') {
     $whereConditions[] = "user_verifications.status = 'rejected'";
+} elseif ($verificationFilter === 'suspended') {
+    $whereConditions[] = "users.is_suspended = 1";
 }
 
 $whereClause = implode(" AND ", $whereConditions);
@@ -196,7 +333,8 @@ $statsQuery = "
         SUM(CASE WHEN user_verifications.status = 'approved' THEN 1 ELSE 0 END) as verified,
         SUM(CASE WHEN user_verifications.status = 'pending' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN user_verifications.status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-        SUM(CASE WHEN user_verifications.id IS NULL THEN 1 ELSE 0 END) as unverified
+        SUM(CASE WHEN user_verifications.id IS NULL THEN 1 ELSE 0 END) as unverified,
+        SUM(CASE WHEN users.is_suspended = 1 THEN 1 ELSE 0 END) as suspended
     FROM users
     LEFT JOIN user_verifications ON users.id = user_verifications.user_id
     WHERE {$whereClause}
@@ -207,7 +345,8 @@ $stats = [
     'verified' => 0,
     'pending' => 0,
     'rejected' => 0,
-    'unverified' => 0
+    'unverified' => 0,
+    'suspended' => 0
 ];
 
 if (!empty($params)) {
@@ -238,7 +377,7 @@ if (!empty($params)) {
 }
 
 // Normalize stats numeric values
-foreach (['total','verified','pending','rejected','unverified'] as $k) {
+foreach (['total','verified','pending','rejected','unverified','suspended'] as $k) {
     $stats[$k] = intval($stats[$k] ?? 0);
 }
 
@@ -375,9 +514,11 @@ function buildFilterUrl($baseParams = []) {
   <title><?= $viewMode === 'overview' ? 'User Status Overview' : 'User Management' ?> - CarGo Admin</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="include/admin-styles.css" rel="stylesheet">
+  <link href="include/admin-styles.css?v=<?= time() ?>" rel="stylesheet">
   <link href="include/notifications.css" rel="stylesheet">
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
   
   <style>
     /* Additional inline enhancements for smooth animations */
@@ -398,6 +539,7 @@ function buildFilterUrl($baseParams = []) {
     .stat-card:nth-child(2) { animation-delay: 0.2s; }
     .stat-card:nth-child(3) { animation-delay: 0.3s; }
     .stat-card:nth-child(4) { animation-delay: 0.4s; }
+    .stat-card:nth-child(5) { animation-delay: 0.5s; }
     
     @keyframes slideUp {
       from {
@@ -419,10 +561,146 @@ function buildFilterUrl($baseParams = []) {
     /* doc modal basic styles (if your CSS expects these) */
     .doc-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 9999; }
     .doc-modal.active { display: flex; }
-    .doc-modal-content { width: 90%; max-width: 900px; background: #fff; border-radius: 8px; overflow: hidden; }
-    .doc-modal-header { padding: 12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #eee; }
-    .doc-modal-body { padding: 20px; min-height: 300px; max-height: 70vh; overflow: auto; display:flex; align-items:center; justify-content:center; }
-    .doc-modal-btn { background: transparent; border: none; font-size: 1.1rem; margin-left: 8px; color: #333; text-decoration: none; }
+    /* doc-modal styles now handled by modal-theme-standardized.css (contact-modal design) */
+
+    /* Force contact-modal design overrides - Enhanced with icons & larger text */
+    .modal-dialog {
+      max-width: 700px !important;
+    }
+
+    .modal-dialog-scrollable .modal-content {
+      max-height: 85vh !important;
+    }
+
+    .modal-header {
+      background: #ffffff !important;
+      color: #111827 !important;
+      padding: 40px 40px 32px 40px !important;
+      border-bottom: none !important;
+    }
+
+    .modal-header h3,
+    .modal-header h5,
+    .modal-header .modal-title {
+      font-size: 32px !important;
+      font-weight: 700 !important;
+      color: #111827 !important;
+      letter-spacing: -0.5px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 14px !important;
+    }
+
+    .modal-header .modal-title i,
+    .modal-header h3 i,
+    .modal-header h5 i {
+      font-size: 34px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-header .btn-close {
+      width: 40px !important;
+      height: 40px !important;
+      background: #f3f4f6 !important;
+      border-radius: 10px !important;
+      opacity: 1 !important;
+      filter: none !important;
+      padding: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      position: relative !important;
+      background-image: none !important;
+    }
+
+    .modal-header .btn-close::after {
+      content: '✕' !important;
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      font-size: 20px !important;
+      color: #6b7280 !important;
+      font-weight: 400 !important;
+      line-height: 1 !important;
+    }
+
+    .modal-header .btn-close:hover {
+      background: #e5e7eb !important;
+    }
+
+    .modal-header .btn-close:hover::after {
+      color: #111827 !important;
+    }
+
+    .modal-body {
+      padding: 40px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+    }
+
+    .modal-body p {
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+      margin-bottom: 14px !important;
+    }
+
+    .modal-body .text-muted,
+    .modal-body small {
+      font-size: 16px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-body strong {
+      font-weight: 600 !important;
+      color: #111827 !important;
+    }
+
+    .modal-body h6,
+    .modal-body .section-title {
+      font-size: 20px !important;
+      font-weight: 650 !important;
+      color: #111827 !important;
+      margin-bottom: 16px !important;
+      margin-top: 28px !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-body h6:first-child,
+    .modal-body .section-title:first-child {
+      margin-top: 0 !important;
+    }
+
+    .modal-body h6 i,
+    .modal-body .section-title i {
+      font-size: 22px !important;
+      color: #9ca3af !important;
+    }
+
+    .modal-footer {
+      padding: 28px 40px 40px 40px !important;
+      border-top: 1px solid #f0f0f0 !important;
+      background: #ffffff !important;
+      gap: 14px !important;
+    }
+
+    .modal-footer .btn {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      padding: 16px 32px !important;
+      border-radius: 12px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-footer .btn i {
+      font-size: 18px !important;
+    }
   </style>
 </head>
 <body>
@@ -477,7 +755,7 @@ function buildFilterUrl($baseParams = []) {
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
     </div>
@@ -500,11 +778,12 @@ function buildFilterUrl($baseParams = []) {
         </select>
 
         <select name="verification" class="filter-select <?= $verificationFilter !== 'all' ? 'active-filter' : '' ?>">
-          <option value="all" <?= $verificationFilter === 'all' ? 'selected' : '' ?>>🔐 All Verification</option>
+          <option value="all" <?= $verificationFilter === 'all' ? 'selected' : '' ?>>🔐 All Status</option>
           <option value="verified" <?= $verificationFilter === 'verified' ? 'selected' : '' ?>>✅ Verified</option>
           <option value="pending" <?= $verificationFilter === 'pending' ? 'selected' : '' ?>>⏳ Pending</option>
           <option value="rejected" <?= $verificationFilter === 'rejected' ? 'selected' : '' ?>>❌ Rejected</option>
           <option value="not-verified" <?= $verificationFilter === 'not-verified' ? 'selected' : '' ?>>⚠️ Not Verified</option>
+          <option value="suspended" <?= $verificationFilter === 'suspended' ? 'selected' : '' ?>>🚫 Suspended</option>
         </select>
 
         <button type="submit" class="search-btn">
@@ -587,6 +866,19 @@ function buildFilterUrl($baseParams = []) {
           <i class="bi bi-info-circle"></i> <?= $viewMode === 'overview' ? 'Declined submissions' : 'No submission yet' ?>
         </div>
       </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <div class="stat-icon stat-suspended">
+            <i class="bi bi-ban"></i>
+          </div>
+        </div>
+        <div class="stat-value"><?= $stats['suspended'] ?></div>
+        <div class="stat-label">Suspended Users</div>
+        <div class="stat-detail">
+          <i class="bi bi-slash-circle"></i> Account suspended
+        </div>
+      </div>
     </div>
 
     <?php if ($viewMode === 'overview'): ?>
@@ -613,9 +905,9 @@ function buildFilterUrl($baseParams = []) {
               </a>
             </div>
             <div class="col-md-3">
-              <a href="<?= buildFilterUrl(['view' => 'management', 'verification' => 'not-verified']) ?>" class="btn btn-secondary w-100">
-                <i class="bi bi-person-x me-2"></i>Not Submitted
-                <span class="badge bg-light text-secondary ms-2"><?= $stats['unverified'] ?></span>
+              <a href="<?= buildFilterUrl(['view' => 'management', 'verification' => 'suspended']) ?>" class="btn btn-danger w-100">
+                <i class="bi bi-ban me-2"></i>View Suspended
+                <span class="badge bg-light text-danger ms-2"><?= $stats['suspended'] ?></span>
               </a>
             </div>
             <div class="col-md-3">
@@ -650,7 +942,17 @@ function buildFilterUrl($baseParams = []) {
               $statusClass = '';
               $statusIcon = '';
               
-              if (empty($user['verification_id'])) {
+              // Check if user is suspended first
+              $isSuspended = !empty($user['is_suspended']) && intval($user['is_suspended']) === 1;
+              
+              if ($isSuspended) {
+                $statusBadge = '<span class="badge bg-danger"><i class="bi bi-ban me-1"></i>Account Suspended</span>';
+                $statusClass = 'text-danger';
+                $statusIcon = '<i class="bi bi-ban"></i>';
+                if (!empty($user['suspension_reason'])) {
+                  $statusBadge .= '<br><small class="text-danger mt-1 d-block"><i class="bi bi-info-circle me-1"></i>' . htmlspecialchars(substr($user['suspension_reason'], 0, 50)) . '...</small>';
+                }
+              } elseif (empty($user['verification_id'])) {
                 $statusBadge = '<span class="badge bg-secondary"><i class="bi bi-dash-circle me-1"></i>Not Submitted</span>';
                 $statusClass = 'text-secondary';
                 $statusIcon = '<i class="bi bi-person-x"></i>';
@@ -676,7 +978,7 @@ function buildFilterUrl($baseParams = []) {
               }
               
               $avatar = !empty($user['profile_image']) 
-                ? htmlspecialchars($user['profile_image']) 
+                ? htmlspecialchars(fixProfileImagePath($user['profile_image'])) 
                 : 'https://ui-avatars.com/api/?name=' . urlencode($user['fullname']) . '&background=random';
               ?>
               <div class="card mb-2 shadow-sm">
@@ -695,7 +997,8 @@ function buildFilterUrl($baseParams = []) {
                     <div class="col-md-3">
                       <div class="d-flex align-items-center">
                         <img src="<?= $avatar ?>" class="rounded-circle me-2" 
-                             style="width: 45px; height: 45px; object-fit: cover;">
+                             style="width: 45px; height: 45px; object-fit: cover;"
+                             onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($user['fullname']) ?>&background=random';">
                         <div>
                           <div class="fw-bold"><?= htmlspecialchars($user['fullname']) ?></div>
                           <div class="text-muted small">
@@ -810,7 +1113,7 @@ function buildFilterUrl($baseParams = []) {
               $num = $offset + 1;
               while($row = $query->fetch_assoc()) { 
                 $avatar = !empty($row['profile_image']) 
-                  ? htmlspecialchars($row['profile_image']) 
+                  ? htmlspecialchars(fixProfileImagePath($row['profile_image'])) 
                   : 'https://ui-avatars.com/api/?name=' . urlencode($row['fullname']) . '&background=667eea&color=fff';
                 
                 $verificationStatus = $row['verification_status'] ?? 'not-verified';
@@ -823,7 +1126,8 @@ function buildFilterUrl($baseParams = []) {
                 <td>
                   <div class="user-cell">
                     <div class="user-avatar-small">
-                      <img src="<?= $avatar ?>" alt="<?= htmlspecialchars($row['fullname']) ?>">
+                      <img src="<?= $avatar ?>" alt="<?= htmlspecialchars($row['fullname']) ?>"
+                           onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($row['fullname']) ?>&background=667eea&color=fff';">
                     </div>
                     <div class="user-info">
                       <span class="user-name"><?= htmlspecialchars($row['fullname']) ?></span>
@@ -850,9 +1154,18 @@ function buildFilterUrl($baseParams = []) {
                   <?= date('M d, Y', strtotime($row['created_at'])) ?>
                 </td>
                 <td>
-                  <span class="verification-badge <?= $verificationStatus ?>">
-                    <?= $verificationLabel ?>
-                  </span>
+                  <?php 
+                  $isSuspendedInTable = !empty($row['is_suspended']) && intval($row['is_suspended']) === 1;
+                  if ($isSuspendedInTable): 
+                  ?>
+                    <span class="badge bg-danger">
+                      <i class="bi bi-ban me-1"></i>Suspended
+                    </span>
+                  <?php else: ?>
+                    <span class="verification-badge <?= $verificationStatus ?>">
+                      <?= $verificationLabel ?>
+                    </span>
+                  <?php endif; ?>
                 </td>
                 <td>
                   <div class="action-buttons">
@@ -866,6 +1179,27 @@ function buildFilterUrl($baseParams = []) {
                         <i class="bi bi-eye-slash"></i>
                       </button>
                     <?php } ?>
+
+                    <?php 
+                      $isSuspended = !empty($row['is_suspended']) && intval($row['is_suspended']) === 1;
+                    ?>
+
+                    <?php if ($isSuspended): ?>
+                      <form method="POST" action="users.php" class="d-inline" onsubmit="return confirm('Unsuspend this user?');">
+                        <input type="hidden" name="user_id" value="<?= intval($row['id']) ?>">
+                        <button type="submit" name="unsuspend_user" class="action-btn" title="Unsuspend User" style="background:#198754; color:#fff;">
+                          <i class="bi bi-unlock-fill"></i>
+                        </button>
+                      </form>
+                    <?php else: ?>
+                      <form method="POST" action="users.php" class="d-inline" onsubmit="return window.__cargoSuspendUser(this);">
+                        <input type="hidden" name="user_id" value="<?= intval($row['id']) ?>">
+                        <input type="hidden" name="reason" value="">
+                        <button type="submit" name="suspend_user" class="action-btn" title="Suspend User" style="background:#dc3545; color:#fff;">
+                          <i class="bi bi-slash-circle-fill"></i>
+                        </button>
+                      </form>
+                    <?php endif; ?>
                   </div>
                 </td>
               </tr>
@@ -880,8 +1214,8 @@ function buildFilterUrl($baseParams = []) {
               ?>
               <div class="modal fade" id="verificationModal<?= $row['verification_id'] ?>" tabindex="-1">
                 <div class="modal-dialog modal-xl modal-dialog-centered">
-                  <div class="modal-content">
-                    <div class="modal-header bg-secondary text-white">
+                  <div class="modal-content modal-verification">
+                    <div class="modal-header">
                       <h5 class="modal-title">
                         <i class="bi bi-shield-check-fill me-2"></i>Verification Details - <?= htmlspecialchars($row['fullname']) ?>
                       </h5>
@@ -969,13 +1303,13 @@ function buildFilterUrl($baseParams = []) {
                           <p class="fw-semibold text-primary">
                             <i class="bi bi-front me-2"></i>ID (Front)
                           </p>
-                          <?php $idFrontPath = fixPath($row['id_front_photo']);
- ?>
+                          <?php $idFrontPath = fixPath($row['id_front_photo']); ?>
                           <img src="<?= htmlspecialchars($idFrontPath) ?>" 
-                               class="img-fluid rounded border" 
+                               class="img-fluid rounded border doc-thumbnail" 
                                style="cursor: pointer; max-height: 200px; object-fit: cover; width: 100%;"
                                onclick="viewDocument('<?= htmlspecialchars($idFrontPath) ?>', 'ID Front')"
-                               onerror="this.src='https://via.placeholder.com/300x200?text=Image+Not+Found'">
+                               data-original-path="<?= htmlspecialchars($row['id_front_photo']) ?>"
+                               onerror="handleImageError(this)">
                         </div>
 
                         <div class="col-md-4">
@@ -984,23 +1318,24 @@ function buildFilterUrl($baseParams = []) {
                           </p>
                           <?php $idBackPath = fixPath($row['id_back_photo']); ?>
                           <img src="<?= htmlspecialchars($idBackPath) ?>" 
-                               class="img-fluid rounded border"
+                               class="img-fluid rounded border doc-thumbnail"
                                style="cursor: pointer; max-height: 200px; object-fit: cover; width: 100%;"
                                onclick="viewDocument('<?= htmlspecialchars($idBackPath) ?>', 'ID Back')"
-                               onerror="this.src='https://via.placeholder.com/300x200?text=Image+Not+Found'">
+                               data-original-path="<?= htmlspecialchars($row['id_back_photo']) ?>"
+                               onerror="handleImageError(this)">
                         </div>
 
                         <div class="col-md-4">
                           <p class="fw-semibold text-primary">
-                            <i class="bi bi-camera-fill me-2"></i>Selfie Verification
+                            <i class="bi bi-camera-fill me-2"></i>Selfie
                           </p>
-                          <?php $selfiePath = fixPath($row['selfie_photo']);
- ?>
+                          <?php $selfiePath = fixPath($row['selfie_photo']); ?>
                           <img src="<?= htmlspecialchars($selfiePath) ?>" 
-                               class="img-fluid rounded border"
+                               class="img-fluid rounded border doc-thumbnail"
                                style="cursor: pointer; max-height: 200px; object-fit: cover; width: 100%;"
                                onclick="viewDocument('<?= htmlspecialchars($selfiePath) ?>', 'Selfie Photo')"
-                               onerror="this.src='https://via.placeholder.com/300x200?text=Image+Not+Found'">
+                               data-original-path="<?= htmlspecialchars($row['selfie_photo']) ?>"
+                               onerror="handleImageError(this)">
                         </div>
                       </div>
                     </div>
@@ -1034,8 +1369,8 @@ function buildFilterUrl($baseParams = []) {
               <!-- Reject Reason Modal -->
               <div class="modal fade" id="rejectModal<?= $row['verification_id'] ?>" tabindex="-1">
                 <div class="modal-dialog modal-dialog-centered">
-                  <div class="modal-content">
-                    <div class="modal-header bg-danger text-white">
+                  <div class="modal-content modal-danger">
+                    <div class="modal-header">
                       <h5 class="modal-title">
                         <i class="bi bi-x-circle-fill me-2"></i>Reject Verification
                       </h5>
@@ -1164,6 +1499,52 @@ function buildFilterUrl($baseParams = []) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Handle thumbnail image loading errors with fallback paths
+function handleImageError(imgElement) {
+  const originalPath = imgElement.getAttribute('data-original-path');
+  const currentSrc = imgElement.src;
+  
+  // Generate fallback URLs
+  const fallbackUrls = [];
+  
+  if (originalPath) {
+    // Try with /cargoAdmin/ prefix
+    if (originalPath.startsWith('uploads/')) {
+      fallbackUrls.push('/cargoAdmin/' + originalPath);
+      fallbackUrls.push('cargoAdmin/' + originalPath);
+    }
+    
+    // Try original path as-is
+    if (!originalPath.startsWith('/')) {
+      fallbackUrls.push('/' + originalPath);
+    }
+    fallbackUrls.push(originalPath);
+  }
+  
+  // Try next URL that hasn't been tried yet
+  for (let url of fallbackUrls) {
+    const fullUrl = url.startsWith('http') ? url : (window.location.origin + (url.startsWith('/') ? url : '/' + url));
+    if (currentSrc !== fullUrl) {
+      imgElement.src = url;
+      return; // Try this URL
+    }
+  }
+  
+  // All fallbacks failed, show placeholder
+  imgElement.src = 'https://via.placeholder.com/300x200?text=Image+Not+Found';
+  imgElement.style.opacity = '0.5';
+  imgElement.parentElement.style.position = 'relative';
+  
+  // Add error overlay
+  if (!imgElement.nextElementSibling || !imgElement.nextElementSibling.classList.contains('error-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.className = 'error-overlay';
+    overlay.innerHTML = '<small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Failed to load</small>';
+    overlay.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.9); padding: 8px; border-radius: 4px; font-weight: bold;';
+    imgElement.parentElement.appendChild(overlay);
+  }
+}
+
 // Auto-dismiss alerts after 5 seconds with fade effect
 document.addEventListener('DOMContentLoaded', function() {
   const alerts = document.querySelectorAll('.alert');
@@ -1214,6 +1595,67 @@ function viewDocument(docUrl, docType) {
   
   const extension = docUrl.split('.').pop().toLowerCase();
   
+  // Generate fallback URLs in case the primary URL fails
+  function generateFallbackUrls(url) {
+    const urls = [url];
+    
+    // If URL doesn't start with /, try adding it
+    if (!url.startsWith('/')) {
+      urls.push('/' + url);
+    }
+    
+    // Try without leading slash
+    if (url.startsWith('/')) {
+      urls.push(url.substring(1));
+    }
+    
+    // Try variations with cargoAdmin prefix
+    const filename = url.split('/').pop();
+    if (url.includes('uploads/verifications/')) {
+      const pathPart = url.substring(url.indexOf('uploads/verifications/'));
+      urls.push('/cargoAdmin/' + pathPart);
+      urls.push('cargoAdmin/' + pathPart);
+    }
+    
+    return [...new Set(urls)]; // Remove duplicates
+  }
+  
+  function tryLoadImage(urls, index = 0) {
+    if (index >= urls.length) {
+      // All URLs failed
+      modalBody.innerHTML = `
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          <strong>Failed to load image.</strong> The file may not exist or the path is incorrect.
+          <details class="mt-2">
+            <summary>Tried paths:</summary>
+            <ul class="text-start mt-2 small">
+              ${urls.map(u => `<li><code>${u}</code></li>`).join('')}
+            </ul>
+          </details>
+        </div>
+      `;
+      return;
+    }
+    
+    const img = document.createElement('img');
+    img.src = urls[index];
+    img.alt = docType;
+    img.style.maxWidth = '100%';
+    
+    img.onload = function() {
+      modalBody.innerHTML = '';
+      modalBody.appendChild(img);
+      // Update download button with working URL
+      downloadBtn.href = urls[index];
+    };
+    
+    img.onerror = function() {
+      // Try next URL
+      tryLoadImage(urls, index + 1);
+    };
+  }
+  
   if (extension === 'pdf') {
     const iframe = document.createElement('iframe');
     iframe.src = docUrl;
@@ -1232,22 +1674,8 @@ function viewDocument(docUrl, docType) {
       `;
     };
   } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
-    const img = document.createElement('img');
-    img.src = docUrl;
-    img.alt = docType;
-    img.style.maxWidth = '100%';
-    img.onload = function() {
-      modalBody.innerHTML = '';
-      modalBody.appendChild(img);
-    };
-    img.onerror = function() {
-      modalBody.innerHTML = `
-        <div class="alert alert-danger">
-          <i class="bi bi-exclamation-triangle me-2"></i>
-          Failed to load image. The file may not exist or the path is incorrect.
-        </div>
-      `;
-    };
+    const fallbackUrls = generateFallbackUrls(docUrl);
+    tryLoadImage(fallbackUrls);
   } else {
     const iframe = document.createElement('iframe');
     iframe.src = docUrl;
@@ -1280,6 +1708,17 @@ document.addEventListener('keydown', function(e) {
     closeDocModal();
   }
 });
+
+// Suspension prompt helper
+window.__cargoSuspendUser = function(form) {
+  const reason = prompt('Enter suspension reason (required):');
+  if (!reason || reason.trim() === '') {
+    alert('Suspension reason is required.');
+    return false;
+  }
+  form.querySelector('input[name="reason"]').value = reason.trim();
+  return confirm('Suspend this user?');
+};
 
 // Add smooth scroll to highlighted row
 window.addEventListener('load', function() {

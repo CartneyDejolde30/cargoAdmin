@@ -87,6 +87,8 @@ $filename = 'refunds_export_' . date('Y-m-d_His') . '.csv';
 
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Cache-Control: no-cache, must-revalidate');
+header('Expires: 0');
 
 // Create output stream
 $output = fopen('php://output', 'w');
@@ -114,5 +116,5 @@ if ($firstRow) {
 }
 
 fclose($output);
-$conn->close();
+mysqli_close($conn);
 exit;

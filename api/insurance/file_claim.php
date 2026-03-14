@@ -61,6 +61,16 @@ if (empty($incidentDescription) || $claimedAmount <= 0) {
     exit;
 }
 
+// Auto-expire policies before processing claim
+$expireStmt = $conn->prepare("
+    UPDATE insurance_policies 
+    SET status = 'expired' 
+    WHERE status = 'active' 
+    AND policy_end < NOW()
+");
+$expireStmt->execute();
+$expireStmt->close();
+
 mysqli_begin_transaction($conn);
 
 try {

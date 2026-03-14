@@ -4,12 +4,25 @@ header("Access-Control-Allow-Origin: *");
 
 require_once "include/db.php";
 
-if (!isset($_GET["user_id"])) {
+$input = json_decode(file_get_contents('php://input'), true) ?? [];
+$emailRaw = $_GET["email"] ?? $input["email"] ?? $_GET["emailAddress"] ?? $input["emailAddress"] ?? null;
+if (!isset($_GET["user_id"]) && !isset($_GET["id"]) && !isset($_GET["uid"]) && !isset($_GET["userId"]) && !isset($_GET["owner_id"]) && !isset($_GET["renter_id"]) && !isset($input["user_id"]) && !isset($input["id"]) && !isset($input["uid"]) && !isset($input["userId"]) && !isset($input["owner_id"]) && !isset($input["renter_id"]) && $emailRaw === null) {
     echo json_encode(["status" => "error", "message" => "Missing user_id"]);
     exit;
 }
 
-$user_id = intval($_GET["user_id"]);
+$uidRaw = $_GET["user_id"] ?? $input["user_id"] ?? $_GET["id"] ?? $input["id"] ?? $_GET["uid"] ?? $input["uid"] ?? $_GET["userId"] ?? $input["userId"] ?? $_GET["owner_id"] ?? $input["owner_id"] ?? $_GET["renter_id"] ?? $input["renter_id"] ?? 0;
+if ((!is_numeric($uidRaw) || intval($uidRaw) <= 0) && $emailRaw !== null) {
+    $lookup = $conn->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+    $lookup->bind_param("s", $emailRaw);
+    $lookup->execute();
+    $res = $lookup->get_result()->fetch_assoc();
+    $lookup->close();
+    if (!empty($res['id'])) {
+        $uidRaw = $res['id'];
+    }
+}
+$user_id = intval($uidRaw);
 
 // Fetch notifications
 $sql = "SELECT id, title, message, read_status, created_at 

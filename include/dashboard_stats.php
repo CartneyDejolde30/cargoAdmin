@@ -314,6 +314,7 @@ function getTopPerformingCars($conn, $limit = 5) {
             c.plate_number,
             c.image,
             u.fullname AS owner_name,
+            'Car' as vehicle_type,
 
             COUNT(DISTINCT b.id) AS total_bookings,
             COALESCE(SUM(b.total_amount), 0) AS total_revenue,
@@ -359,6 +360,172 @@ function getTopPerformingCars($conn, $limit = 5) {
     }
 
     return $topCars;
+}
+
+/**
+ * Get top performing vehicles (Cars + Motorcycles combined)
+ * @param mysqli $conn Database connection
+ * @param int $limit Number of vehicles to return
+ * @return array Top performing vehicles with booking counts and revenue
+ */
+function getTopPerformingVehicles($conn, $limit = 5) {
+    // Check required tables
+    $bookingsExists = $conn->query("SHOW TABLES LIKE 'bookings'");
+    
+    if (!$bookingsExists || $bookingsExists->num_rows == 0) {
+        return [];
+    }
+    
+    // Check if reviews table exists
+    $reviewsExists = $conn->query("SHOW TABLES LIKE 'reviews'");
+    $hasReviews = $reviewsExists && $reviewsExists->num_rows > 0;
+
+    // Get all vehicles (cars + motorcycles) with their performance data
+    $vehicles = [];
+    
+    // Build query based on whether reviews table exists
+    if ($hasReviews) {
+        // Get top cars WITH reviews
+        $carQuery = "
+            SELECT 
+                c.id,
+                c.brand,
+                c.model,
+                c.plate_number,
+                c.image,
+                COALESCE(u.fullname, 'Unknown Owner') AS owner_name,
+                'Car' as vehicle_type,
+                COUNT(DISTINCT b.id) AS total_bookings,
+                COALESCE(SUM(b.total_amount), 0) AS total_revenue,
+                ROUND(AVG(r.rating), 1) AS avg_rating,
+                COUNT(DISTINCT r.id) AS total_reviews
+            FROM cars c
+            LEFT JOIN bookings b ON b.car_id = c.id AND b.status = 'completed'
+            LEFT JOIN reviews r ON r.car_id = c.id
+            LEFT JOIN users u ON u.id = c.owner_id
+            WHERE c.status = 'approved'
+            GROUP BY c.id, c.brand, c.model, c.plate_number, c.image, u.fullname
+            HAVING total_bookings > 0 OR total_reviews > 0
+            ORDER BY total_revenue DESC, total_bookings DESC
+        ";
+    } else {
+        // Get top cars WITHOUT reviews table
+        $carQuery = "
+            SELECT 
+                c.id,
+                c.brand,
+                c.model,
+                c.plate_number,
+                c.image,
+                COALESCE(u.fullname, 'Unknown Owner') AS owner_name,
+                'Car' as vehicle_type,
+                COUNT(DISTINCT b.id) AS total_bookings,
+                COALESCE(SUM(b.total_amount), 0) AS total_revenue,
+                0 AS avg_rating,
+                0 AS total_reviews
+            FROM cars c
+            LEFT JOIN bookings b ON b.car_id = c.id AND b.status = 'completed'
+            LEFT JOIN users u ON u.id = c.owner_id
+            WHERE c.status = 'approved'
+            GROUP BY c.id, c.brand, c.model, c.plate_number, c.image, u.fullname
+            HAVING total_bookings > 0
+            ORDER BY total_revenue DESC, total_bookings DESC
+        ";
+    }
+    
+    $carResult = $conn->query($carQuery);
+    if ($carResult) {
+        while ($row = $carResult->fetch_assoc()) {
+            $vehicles[] = $row;
+        }
+    } else {
+        error_log("getTopPerformingVehicles car query failed: " . $conn->error);
+    }
+    
+    // Check if motorcycle_id column exists in bookings table
+    $columnsResult = $conn->query("SHOW COLUMNS FROM bookings LIKE 'motorcycle_id'");
+    $hasMotorcycleColumn = $columnsResult && $columnsResult->num_rows > 0;
+    
+    // Check if motorcycles table exists
+    $motorcyclesExists = $conn->query("SHOW TABLES LIKE 'motorcycles'");
+    $hasMotorcycles = $motorcyclesExists && $motorcyclesExists->num_rows > 0;
+    
+    if ($hasMotorcycleColumn && $hasMotorcycles) {
+        // Build motorcycle query based on whether reviews table exists
+        if ($hasReviews) {
+            // Get top motorcycles WITH reviews
+            $motorcycleQuery = "
+                SELECT 
+                    m.id,
+                    m.brand,
+                    m.model,
+                    m.plate_number,
+                    m.image,
+                    COALESCE(u.fullname, 'Unknown Owner') AS owner_name,
+                    'Motorcycle' as vehicle_type,
+                    COUNT(DISTINCT b.id) AS total_bookings,
+                    COALESCE(SUM(b.total_amount), 0) AS total_revenue,
+                    ROUND(AVG(r.rating), 1) AS avg_rating,
+                    COUNT(DISTINCT r.id) AS total_reviews
+                FROM motorcycles m
+                LEFT JOIN bookings b ON b.motorcycle_id = m.id AND b.status = 'completed'
+                LEFT JOIN reviews r ON r.motorcycle_id = m.id
+                LEFT JOIN users u ON u.id = m.owner_id
+                WHERE m.status = 'approved'
+                GROUP BY m.id, m.brand, m.model, m.plate_number, m.image, u.fullname
+                HAVING total_bookings > 0 OR total_reviews > 0
+                ORDER BY total_revenue DESC, total_bookings DESC
+            ";
+        } else {
+            // Get top motorcycles WITHOUT reviews table
+            $motorcycleQuery = "
+                SELECT 
+                    m.id,
+                    m.brand,
+                    m.model,
+                    m.plate_number,
+                    m.image,
+                    COALESCE(u.fullname, 'Unknown Owner') AS owner_name,
+                    'Motorcycle' as vehicle_type,
+                    COUNT(DISTINCT b.id) AS total_bookings,
+                    COALESCE(SUM(b.total_amount), 0) AS total_revenue,
+                    0 AS avg_rating,
+                    0 AS total_reviews
+                FROM motorcycles m
+                LEFT JOIN bookings b ON b.motorcycle_id = m.id AND b.status = 'completed'
+                LEFT JOIN users u ON u.id = m.owner_id
+                WHERE m.status = 'approved'
+                GROUP BY m.id, m.brand, m.model, m.plate_number, m.image, u.fullname
+                HAVING total_bookings > 0
+                ORDER BY total_revenue DESC, total_bookings DESC
+            ";
+        }
+        
+        $motorcycleResult = $conn->query($motorcycleQuery);
+        if ($motorcycleResult) {
+            while ($row = $motorcycleResult->fetch_assoc()) {
+                $vehicles[] = $row;
+            }
+        } else {
+            error_log("getTopPerformingVehicles motorcycle query failed: " . $conn->error);
+        }
+    }
+    
+    // Sort by rating, then revenue, then bookings
+    if (!empty($vehicles)) {
+        usort($vehicles, function($a, $b) {
+            if ($a['avg_rating'] != $b['avg_rating']) {
+                return $b['avg_rating'] <=> $a['avg_rating'];
+            }
+            if ($a['total_revenue'] != $b['total_revenue']) {
+                return $b['total_revenue'] <=> $a['total_revenue'];
+            }
+            return $b['total_bookings'] <=> $a['total_bookings'];
+        });
+    }
+    
+    // Return top N vehicles
+    return array_slice($vehicles, 0, $limit);
 }
 
 
@@ -407,41 +574,71 @@ function getRevenueByPeriod($conn) {
 }
 
 /**
- * Get recent bookings
+ * Get recent bookings (Cars + Motorcycles)
  * @param mysqli $conn Database connection
  * @param int $limit Number of bookings to fetch
- * @return array Recent bookings with car and user details
+ * @return array Recent bookings with vehicle and user details
  */
 function getRecentBookings($conn, $limit = 5) {
     $tableExists = $conn->query("SHOW TABLES LIKE 'bookings'");
-    
+
     if (!$tableExists || $tableExists->num_rows == 0) {
         return [];
     }
-    
+
+    // bookings uses car_id for both cars and motorcycles, distinguished by vehicle_type
     $query = "
-        SELECT 
+        SELECT
             b.*,
-            c.brand,
-            c.model,
-            c.plate_number,
-            u.fullname as renter_name,
-            o.fullname as owner_name
+            CASE
+                WHEN b.vehicle_type = 'motorcycle' THEN m.brand
+                ELSE c.brand
+            END as brand,
+            CASE
+                WHEN b.vehicle_type = 'motorcycle' THEN m.model
+                ELSE c.model
+            END as model,
+            CASE
+                WHEN b.vehicle_type = 'motorcycle' THEN m.plate_number
+                ELSE c.plate_number
+            END as plate_number,
+            CASE
+                WHEN b.vehicle_type = 'motorcycle' THEN 'Motorcycle'
+                ELSE 'Car'
+            END as vehicle_type,
+            COALESCE(u.fullname, 'Unknown User') as renter_name,
+            CASE
+                WHEN b.vehicle_type = 'motorcycle' THEN COALESCE(om.fullname, 'Unknown Owner')
+                ELSE COALESCE(oc.fullname, 'Unknown Owner')
+            END as owner_name,
+            CASE
+                WHEN b.vehicle_type = 'motorcycle' AND m.id IS NULL THEN 1
+                WHEN b.vehicle_type != 'motorcycle' AND c.id IS NULL THEN 1
+                ELSE 0
+            END as vehicle_deleted
         FROM bookings b
-        LEFT JOIN cars c ON c.id = b.car_id
-        LEFT JOIN users u ON u.id = b.user_id
-        LEFT JOIN users o ON o.id = c.owner_id
+        LEFT JOIN cars c        ON c.id = b.car_id AND b.vehicle_type = 'car'
+        LEFT JOIN motorcycles m ON m.id = b.car_id AND b.vehicle_type = 'motorcycle'
+        LEFT JOIN users u  ON u.id  = b.user_id
+        LEFT JOIN users oc ON oc.id = c.owner_id
+        LEFT JOIN users om ON om.id = m.owner_id
         ORDER BY b.created_at DESC
         LIMIT ?
     ";
     
     $stmt = $conn->prepare($query);
     if ($stmt === false) {
+        // If prepare fails, log error and return empty
+        error_log("getRecentBookings prepare failed: " . $conn->error);
         return [];
     }
     
     $stmt->bind_param("i", $limit);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        error_log("getRecentBookings execute failed: " . $stmt->error);
+        return [];
+    }
+    
     $result = $stmt->get_result();
     
     $bookings = [];

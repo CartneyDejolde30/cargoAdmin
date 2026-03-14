@@ -8,6 +8,7 @@
 
 session_start();
 require_once 'include/db.php';
+require_once 'include/admin_profile.php';
 
 // Auth check
 if (!isset($_SESSION['admin_id'])) {
@@ -290,6 +291,8 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="include/notifications.css" rel="stylesheet">
   
   <style>
@@ -529,6 +532,178 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
       transform: translateY(-2px);
     }
     
+    .action-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 15px;
+      transition: all 0.3s ease;
+    }
+    
+    .action-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+    
+    .action-card h6 {
+      margin-bottom: 15px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    
+    /* modal-action-btn styles now handled by modal-theme-standardized.css (contact-modal design) */
+
+    /* Force contact-modal design overrides */
+    .modal-header {
+      background: #ffffff !important;
+      color: #111827 !important;
+      padding: 40px 40px 32px 40px !important;
+      border-bottom: none !important;
+    }
+
+    .modal-dialog {
+      max-width: 900px !important;
+    }
+
+    .modal-dialog-scrollable .modal-content {
+      max-height: 90vh !important;
+    }
+
+    .modal-header h3,
+    .modal-header h5,
+    .modal-header .modal-title {
+      font-size: 32px !important;
+      font-weight: 700 !important;
+      color: #111827 !important;
+      letter-spacing: -0.5px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 14px !important;
+    }
+
+    .modal-header .modal-title i,
+    .modal-header h3 i,
+    .modal-header h5 i {
+      font-size: 34px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-header .btn-close {
+      width: 40px !important;
+      height: 40px !important;
+      background: #f3f4f6 !important;
+      border-radius: 10px !important;
+      opacity: 1 !important;
+      filter: none !important;
+      padding: 0 !important;
+      background-image: none !important;
+      position: relative !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    .modal-header .btn-close::after {
+      content: '✕' !important;
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      font-size: 20px !important;
+      color: #6b7280 !important;
+      font-weight: 400 !important;
+      line-height: 1 !important;
+    }
+
+    .modal-header .btn-close:hover {
+      background: #e5e7eb !important;
+      transform: scale(1.05) !important;
+    }
+
+    .modal-header .btn-close:hover::after {
+      color: #111827 !important;
+    }
+
+    .modal-body {
+      padding: 40px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+    }
+
+    .modal-body p {
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+      margin-bottom: 14px !important;
+    }
+
+    .modal-body .text-muted,
+    .modal-body small {
+      font-size: 16px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-body strong {
+      font-weight: 600 !important;
+      color: #111827 !important;
+    }
+
+    .modal-body h6,
+    .modal-body .section-title {
+      font-size: 20px !important;
+      font-weight: 650 !important;
+      color: #111827 !important;
+      margin-bottom: 16px !important;
+      margin-top: 28px !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-body h6:first-child,
+    .modal-body .section-title:first-child {
+      margin-top: 0 !important;
+    }
+
+    .modal-body h6 i,
+    .modal-body .section-title i {
+      font-size: 22px !important;
+      color: #9ca3af !important;
+    }
+
+    .modal-footer {
+      padding: 28px 40px 40px 40px !important;
+      border-top: 1px solid #f0f0f0 !important;
+      background: #ffffff !important;
+      gap: 14px !important;
+    }
+
+    .modal-footer .btn {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      padding: 16px 32px !important;
+      border-radius: 12px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-footer .btn i {
+      font-size: 18px !important;
+    }
+    
+    tr[style*="cursor: pointer"]:hover {
+      background-color: #f8f9fa;
+    }
+    
     @media (max-width: 768px) {
       .filter-tabs {
         flex-direction: column;
@@ -561,7 +736,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
           </button>
         </div>
         <div class="user-avatar">
-          <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+          <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
         </div>
       </div>
     </div>
@@ -616,7 +791,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             <i class="bi bi-cash-stack"></i>
           </div>
           <div class="stat-trend">
-            <i class="bi bi-currency-dollar"></i>
+            <span class="currency-symbol">₱</span>
             Pending
           </div>
         </div>
@@ -718,7 +893,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
               <th>Overdue Duration</th>
               <th>Late Fee</th>
               <th>Status</th>
-              <th>Actions</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -729,7 +904,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                   $statusClass = $row['overdue_status'] === 'severely_overdue' ? 'danger' : 'warning';
                   $statusText = $row['overdue_status'] === 'severely_overdue' ? 'SEVERELY OVERDUE' : 'OVERDUE';
                 ?>
-                <tr>
+                <tr style="cursor: pointer;" onclick="openActionModal(<?= $row['booking_id'] ?>, <?= $row['late_fee_amount'] ?>, <?= $row['late_fee_charged'] ? 'true' : 'false' ?>)" title="Click to view actions">
                   <td>
                     <strong>#BK-<?= str_pad($row['booking_id'], 4, '0', STR_PAD_LEFT) ?></strong><br>
                     <small style="color:#999;"><?= date('M d, Y', strtotime($row['created_at'])) ?></small>
@@ -793,46 +968,10 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                       <?= $statusText ?>
                     </span>
                   </td>
-                  <td>
-                    <div class="action-buttons" style="display: flex; gap: 4px; flex-wrap: wrap;">
-                      <button class="action-btn btn-view" onclick="viewDetails(<?= $row['booking_id'] ?>)" title="View Details">
-                        <i class="bi bi-eye"></i>
-                      </button>
-                      
-                      <?php if (!$row['late_fee_charged']): ?>
-                      <button class="action-btn" style="background: #e3f2fd; color: #1976d2;" 
-                              onclick="confirmLateFee(<?= $row['booking_id'] ?>, <?= $row['late_fee_amount'] ?>)" 
-                              title="Confirm Late Fee">
-                        <i class="bi bi-check-circle"></i>
-                      </button>
-                      
-                      <button class="action-btn" style="background: #fff3e0; color: #f57c00;" 
-                              onclick="sendReminder(<?= $row['booking_id'] ?>)" 
-                              title="Send Reminder">
-                        <i class="bi bi-bell"></i>
-                      </button>
-                      
-                      <button class="action-btn" style="background: #fce4ec; color: #c2185b;" 
-                              onclick="adjustLateFee(<?= $row['booking_id'] ?>, <?= $row['late_fee_amount'] ?>)" 
-                              title="Adjust Late Fee">
-                        <i class="bi bi-pencil"></i>
-                      </button>
-                      
-                      <button class="action-btn" style="background: #e8f5e9; color: #388e3c;" 
-                              onclick="waiveLateFee(<?= $row['booking_id'] ?>)" 
-                              title="Waive Late Fee">
-                        <i class="bi bi-x-circle"></i>
-                      </button>
-                      <?php endif; ?>
-                      
-                      <button class="action-btn btn-complete" onclick="forceComplete(<?= $row['booking_id'] ?>)" title="Force Complete">
-                        <i class="bi bi-check-lg"></i>
-                      </button>
-                      
-                      <button class="action-btn btn-contact" onclick="contactRenter(<?= $row['booking_id'] ?>)" title="Contact Renter">
-                        <i class="bi bi-telephone"></i>
-                      </button>
-                    </div>
+                  <td onclick="event.stopPropagation();">
+                    <button class="action-btn btn-view" onclick="openActionModal(<?= $row['booking_id'] ?>, <?= $row['late_fee_amount'] ?>, <?= $row['late_fee_charged'] ? 'true' : 'false' ?>)" title="Open Actions">
+                      <i class="bi bi-three-dots-vertical"></i>
+                    </button>
                   </td>
                 </tr>
               <?php endwhile; ?>
@@ -938,8 +1077,117 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   </div>
 </div>
 
+<!-- Actions Modal -->
+<div class="modal fade" id="actionsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-cogs"></i> Manage Overdue Booking
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="actionsModalBody">
+        <!-- Loaded via JavaScript -->
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Open actions modal
+function openActionModal(bookingId, lateFeeAmount, isCharged) {
+  fetch(`api/overdue/get_booking_details.php?id=${bookingId}`)
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          console.error('Server error response:', text);
+          throw new Error(`Server error: ${response.status}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      if (data.success) {
+        const booking = data.data;
+        const statusClass = booking.overdue_status === 'severely_overdue' ? 'danger' : 'warning';
+        
+        let actionsHtml = `
+          <div class="action-card">
+            <h6><i class="bi bi-info-circle"></i> Booking Overview</h6>
+            <div class="row">
+              <div class="col-md-6">
+                <p><strong>Booking ID:</strong> #BK-${String(booking.booking_id).padStart(4, '0')}</p>
+                <p><strong>Vehicle:</strong> ${booking.vehicle_name}</p>
+                <p><strong>Renter:</strong> ${booking.renter_name}</p>
+              </div>
+              <div class="col-md-6">
+                <p><strong>Days Overdue:</strong> <strong style="color: #d32f2f;">${booking.days_overdue} days</strong></p>
+                <p><strong>Late Fee:</strong> ₱${Number(booking.late_fee_amount).toFixed(2)}</p>
+                <p><strong>Fee Status:</strong> ${booking.late_fee_charged ? '<span class="fee-badge charged">✓ Collected</span>' : '<span class="fee-badge pending">⏳ Pending</span>'}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="action-card">
+            <h6><i class="bi bi-eye"></i> View Information</h6>
+            <div class="action-grid">
+              <button class="modal-action-btn" style="background: #e3f2fd; color: #1976d2;" onclick="viewDetails(${booking.booking_id})">
+                <i class="bi bi-file-text"></i> View Full Details
+              </button>
+              <button class="modal-action-btn" style="background: #f3e5f5; color: #7b1fa2;" onclick="contactRenter(${booking.booking_id})">
+                <i class="bi bi-telephone"></i> Contact Renter
+              </button>
+            </div>
+          </div>
+        `;
+        
+        if (!booking.late_fee_charged) {
+          actionsHtml += `
+            <div class="action-card">
+              <h6><i class="bi bi-cash"></i> Late Fee Actions</h6>
+              <div class="action-grid">
+                <button class="modal-action-btn" style="background: #e3f2fd; color: #1976d2;" onclick="confirmLateFee(${booking.booking_id}, ${booking.late_fee_amount})">
+                  <i class="bi bi-check-circle"></i> Confirm Late Fee
+                </button>
+                <button class="modal-action-btn" style="background: #fff3e0; color: #f57c00;" onclick="sendReminder(${booking.booking_id})">
+                  <i class="bi bi-bell"></i> Send Reminder
+                </button>
+                <button class="modal-action-btn" style="background: #fce4ec; color: #c2185b;" onclick="adjustLateFee(${booking.booking_id}, ${booking.late_fee_amount})">
+                  <i class="bi bi-pencil"></i> Adjust Late Fee
+                </button>
+                <button class="modal-action-btn" style="background: #e8f5e9; color: #388e3c;" onclick="waiveLateFee(${booking.booking_id})">
+                  <i class="bi bi-x-circle"></i> Waive Late Fee
+                </button>
+              </div>
+            </div>
+          `;
+        }
+        
+        actionsHtml += `
+          <div class="action-card">
+            <h6><i class="bi bi-tools"></i> Administrative Actions</h6>
+            <div class="action-grid">
+              <button class="modal-action-btn" style="background: #e8f8f0; color: #009944;" onclick="forceComplete(${booking.booking_id})">
+                <i class="bi bi-check-lg"></i> Force Complete
+              </button>
+            </div>
+          </div>
+        `;
+        
+        document.getElementById('actionsModalBody').innerHTML = actionsHtml;
+        new bootstrap.Modal(document.getElementById('actionsModal')).show();
+      } else {
+        alert('Error loading booking details');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Network error occurred');
+    });
+}
+
 // View booking details
 function viewDetails(bookingId) {
   fetch(`api/overdue/get_booking_details.php?id=${bookingId}`)

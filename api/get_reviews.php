@@ -17,10 +17,10 @@ if ($car_id <= 0) {
 $query = $conn->prepare("
     SELECT
         r.rating,
-        r.review AS comment,
+        r.review AS review,
         r.created_at,
-        u.fullname AS name,
-        IFNULL(u.profile_image, '') AS avatar
+        u.fullname AS reviewer_name,
+        IFNULL(u.profile_image, '') AS reviewer_image
     FROM reviews r
     JOIN users u ON u.id = r.renter_id
     WHERE r.car_id = ?
@@ -37,10 +37,15 @@ while ($row = $result->fetch_assoc()) {
     $row['rating'] = floatval($row['rating']);
 
     // avatar fallback
-    if ($row['avatar'] !== '') {
-        $row['avatar'] = "http://10.77.127.2/carGOAdmin/uploads/" . $row['avatar'];
+    if ($row['reviewer_image'] !== '') {
+        // Load config if not already loaded
+        if (!defined('UPLOADS_URL')) {
+            require_once __DIR__ . '/../include/config.php';
+        }
+        // ✅ FIX: Profile images are stored in profile_images subdirectory
+        $row['reviewer_image'] = UPLOADS_URL . "/profile_images/" . $row['reviewer_image'];
     } else {
-        $row['avatar'] = "https://ui-avatars.com/api/?name=" . urlencode($row['name']);
+        $row['reviewer_image'] = "https://ui-avatars.com/api/?name=" . urlencode($row['reviewer_name']);
     }
 
     $reviews[] = $row;

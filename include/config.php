@@ -42,7 +42,7 @@ if ($isLocalhost) {
     define('DOMAIN', $_SERVER['HTTP_HOST']);
 } else {
     // PRODUCTION (Hostinger)
-    define('BASE_URL', 'http://cargoph.online/cargoAdmin');
+    define('BASE_URL', 'https://cargoph.online/cargoAdmin');
     define('DOMAIN', 'cargoph.online');
 }
 
@@ -91,6 +91,24 @@ define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/jpg', 'image/png', 'image/gi
 // ========================================
 define('API_TIMEOUT', 30); // seconds
 define('MAX_RESULTS_PER_PAGE', 50);
+
+// ========================================
+// SMTP EMAIL SETTINGS (Gmail)
+// ========================================
+// IMPORTANT: Gmail requires a Google Account "App Password" (not your normal password).
+// SMTP host/port:
+//   smtp.gmail.com:587 (STARTTLS)
+
+define('SMTP_HOST', 'smtp.gmail.com');
+define('SMTP_PORT', 587);
+define('SMTP_USE_TLS', true);
+
+define('SMTP_USER', 'ethanjamesestino@gmail.com');
+// Put your 16-character Gmail App Password here
+define('SMTP_PASS', 'odklrocotulcglqv');
+
+define('SMTP_FROM_EMAIL', 'ethanjamesestino@gmail.com');
+define('SMTP_FROM_NAME', APP_NAME);
 
 // ========================================
 // CORS SETTINGS

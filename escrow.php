@@ -4,10 +4,182 @@
  * ESCROW MANAGEMENT - CarGo Admin (FIXED)
  * Manage funds held in escrow between payment and payout
  * ============================================================================
+ * 
+ * ESCROW LIFECYCLE OVERVIEW:
+ * --------------------------
+ * 1. PAYMENT VERIFIED → Funds enter escrow (escrow_status = 'held')
+ * 2. RENTAL PERIOD → Funds remain secured in escrow
+ * 3. RENTAL COMPLETED → Ready for release (status = 'completed')
+ * 4. RELEASE TO OWNER → Escrow released (escrow_status = 'released_to_owner')
+ * 5. PAYOUT PROCESSING → Owner receives payment (payout_status = 'completed')
+ * 
+ * ESCROW STATUS VALUES:
+ * ---------------------
+ * - 'pending'            : Payment not yet verified (initial state)
+ * - 'held'               : Funds secured in escrow (normal active state)
+ * - 'released_to_owner'  : Released and ready for payout
+ * - 'released'           : Alternative released state (legacy)
+ * - 'refunded'           : Refunded back to renter
+ * - 'on_hold' (virtual)  : When escrow_hold_reason is set (not a DB enum value)
+ * 
+ * PAYOUT STATUS VALUES:
+ * ---------------------
+ * - 'pending'     : Awaiting payout processing
+ * - 'processing'  : Payout in progress
+ * - 'completed'   : Payout successfully completed
+ * - 'failed'      : Payout failed
+ * 
+ * REQUIREMENTS FOR ESCROW RELEASE:
+ * --------------------------------
+ * Before an escrow can be released to the owner, ALL of the following must be true:
+ * 
+ * ✅ 1. BOOKING STATUS = 'completed'
+ *       - The rental period must be finished
+ *       - Trip must be properly ended (trip_started = 1, actual_return_date set)
+ *       - Cannot release during 'ongoing', 'approved', or 'pending' states
+ * 
+ * ✅ 2. ESCROW STATUS = 'held'
+ *       - Funds must be currently held in escrow
+ *       - Cannot release if already 'released_to_owner' or 'refunded'
+ * 
+ * ✅ 3. NO ACTIVE HOLDS
+ *       - escrow_hold_reason must be NULL or empty
+ *       - escrow_hold_details must be NULL or empty
+ *       - Any disputes/investigations must be resolved first
+ * 
+ * ✅ 4. OWNER GCASH CONFIGURED
+ *       - owner_gcash (GCash number) must be set in users table
+ *       - Cannot process payout without payment method
+ *       - Display warning badge if missing
+ * 
+ * ✅ 5. NO OUTSTANDING ISSUES (Recommended checks)
+ *       - No active insurance claims on the booking
+ *       - No unresolved damage reports
+ *       - Late fees settled (if applicable)
+ *       - Mileage verification completed (if enabled)
+ *       - No active disputes or complaints
+ * 
+ * ✅ 6. PAYMENT VERIFIED
+ *       - payment_verified_at should be set
+ *       - Payment status should be 'verified' or 'completed'
+ *       - Original payment must have cleared
+ * 
+ * ✅ 7. SUFFICIENT HOLDING PERIOD (Auto-release)
+ *       - For auto-release: 3 days after return_date
+ *       - Manual release can be done immediately after completion
+ *       - Provides buffer for any issues to surface
+ * 
+ * ESCROW ACTIONS AVAILABLE:
+ * -------------------------
+ * 
+ * 📤 RELEASE TO OWNER
+ *    - API: api/escrow/release_escrow.php
+ *    - Sets escrow_status = 'released_to_owner'
+ *    - Sets escrow_released_at = NOW()
+ *    - Creates payout record or schedules payout
+ *    - Sends notification to owner
+ *    - Requires all release conditions above
+ * 
+ * ⏸️ PUT ON HOLD
+ *    - API: api/escrow/hold_escrow.php
+ *    - Sets escrow_hold_reason (keeps escrow_status = 'held')
+ *    - Sets escrow_hold_details
+ *    - Prevents release until resolved
+ *    - Used for: disputes, investigations, complaints, damage claims
+ *    - Notifies both renter and owner
+ * 
+ * ▶️ RESUME ESCROW
+ *    - API: api/escrow/resume_escrow.php
+ *    - Clears escrow_hold_reason and escrow_hold_details
+ *    - Returns escrow to normal 'held' state
+ *    - Can then be released normally
+ * 
+ * ↩️ REFUND TO RENTER
+ *    - API: api/escrow/refund_escrow.php
+ *    - Sets escrow_status = 'refunded'
+ *    - Sets booking status = 'cancelled'
+ *    - Creates refund record in refunds table
+ *    - Updates payment status to 'refunded'
+ *    - Cannot be undone - permanent action
+ * 
+ * AUTOMATED PROCESSES:
+ * --------------------
+ * 
+ * 🤖 AUTO-RELEASE CRON JOB
+ *    - File: cron/auto_release_escrow.php
+ *    - Runs: Daily (recommended: 0 0 * * *)
+ *    - Releases escrow for completed bookings after 3 days
+ *    - Only if all release requirements are met
+ *    - Logs all actions to escrow_logs table
+ * 
+ * DATABASE TABLES INVOLVED:
+ * -------------------------
+ * - bookings: Main escrow status and amounts
+ * - payments: Payment verification and references
+ * - payouts: Payout tracking and completion
+ * - refunds: Refund processing records
+ * - escrow_logs: Audit trail of all escrow actions (if exists)
+ * - notifications: User notifications for escrow events
+ * - users: Owner GCash details for payouts
+ * 
+ * IMPORTANT FIELDS IN BOOKINGS TABLE:
+ * ------------------------------------
+ * - escrow_status: Current escrow state (ENUM)
+ * - escrow_held_at: When funds entered escrow
+ * - escrow_released_at: When released to owner
+ * - escrow_refunded_at: When refunded to renter
+ * - escrow_hold_reason: Why on hold (NULL = not on hold)
+ * - escrow_hold_details: Detailed explanation of hold
+ * - owner_payout: Amount to release to owner (after platform fee)
+ * - platform_fee: 10% fee retained by platform
+ * - total_amount: Original payment from renter
+ * - payout_status: Current payout state (ENUM)
+ * - payment_verified_at: When payment was verified
+ * - status: Booking status (affects release eligibility)
+ * 
+ * ESCROW AMOUNT CALCULATION:
+ * --------------------------
+ * Total Amount (Renter Pays) = Rental Price + Insurance + Extras
+ * Platform Fee (10%) = Total Amount × 0.10
+ * Owner Payout (Escrow) = Total Amount - Platform Fee
+ * 
+ * Example:
+ * - Total Amount: ₱5,000
+ * - Platform Fee: ₱500 (10%)
+ * - Owner Payout: ₱4,500 (held in escrow)
+ * 
+ * SECURITY & COMPLIANCE:
+ * ----------------------
+ * - All escrow actions require admin authentication
+ * - All actions are logged to escrow_logs (audit trail)
+ * - Transaction logging via TransactionLogger
+ * - Database transactions ensure data integrity
+ * - Rollback on any errors to prevent partial updates
+ * - Notifications sent to affected parties
+ * 
+ * TROUBLESHOOTING:
+ * ----------------
+ * Q: Why can't I release an escrow?
+ * A: Check all 7 requirements above. Most common issues:
+ *    - Booking not 'completed' yet
+ *    - Owner GCash not configured
+ *    - Escrow on hold (check escrow_hold_reason)
+ * 
+ * Q: What if owner doesn't have GCash?
+ * A: Release button will show warning. Owner must add GCash in profile.
+ * 
+ * Q: Can I undo a release?
+ * A: No - once released, payout process begins. Cannot reverse.
+ * 
+ * Q: Can I undo a refund?
+ * A: No - refunds are permanent and cannot be reversed.
+ * 
+ * ============================================================================
  */
 
 session_start();
-include "include/db.php";
+require_once 'include/db.php';
+require_once 'include/admin_profile.php';
 
 // Auth check
 if (!isset($_SESSION['admin_id'])) {
@@ -95,12 +267,17 @@ if (!$avgResult) {
 /* =========================================================
    FILTERS & PAGINATION
    ========================================================= */
-$limit = 10;
+$limit = isset($_GET['limit']) ? max(10, min(100, intval($_GET['limit']))) : 10;
 $page = isset($_GET["page"]) ? max(1, intval($_GET["page"])) : 1;
 $offset = ($page - 1) * $limit;
 
 $statusFilter = isset($_GET['status']) ? trim($_GET['status']) : 'held';
+$sortBy = isset($_GET['sort']) ? trim($_GET['sort']) : 'priority';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$dateFrom = isset($_GET['date_from']) ? trim($_GET['date_from']) : '';
+$dateTo = isset($_GET['date_to']) ? trim($_GET['date_to']) : '';
+$minAmount = isset($_GET['min_amount']) ? floatval($_GET['min_amount']) : 0;
+$maxAmount = isset($_GET['max_amount']) ? floatval($_GET['max_amount']) : 0;
 
 /* =========================================================
    BUILD WHERE CLAUSE - FIXED FOR ACTUAL ENUM VALUES
@@ -139,6 +316,26 @@ if (!empty($search)) {
         u_owner.fullname LIKE '%$searchEsc%' OR
         COALESCE(c.brand, m.brand) LIKE '%$searchEsc%'
     )";
+}
+
+// Date range filter
+if (!empty($dateFrom)) {
+    $dateFromEsc = mysqli_real_escape_string($conn, $dateFrom);
+    $where .= " AND DATE(b.created_at) >= '$dateFromEsc' ";
+}
+
+if (!empty($dateTo)) {
+    $dateToEsc = mysqli_real_escape_string($conn, $dateTo);
+    $where .= " AND DATE(b.created_at) <= '$dateToEsc' ";
+}
+
+// Amount range filter
+if ($minAmount > 0) {
+    $where .= " AND b.owner_payout >= $minAmount ";
+}
+
+if ($maxAmount > 0) {
+    $where .= " AND b.owner_payout <= $maxAmount ";
 }
 
 /* =========================================================
@@ -210,16 +407,41 @@ $sql = "
     $where
     ORDER BY 
         CASE 
-            -- Priority 1: Items on hold (have hold reason)
-            WHEN b.escrow_hold_reason IS NOT NULL AND b.escrow_hold_reason != '' THEN 1
-            -- Priority 2: Completed bookings ready to release
-            WHEN b.escrow_status = 'held' AND b.status = 'completed' THEN 2
-            -- Priority 3: Other held escrow
-            WHEN b.escrow_status = 'held' THEN 3
-            -- Everything else
-            ELSE 4
+            WHEN '$sortBy' = 'priority' THEN
+                CASE 
+                    -- Priority 1: Items on hold (have hold reason)
+                    WHEN b.escrow_hold_reason IS NOT NULL AND b.escrow_hold_reason != '' THEN 1
+                    -- Priority 2: Completed bookings ready to release
+                    WHEN b.escrow_status = 'held' AND b.status = 'completed' THEN 2
+                    -- Priority 3: Other held escrow
+                    WHEN b.escrow_status = 'held' THEN 3
+                    -- Everything else
+                    ELSE 4
+                END
+            ELSE 0
         END,
-        b.created_at DESC
+        CASE '$sortBy'
+            WHEN 'date_asc' THEN b.created_at
+            WHEN 'amount_asc' THEN b.owner_payout
+            ELSE NULL
+        END ASC,
+        CASE '$sortBy'
+            WHEN 'date_desc' THEN b.created_at
+            WHEN 'amount_desc' THEN b.owner_payout
+            WHEN 'days_desc' THEN DATEDIFF(NOW(), COALESCE(b.escrow_held_at, b.payment_verified_at, b.created_at))
+            WHEN 'days_asc' THEN DATEDIFF(NOW(), COALESCE(b.escrow_held_at, b.payment_verified_at, b.created_at))
+            ELSE b.created_at
+        END DESC,
+        CASE '$sortBy'
+            WHEN 'renter_asc' THEN u_renter.fullname
+            WHEN 'owner_asc' THEN u_owner.fullname
+            ELSE NULL
+        END ASC,
+        CASE '$sortBy'
+            WHEN 'renter_desc' THEN u_renter.fullname
+            WHEN 'owner_desc' THEN u_owner.fullname
+            ELSE NULL
+        END DESC
     LIMIT $limit OFFSET $offset
 ";
 
@@ -272,6 +494,8 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="include/admin-styles.css" rel="stylesheet">
+  <link href="include/modal-theme-standardized.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="include/notifications.css" rel="stylesheet">
   <style>
     /* Additional escrow-specific styles */
@@ -363,6 +587,147 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
       color: #ffc107;
       font-weight: 600;
     }
+
+    /* Force contact-modal design overrides - Enhanced with icons & larger text */
+    .modal-dialog {
+      max-width: 800px !important;
+    }
+
+    .modal-dialog-scrollable .modal-content {
+      max-height: 85vh !important;
+    }
+
+    .modal-header {
+      background: #ffffff !important;
+      color: #111827 !important;
+      padding: 40px 40px 32px 40px !important;
+      border-bottom: none !important;
+    }
+
+    .modal-header h3,
+    .modal-header h5,
+    .modal-header .modal-title {
+      font-size: 32px !important;
+      font-weight: 700 !important;
+      color: #111827 !important;
+      letter-spacing: -0.5px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 14px !important;
+    }
+
+    .modal-header .modal-title i,
+    .modal-header h3 i,
+    .modal-header h5 i {
+      font-size: 34px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-header .btn-close {
+      width: 40px !important;
+      height: 40px !important;
+      background: #f3f4f6 !important;
+      border-radius: 10px !important;
+      opacity: 1 !important;
+      filter: none !important;
+      padding: 0 !important;
+      background-image: none !important;
+      position: relative !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    .modal-header .btn-close::after {
+      content: '✕' !important;
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      font-size: 20px !important;
+      color: #6b7280 !important;
+      font-weight: 400 !important;
+      line-height: 1 !important;
+    }
+
+    .modal-header .btn-close:hover {
+      background: #e5e7eb !important;
+      transform: scale(1.05) !important;
+    }
+
+    .modal-header .btn-close:hover::after {
+      color: #111827 !important;
+    }
+
+    .modal-body {
+      padding: 40px !important;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+    }
+
+    .modal-body p {
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+      margin-bottom: 14px !important;
+    }
+
+    .modal-body .text-muted,
+    .modal-body small {
+      font-size: 16px !important;
+      color: #6b7280 !important;
+    }
+
+    .modal-body strong {
+      font-weight: 600 !important;
+      color: #111827 !important;
+    }
+
+    .modal-body h6,
+    .modal-body .section-title {
+      font-size: 20px !important;
+      font-weight: 650 !important;
+      color: #111827 !important;
+      margin-bottom: 16px !important;
+      margin-top: 28px !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-body h6:first-child,
+    .modal-body .section-title:first-child {
+      margin-top: 0 !important;
+    }
+
+    .modal-body h6 i,
+    .modal-body .section-title i {
+      font-size: 22px !important;
+      color: #9ca3af !important;
+    }
+
+    .modal-footer {
+      padding: 28px 40px 40px 40px !important;
+      border-top: 1px solid #f0f0f0 !important;
+      background: #ffffff !important;
+      gap: 14px !important;
+    }
+
+    .modal-footer .btn {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      padding: 16px 32px !important;
+      border-radius: 12px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+    }
+
+    .modal-footer .btn i {
+      font-size: 18px !important;
+    }
   </style>
 </head>
 <body>
@@ -385,7 +750,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
           </button>
         </div>
         <div class="user-avatar">
-          <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+          <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
         </div>
       </div>
     </div>
@@ -419,7 +784,15 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </div>
         <div class="stat-value"><?= $pendingReleases ?></div>
         <div class="stat-label">Pending Releases</div>
-        <div class="stat-detail">Completed bookings</div>
+        <div class="stat-detail">
+          <strong>Ready to release:</strong><br>
+          <small style="font-size: 11px;">
+            ✅ Booking completed<br>
+            ✅ Escrow held<br>
+            ✅ No holds<br>
+            ✅ GCash configured
+          </small>
+        </div>
       </div>
 
       <div class="stat-card">
@@ -457,28 +830,137 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         <div class="stat-detail">Release time</div>
       </div>
     </div>
+    
+    <!-- ESCROW RELEASE REQUIREMENTS INFO BOX -->
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+      <div style="display: flex; align-items: flex-start; gap: 20px;">
+        <div style="flex-shrink: 0;">
+          <i class="bi bi-info-circle" style="font-size: 48px; opacity: 0.9;"></i>
+        </div>
+        <div style="flex: 1;">
+          <h5 style="margin: 0 0 15px 0; font-weight: 700;">📋 Requirements for Escrow Release</h5>
+          <p style="margin: 0 0 15px 0; opacity: 0.95; font-size: 14px;">
+            Before releasing escrow funds to the owner, ensure ALL of the following conditions are met:
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px;">
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+              <strong style="display: block; margin-bottom: 6px;">✅ 1. Booking Completed</strong>
+              <small style="opacity: 0.9;">Rental period finished, trip ended properly</small>
+            </div>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+              <strong style="display: block; margin-bottom: 6px;">✅ 2. Escrow Status = Held</strong>
+              <small style="opacity: 0.9;">Funds currently secured in escrow</small>
+            </div>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+              <strong style="display: block; margin-bottom: 6px;">✅ 3. No Active Holds</strong>
+              <small style="opacity: 0.9;">No disputes or investigations pending</small>
+            </div>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+              <strong style="display: block; margin-bottom: 6px;">✅ 4. GCash Configured</strong>
+              <small style="opacity: 0.9;">Owner has valid GCash number in profile</small>
+            </div>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+              <strong style="display: block; margin-bottom: 6px;">✅ 5. Payment Verified</strong>
+              <small style="opacity: 0.9;">Original payment has cleared successfully</small>
+            </div>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+              <strong style="display: block; margin-bottom: 6px;">✅ 6. No Outstanding Issues</strong>
+              <small style="opacity: 0.9;">Claims, damages, late fees resolved</small>
+            </div>
+          </div>
+          <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 6px; border-left: 4px solid #ffc107;">
+            <strong>⚡ Auto-Release:</strong> 
+            <small style="opacity: 0.95;">Escrows are automatically released 3 days after rental completion if all requirements are met. Manual release can be done immediately.</small>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Filter Section -->
     <div class="filter-section">
-      <form method="GET" class="filter-row">
-        <div class="search-box">
-          <input type="text" name="search" id="searchInput" placeholder="Search by booking, renter, owner, or vehicle..." value="<?= htmlspecialchars($search) ?>">
-          <i class="bi bi-search"></i>
+      <form method="GET" id="filterForm">
+        <div class="filter-row">
+          <div class="search-box">
+            <input type="text" name="search" id="searchInput" 
+                   placeholder="Search by booking, renter, owner, or vehicle..." 
+                   value="<?= htmlspecialchars($search) ?>">
+            <i class="bi bi-search"></i>
+          </div>
+
+          <select name="status" class="filter-dropdown" onchange="this.form.submit()">
+            <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All Escrow</option>
+            <option value="held" <?= $statusFilter === 'held' ? 'selected' : '' ?>>Currently Held</option>
+            <option value="pending_release" <?= $statusFilter === 'pending_release' ? 'selected' : '' ?>>Ready to Release</option>
+            <option value="on_hold" <?= $statusFilter === 'on_hold' ? 'selected' : '' ?>>On Hold / Disputed</option>
+            <option value="released" <?= $statusFilter === 'released' ? 'selected' : '' ?>>Released</option>
+            <option value="refunded" <?= $statusFilter === 'refunded' ? 'selected' : '' ?>>Refunded</option>
+          </select>
+
+          <select name="sort" class="filter-dropdown" onchange="this.form.submit()">
+            <option value="priority" <?= $sortBy === 'priority' ? 'selected' : '' ?>>🎯 By Priority</option>
+            <option value="date_desc" <?= $sortBy === 'date_desc' ? 'selected' : '' ?>>📅 Newest First</option>
+            <option value="date_asc" <?= $sortBy === 'date_asc' ? 'selected' : '' ?>>📅 Oldest First</option>
+            <option value="amount_desc" <?= $sortBy === 'amount_desc' ? 'selected' : '' ?>>💰 Highest Amount</option>
+            <option value="amount_asc" <?= $sortBy === 'amount_asc' ? 'selected' : '' ?>>💰 Lowest Amount</option>
+            <option value="days_desc" <?= $sortBy === 'days_desc' ? 'selected' : '' ?>>⏱️ Longest in Escrow</option>
+            <option value="days_asc" <?= $sortBy === 'days_asc' ? 'selected' : '' ?>>⏱️ Shortest in Escrow</option>
+            <option value="renter_asc" <?= $sortBy === 'renter_asc' ? 'selected' : '' ?>>👤 Renter (A-Z)</option>
+            <option value="owner_asc" <?= $sortBy === 'owner_asc' ? 'selected' : '' ?>>🏢 Owner (A-Z)</option>
+          </select>
+
+          <button type="button" class="add-user-btn" onclick="toggleAdvancedFilters()" id="advancedFilterBtn">
+            <i class="bi bi-funnel"></i>
+            Advanced
+          </button>
+
+          <button type="button" class="add-user-btn" onclick="exportEscrow()">
+            <i class="bi bi-download"></i>
+            Export
+          </button>
         </div>
 
-        <select name="status" class="filter-dropdown" onchange="this.form.submit()">
-          <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All Escrow</option>
-          <option value="held" <?= $statusFilter === 'held' ? 'selected' : '' ?>>Currently Held</option>
-          <option value="pending_release" <?= $statusFilter === 'pending_release' ? 'selected' : '' ?>>Ready to Release</option>
-          <option value="on_hold" <?= $statusFilter === 'on_hold' ? 'selected' : '' ?>>On Hold / Disputed</option>
-          <option value="released" <?= $statusFilter === 'released' ? 'selected' : '' ?>>Released</option>
-          <option value="refunded" <?= $statusFilter === 'refunded' ? 'selected' : '' ?>>Refunded</option>
-        </select>
-
-        <button type="button" class="add-user-btn" onclick="exportEscrow()">
-          <i class="bi bi-download"></i>
-          Export Report
-        </button>
+        <!-- Advanced Filters (Hidden by default) -->
+        <div id="advancedFilters" style="display: none; margin-top: 15px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label" style="font-size: 13px; font-weight: 600;">Date From</label>
+              <input type="date" class="form-control form-control-sm" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" style="font-size: 13px; font-weight: 600;">Date To</label>
+              <input type="date" class="form-control form-control-sm" name="date_to" value="<?= htmlspecialchars($dateTo) ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" style="font-size: 13px; font-weight: 600;">Min Amount (₱)</label>
+              <input type="number" class="form-control form-control-sm" name="min_amount" 
+                     placeholder="0.00" step="100" value="<?= $minAmount > 0 ? $minAmount : '' ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" style="font-size: 13px; font-weight: 600;">Max Amount (₱)</label>
+              <input type="number" class="form-control form-control-sm" name="max_amount" 
+                     placeholder="0.00" step="100" value="<?= $maxAmount > 0 ? $maxAmount : '' ?>">
+            </div>
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-2">
+              <label class="form-label" style="font-size: 13px; font-weight: 600;">Show Per Page</label>
+              <select class="form-control form-control-sm" name="limit">
+                <option value="10" <?= $limit == 10 ? 'selected' : '' ?>>10</option>
+                <option value="25" <?= $limit == 25 ? 'selected' : '' ?>>25</option>
+                <option value="50" <?= $limit == 50 ? 'selected' : '' ?>>50</option>
+                <option value="100" <?= $limit == 100 ? 'selected' : '' ?>>100</option>
+              </select>
+            </div>
+            <div class="col-md-10 d-flex align-items-end gap-2">
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-search"></i> Apply Filters
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="clearFilters()">
+                <i class="bi bi-x-circle"></i> Clear All
+              </button>
+            </div>
+          </div>
+        </div>
       </form>
     </div>
 
@@ -607,8 +1089,13 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                 <span class="status-badge <?= $bookingStatusClass ?>">
                   <?= ucfirst($row['booking_status']) ?>
                 </span>
-                <?php if ($row['booking_status'] === 'completed' && $actualEscrowStatus === 'held'): ?>
-                <br><small style="color: #28a745;">✓ Ready for release</small>
+                <?php if ($row['booking_status'] === 'completed' && $actualEscrowStatus === 'held' && !$isOnHold): ?>
+                <br><small style="color: #28a745; font-weight: 600;">
+                  ✓ Ready for release
+                  <?php if (empty($row['owner_gcash'])): ?>
+                  <br><span style="color: #dc3545;">⚠️ GCash needed</span>
+                  <?php endif; ?>
+                </small>
                 <?php endif; ?>
               </td>
 
@@ -644,10 +1131,57 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                     <i class="bi bi-eye"></i>
                   </button>
 
-                  <?php if ($actualEscrowStatus === 'held' && $row['booking_status'] === 'completed'): ?>
-                  <button class="action-btn approve" onclick="releaseEscrow(<?= $row['booking_id'] ?>)" title="Release to Owner">
+                  <?php 
+                  // ============================================================================
+                  // RELEASE TO OWNER BUTTON - VALIDATION LOGIC
+                  // ============================================================================
+                  // Show "Release to Owner" button ONLY when ALL conditions are met:
+                  //
+                  // ✅ REQUIREMENT 1: Booking status is 'completed'
+                  //    - Rental period must be finished
+                  //    - Trip properly ended with actual_return_date set
+                  //
+                  // ✅ REQUIREMENT 2: Escrow status is 'held'
+                  //    - Funds currently secured in escrow
+                  //    - Not already released or refunded
+                  //
+                  // ✅ REQUIREMENT 3: Not currently on hold
+                  //    - No active disputes or investigations
+                  //    - escrow_hold_reason must be NULL/empty
+                  //
+                  // ✅ REQUIREMENT 4: Owner has GCash configured
+                  //    - owner_gcash field must be set in users table
+                  //    - Required for payout processing
+                  //
+                  // Additional recommended checks (handled by backend API):
+                  // - Payment verified (payment_verified_at set)
+                  // - No active insurance claims
+                  // - Late fees settled (if applicable)
+                  // - Mileage verification completed (if enabled)
+                  // ============================================================================
+                  
+                  $canRelease = (
+                    $row['booking_status'] === 'completed' && 
+                    $actualEscrowStatus === 'held' && 
+                    !$isOnHold &&
+                    !empty($row['owner_gcash'])
+                  );
+                  
+                  if ($canRelease): 
+                  ?>
+                  <button class="action-btn approve" onclick="releaseEscrow(<?= $row['booking_id'] ?>)" title="✅ All requirements met - Release to Owner">
                     <i class="bi bi-unlock"></i>
                   </button>
+                  <?php elseif ($actualEscrowStatus === 'held' && $row['booking_status'] === 'completed' && !$isOnHold): ?>
+                    <!-- Booking completed but owner GCash missing -->
+                    <span class="badge bg-danger" style="font-size: 11px;" title="Cannot release: Owner must configure GCash number in profile settings">
+                      ⚠️ Owner GCash not set
+                    </span>
+                  <?php elseif ($actualEscrowStatus === 'held' && $row['booking_status'] !== 'completed'): ?>
+                    <!-- Booking not completed yet -->
+                    <span class="badge bg-warning" style="font-size: 11px;" title="Cannot release: Booking must be completed first (current: <?= $row['booking_status'] ?>)">
+                      ⏳ Waiting for completion
+                    </span>
                   <?php endif; ?>
 
                   <?php if ($actualEscrowStatus === 'held' && !$isOnHold): ?>
@@ -677,15 +1211,31 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
       </div>
 
       <!-- Pagination -->
-      <?php if ($totalPages > 1): ?>
+      <?php if ($totalPages > 1): 
+        // Build query string preserving all filters
+        $queryParams = [
+          'status' => $statusFilter,
+          'sort' => $sortBy,
+          'search' => $search,
+          'date_from' => $dateFrom,
+          'date_to' => $dateTo,
+          'min_amount' => $minAmount > 0 ? $minAmount : '',
+          'max_amount' => $maxAmount > 0 ? $maxAmount : '',
+          'limit' => $limit
+        ];
+        $queryParams = array_filter($queryParams, function($v) { return $v !== ''; });
+      ?>
       <div class="pagination-section">
         <div class="pagination-info">
           Showing <strong><?= $offset + 1 ?></strong> - <strong><?= min($offset + $limit, $totalRows) ?></strong>
-          of <strong><?= $totalRows ?></strong> transactions
+          of <strong><?= $totalRows ?></strong> transaction<?= $totalRows != 1 ? 's' : '' ?>
         </div>
         <div class="pagination-controls">
-          <?php if ($page > 1): ?>
-          <a href="?page=<?= $page - 1 ?>&status=<?= $statusFilter ?>&search=<?= urlencode($search) ?>" class="page-btn">
+          <?php if ($page > 1): 
+            $prevParams = $queryParams;
+            $prevParams['page'] = $page - 1;
+          ?>
+          <a href="?<?= http_build_query($prevParams) ?>" class="page-btn">
             <i class="bi bi-chevron-left"></i>
           </a>
           <?php endif; ?>
@@ -694,15 +1244,20 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
           $startPage = max(1, $page - 2);
           $endPage = min($totalPages, $page + 2);
           for ($i = $startPage; $i <= $endPage; $i++): 
+            $pageParams = $queryParams;
+            $pageParams['page'] = $i;
           ?>
-          <a href="?page=<?= $i ?>&status=<?= $statusFilter ?>&search=<?= urlencode($search) ?>" 
+          <a href="?<?= http_build_query($pageParams) ?>" 
              class="page-btn <?= $i === $page ? 'active' : '' ?>">
             <?= $i ?>
           </a>
           <?php endfor; ?>
 
-          <?php if ($page < $totalPages): ?>
-          <a href="?page=<?= $page + 1 ?>&status=<?= $statusFilter ?>&search=<?= urlencode($search) ?>" class="page-btn">
+          <?php if ($page < $totalPages): 
+            $nextParams = $queryParams;
+            $nextParams['page'] = $page + 1;
+          ?>
+          <a href="?<?= http_build_query($nextParams) ?>" class="page-btn">
             <i class="bi bi-chevron-right"></i>
           </a>
           <?php endif; ?>
@@ -725,9 +1280,9 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 <!-- Hold Escrow Modal -->
 <div class="modal fade" id="holdModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content modal-warning">
       <div class="modal-header">
-        <h5 class="modal-title">Put Escrow On Hold</h5>
+        <h5 class="modal-title"><i class="fas fa-pause-circle"></i> Put Escrow On Hold</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -769,9 +1324,9 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 <!-- Refund Escrow Modal -->
 <div class="modal fade" id="refundModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content modal-danger">
       <div class="modal-header">
-        <h5 class="modal-title">Refund Escrow to Renter</h5>
+        <h5 class="modal-title"><i class="fas fa-undo-alt"></i> Refund Escrow to Renter</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -960,7 +1515,32 @@ function viewEscrowDetails(escrow) {
 
 // RELEASE ESCROW
 function releaseEscrow(bookingId) {
-  if (!confirm('Release escrow funds to owner? This will schedule the payout.')) return;
+  // Comprehensive confirmation message with requirements checklist
+  const confirmMessage = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RELEASE ESCROW TO OWNER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Booking ID: #BK-${String(bookingId).padStart(4, '0')}
+
+Before proceeding, confirm that:
+
+✅ Booking is completed
+✅ No disputes or issues pending
+✅ Owner has valid GCash number
+✅ Payment has been verified
+✅ No outstanding claims or damages
+
+⚠️ This action cannot be undone!
+
+Funds will be released to owner and payout will be scheduled.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Proceed with escrow release?
+  `.trim();
+
+  if (!confirm(confirmMessage)) return;
 
   const formData = new FormData();
   formData.append('booking_id', bookingId);
@@ -972,15 +1552,15 @@ function releaseEscrow(bookingId) {
   .then(r => r.json())
   .then(data => {
     if (data.success) {
-      alert('✅ ' + data.message);
+      alert('✅ SUCCESS!\n\n' + data.message + '\n\nBooking ID: #BK-' + String(bookingId).padStart(4, '0'));
       location.reload();
     } else {
-      alert('❌ ' + data.message);
+      alert('❌ RELEASE FAILED\n\n' + data.message + '\n\nPlease check:\n• Booking status\n• Escrow status\n• Owner GCash configuration\n• No active holds');
     }
   })
   .catch(err => {
     console.error(err);
-    alert('Network error occurred');
+    alert('❌ NETWORK ERROR\n\nCould not connect to server. Please check your connection and try again.');
   });
 }
 
@@ -1100,6 +1680,27 @@ function resumeEscrow(bookingId) {
   });
 }
 
+// TOGGLE ADVANCED FILTERS
+function toggleAdvancedFilters() {
+  const advancedFilters = document.getElementById('advancedFilters');
+  const btn = document.getElementById('advancedFilterBtn');
+  
+  if (advancedFilters.style.display === 'none') {
+    advancedFilters.style.display = 'block';
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="bi bi-funnel-fill"></i> Hide Filters';
+  } else {
+    advancedFilters.style.display = 'none';
+    btn.classList.remove('active');
+    btn.innerHTML = '<i class="bi bi-funnel"></i> Advanced';
+  }
+}
+
+// CLEAR FILTERS
+function clearFilters() {
+  window.location.href = 'escrow.php?status=held';
+}
+
 // EXPORT
 function exportEscrow() {
   const params = new URLSearchParams(window.location.search);
@@ -1113,6 +1714,20 @@ document.getElementById('searchInput').addEventListener('keyup', function() {
   searchTimeout = setTimeout(() => {
     this.form.submit();
   }, 500);
+});
+
+// Show advanced filters if any advanced filter is active
+window.addEventListener('DOMContentLoaded', function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasAdvancedFilters = urlParams.get('date_from') || urlParams.get('date_to') || 
+                              urlParams.get('min_amount') || urlParams.get('max_amount') ||
+                              (urlParams.get('limit') && urlParams.get('limit') !== '10');
+  
+  if (hasAdvancedFilters) {
+    document.getElementById('advancedFilters').style.display = 'block';
+    document.getElementById('advancedFilterBtn').classList.add('active');
+    document.getElementById('advancedFilterBtn').innerHTML = '<i class="bi bi-funnel-fill"></i> Hide Filters';
+  }
 });
 </script>
 <script src="include/notifications.js"></script>

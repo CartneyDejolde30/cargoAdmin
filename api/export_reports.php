@@ -1,9 +1,16 @@
 <?php
+/**
+ * ============================================================================
+ * EXPORT REPORTS TO CSV - Admin Download
+ * ============================================================================
+ */
+
 session_start();
 require_once "../include/db.php";
 
+// Check admin authentication
 if (!isset($_SESSION['admin_id'])) {
-    die('Unauthorized');
+    die('Unauthorized access');
 }
 
 // Get filters
@@ -40,11 +47,22 @@ $query .= " ORDER BY r.created_at DESC";
 
 $result = mysqli_query($conn, $query);
 
+if (!$result) {
+    die('Query error: ' . mysqli_error($conn));
+}
+
 // Set headers for CSV download
-header('Content-Type: text/csv');
-header('Content-Disposition: attachment; filename="reports_' . date('Y-m-d') . '.csv"');
+$filename = 'reports_export_' . date('Y-m-d_His') . '.csv';
+
+header('Content-Type: text/csv; charset=utf-8');
+header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Cache-Control: no-cache, must-revalidate');
+header('Expires: 0');
 
 $output = fopen('php://output', 'w');
+
+// UTF-8 BOM for Excel compatibility
+fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
 
 // CSV headers
 fputcsv($output, ['ID', 'Type', 'Reported ID', 'Reason', 'Details', 'Status', 'Priority', 'Reporter', 'Email', 'Date']);
@@ -66,5 +84,5 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 fclose($output);
-$conn->close();
-?>
+mysqli_close($conn);
+exit;

@@ -29,6 +29,7 @@ try {
             p.scheduled_at,
             p.processed_at,
             p.completion_reference,
+            p.transfer_proof,
             p.created_at,
             b.car_id,
             b.pickup_date,

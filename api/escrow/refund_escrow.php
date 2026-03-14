@@ -75,8 +75,8 @@ try {
         throw new Exception('Can only refund escrow from "held" status. Current: ' . $booking['escrow_status']);
     }
     
-    // Calculate refund amount (full amount back to renter)
-    $refundAmount = floatval($booking['total_amount']);
+    // Calculate refund amount: rental total + security deposit (renter paid both upfront)
+    $refundAmount = floatval($booking['total_amount']) + floatval($booking['security_deposit_amount'] ?? 0);
     
     // Update escrow status
     $updateEscrow = "
@@ -86,69 +86,110 @@ try {
             status = 'cancelled',
             escrow_refunded_at = NOW(),
             escrow_hold_reason = NULL,
-            escrow_hold_details = NULL
+            escrow_hold_details = NULL,
+            cancelled_at = NOW(),
+            cancellation_reason = CONCAT('Escrow refunded - Reason: ', ?)
         WHERE id = ?
     ";
     
     $stmt = mysqli_prepare($conn, $updateEscrow);
-    mysqli_stmt_bind_param($stmt, "i", $bookingId);
+    mysqli_stmt_bind_param($stmt, "si", $reason, $bookingId);
     
     if (!mysqli_stmt_execute($stmt)) {
         throw new Exception('Failed to update escrow status: ' . mysqli_error($conn));
     }
     
-    // Generate unique refund ID
-    $refundId = 'REF-' . date('Ymd') . '-' . strtoupper(substr(md5(uniqid()), 0, 4));
+    // Check if refund request already exists
+    $checkRefund = "SELECT id, refund_id FROM refunds WHERE booking_id = ? LIMIT 1";
+    $stmt = mysqli_prepare($conn, $checkRefund);
+    mysqli_stmt_bind_param($stmt, "i", $bookingId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $existingRefund = mysqli_fetch_assoc($result);
     
-    // Create refund record
-    $createRefund = "
-        INSERT INTO refunds (
-            refund_id,
-            user_id,
-            booking_id,
-            payment_id,
-            refund_amount,
-            refund_method,
-            account_number,
-            account_name,
-            refund_reason,
-            reason_details,
-            original_payment_method,
-            original_payment_reference,
-            status,
-            processed_by,
-            processed_at,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, NOW(), NOW())
-    ";
-    
-    $refundMethod = $booking['payment_method'] ?? 'gcash';
-    $accountNumber = $booking['renter_gcash'] ?? 'N/A';
-    $accountName = $booking['renter_name'];
-    $originalPaymentRef = $booking['payment_id'] ?? null;
-    
-    $stmt = mysqli_prepare($conn, $createRefund);
-    mysqli_stmt_bind_param($stmt, "siiidssssssi",
-        $refundId,
-        $booking['user_id'],
-        $bookingId,
-        $booking['payment_id'],
-        $refundAmount,
-        $refundMethod,
-        $accountNumber,
-        $accountName,
-        $reason,
-        $details,
-        $refundMethod,
-        $originalPaymentRef,
-        $adminId
-    );
-    
-    if (!mysqli_stmt_execute($stmt)) {
-        throw new Exception('Failed to create refund record: ' . mysqli_error($conn));
+    if ($existingRefund) {
+        // Update existing refund record
+        $refundId = $existingRefund['refund_id'];
+        $newRefundId = $existingRefund['id'];
+        
+        $updateRefund = "
+            UPDATE refunds 
+            SET 
+                status = 'approved',
+                processed_by = ?,
+                processed_at = NOW(),
+                refund_reason = COALESCE(refund_reason, ?),
+                reason_details = COALESCE(reason_details, ?)
+            WHERE id = ?
+        ";
+        
+        $stmt = mysqli_prepare($conn, $updateRefund);
+        mysqli_stmt_bind_param($stmt, "issi", $adminId, $reason, $details, $newRefundId);
+        
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception('Failed to update refund record: ' . mysqli_error($conn));
+        }
+    } else {
+        // Create new refund record if none exists
+        $refundId = 'REF-' . date('Ymd') . '-' . strtoupper(substr(md5(uniqid()), 0, 4));
+        
+        $createRefund = "
+            INSERT INTO refunds (
+                refund_id,
+                booking_id,
+                payment_id,
+                user_id,
+                owner_id,
+                refund_amount,
+                original_amount,
+                deduction_amount,
+                refund_method,
+                account_number,
+                account_name,
+                bank_name,
+                refund_reason,
+                reason_details,
+                status,
+                original_payment_method,
+                original_payment_reference,
+                processed_by,
+                processed_at,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?, 'approved', ?, ?, ?, NOW(), NOW())
+        ";
+        
+        $refundMethod = $booking['payment_method'] ?? 'gcash';
+        $accountNumber = $booking['renter_gcash'] ?? 'N/A';
+        $accountName = $booking['renter_name'];
+        $originalAmount = floatval($booking['total_amount']);
+        $originalPaymentMethod = $booking['payment_method'] ?? 'gcash';
+        $originalPaymentRef = $booking['payment_id'];
+        
+        $stmt = mysqli_prepare($conn, $createRefund);
+        mysqli_stmt_bind_param($stmt, "siiiiddssssssii",
+            $refundId,
+            $bookingId,
+            $booking['payment_id'],
+            $booking['user_id'],
+            $booking['owner_id'],
+            $refundAmount,
+            $originalAmount,
+            $refundMethod,
+            $accountNumber,
+            $accountName,
+            $reason,
+            $details,
+            $originalPaymentMethod,
+            $originalPaymentRef,
+            $adminId
+        );
+        
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception('Failed to create refund record: ' . mysqli_error($conn));
+        }
+        
+        $newRefundId = mysqli_insert_id($conn);
     }
-    
-    $newRefundId = mysqli_insert_id($conn);
     
     // Update payment status
     if ($booking['payment_id']) {
@@ -193,8 +234,25 @@ try {
     // Commit transaction
     mysqli_commit($conn);
     
-    // TODO: Send notification to renter about refund
-    // TODO: Send notification to owner about cancellation
+    // Send notification to renter about refund
+    $notifyRenter = "
+        INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+        VALUES (?, 'Refund Approved ✓', ?, 'refund_approved', 'unread', NOW())
+    ";
+    $renterMessage = "Your booking #{$bookingId} has been cancelled and refund of ₱" . number_format($refundAmount, 2) . " has been approved. Reference: {$refundId}";
+    $stmt = mysqli_prepare($conn, $notifyRenter);
+    mysqli_stmt_bind_param($stmt, "is", $booking['user_id'], $renterMessage);
+    mysqli_stmt_execute($stmt);
+    
+    // Send notification to owner about cancellation
+    $notifyOwner = "
+        INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+        VALUES (?, 'Booking Cancelled ⚠️', ?, 'booking_cancelled', 'unread', NOW())
+    ";
+    $ownerMessage = "Booking #{$bookingId} has been cancelled and refunded to renter. Reason: {$reason}";
+    $stmt = mysqli_prepare($conn, $notifyOwner);
+    mysqli_stmt_bind_param($stmt, "is", $booking['owner_id'], $ownerMessage);
+    mysqli_stmt_execute($stmt);
     
     echo json_encode([
         'success' => true,

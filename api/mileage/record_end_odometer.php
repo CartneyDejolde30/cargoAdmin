@@ -40,21 +40,53 @@ if (!is_numeric($odometer_reading) || $odometer_reading < 0) {
     exit;
 }
 
-// Handle photo upload
+// Handle photo upload with validation
 $photo_path = null;
+$photo_url = null;
 if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
     $upload_dir = "../../uploads/odometer/";
-    
     if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0777, true);
+        mkdir($upload_dir, 0755, true);
     }
-    
-    $file_extension = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
-    $file_name = "odometer_end_{$booking_id}_" . time() . "." . $file_extension;
+    $mime = $_FILES['photo']['type'] ?? '';
+    $size = $_FILES['photo']['size'] ?? 0;
+    $allowed = defined('ALLOWED_IMAGE_TYPES') ? ALLOWED_IMAGE_TYPES : ['image/jpeg','image/jpg','image/png','image/gif'];
+    $maxSize = defined('MAX_UPLOAD_SIZE') ? MAX_UPLOAD_SIZE : 5242880;
+    if (!in_array($mime, $allowed, true)) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Invalid image type"
+        ]);
+        exit;
+    }
+    if ($size > $maxSize) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Image too large"
+        ]);
+        exit;
+    }
+    $ext = strtolower(pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg','jpeg','png','gif'], true)) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Unsupported image extension"
+        ]);
+        exit;
+    }
+    $file_name = "odometer_end_{$booking_id}_" . time() . "." . $ext;
     $target_file = $upload_dir . $file_name;
-    
     if (move_uploaded_file($_FILES['photo']['tmp_name'], $target_file)) {
         $photo_path = "uploads/odometer/" . $file_name;
+        if (defined('BASE_URL')) {
+            $photo_url = BASE_URL . '/' . $photo_path;
+        }
+    } else {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Failed to upload photo"
+        ]);
+        exit;
     }
 }
 
@@ -64,8 +96,11 @@ $check_stmt = $conn->prepare("
         b.id, b.status, b.odometer_start, b.odometer_end, 
         b.vehicle_type, b.car_id, b.pickup_date, b.return_date,
         b.user_id, b.owner_id,
+        COALESCE(c.has_unlimited_mileage, m.has_unlimited_mileage) AS has_unlimited_mileage,
         DATEDIFF(b.return_date, b.pickup_date) + 1 AS rental_days
     FROM bookings b
+    LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+    LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
     WHERE b.id = ?
 ");
 $check_stmt->bind_param("i", $booking_id);
@@ -82,6 +117,20 @@ if ($result->num_rows === 0) {
 
 $booking = $result->fetch_assoc();
 
+// If vehicle has unlimited mileage, odometer tracking is not required
+$isUnlimited = !empty($booking['has_unlimited_mileage']) && intval($booking['has_unlimited_mileage']) === 1;
+if ($isUnlimited) {
+    echo json_encode([
+        "status" => "success",
+        "message" => "Odometer tracking not required for unlimited mileage vehicle",
+        "data" => [
+            "booking_id" => $booking_id,
+            "odometer_required" => false
+        ]
+    ]);
+    exit;
+}
+
 // Check if starting odometer recorded
 if (empty($booking['odometer_start'])) {
     echo json_encode([
@@ -91,14 +140,21 @@ if (empty($booking['odometer_start'])) {
     exit;
 }
 
-// Check if ending odometer already recorded
-if (!empty($booking['odometer_end'])) {
+// Check if ending odometer already recorded AND trip is completed
+// Allow re-recording if trip is still in 'approved' or 'ongoing' status
+if (!empty($booking['odometer_end']) && $booking['status'] === 'completed') {
     echo json_encode([
         "status" => "error",
-        "message" => "Ending odometer already recorded",
+        "message" => "Ending odometer already recorded for this completed trip",
         "existing_reading" => $booking['odometer_end']
     ]);
     exit;
+}
+
+// If odometer_end exists but trip not completed, allow update (user might be correcting)
+if (!empty($booking['odometer_end']) && in_array($booking['status'], ['approved', 'ongoing'])) {
+    // Log that we're updating existing odometer reading
+    error_log("Updating existing odometer_end for booking {$booking_id}: old={$booking['odometer_end']}, new={$odometer_reading}");
 }
 
 // Validate odometer reading is greater than start
@@ -275,6 +331,7 @@ echo json_encode([
         "discrepancy_percentage" => $discrepancy_percentage,
         "needs_verification" => $needs_verification,
         "photo_path" => $photo_path,
+        "photo_url" => $photo_url,
         "timestamp" => date('Y-m-d H:i:s'),
         "vehicle" => [
             "brand" => $vehicle['brand'],

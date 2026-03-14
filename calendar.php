@@ -33,6 +33,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="include/admin-styles.css" rel="stylesheet">
     <link href="include/notifications.css" rel="stylesheet">
+    <link href="include/modal-theme-standardized.css" rel="stylesheet">
     <style>
         * {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -51,8 +52,196 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             overflow-x: hidden;
         }
         
-        body.modal-open {
-            overflow: hidden;
+        /* Override calendar custom modal with MUCH LARGER contact-modal design */
+        .event-modal .modal-content {
+            background: #ffffff !important;
+            max-width: 1000px !important;
+            margin: 2rem auto !important;
+            border-radius: 20px !important;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.14), 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+            animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) !important;
+            border: none !important;
+        }
+
+        .event-modal .modal-header {
+            padding: 40px 40px 32px 40px !important;
+            background: #ffffff !important;
+            border-bottom: none !important;
+            position: relative !important;
+        }
+
+        .event-modal .modal-header-bg {
+            display: none !important;
+        }
+
+        .event-modal .modal-header-content {
+            padding: 0 !important;
+            color: #111827 !important;
+        }
+
+        .event-modal .modal-title {
+            font-size: 32px !important;
+            font-weight: 700 !important;
+            color: #111827 !important;
+            letter-spacing: -0.5px !important;
+            text-shadow: none !important;
+            margin-bottom: 12px !important;
+            font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        }
+
+        .event-modal .modal-type-badge {
+            background: #ede9fe !important;
+            color: #7c3aed !important;
+            border: none !important;
+            backdrop-filter: none !important;
+            padding: 6px 16px !important;
+            font-size: 13px !important;
+            margin-bottom: 12px !important;
+            font-weight: 600 !important;
+        }
+
+        .event-modal .modal-subtitle {
+            color: #6b7280 !important;
+            font-size: 16px !important;
+        }
+
+        .event-modal .modal-subtitle span {
+            background: transparent !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            backdrop-filter: none !important;
+        }
+
+        .event-modal .modal-close {
+            position: absolute !important;
+            top: 40px !important;
+            right: 40px !important;
+            background: #f3f4f6 !important;
+            backdrop-filter: none !important;
+            border: none !important;
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 10px !important;
+            color: #6b7280 !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            font-size: 20px !important;
+            line-height: 1 !important;
+            text-align: center !important;
+            z-index: 1000 !important;
+        }
+
+        .event-modal .modal-close::before {
+            content: '✕' !important;
+            display: block !important;
+            font-size: 20px !important;
+            font-weight: 400 !important;
+            color: #6b7280 !important;
+        }
+
+        .event-modal .modal-close i {
+            display: none !important;
+        }
+
+        .event-modal .modal-close:hover {
+            background: #e5e7eb !important;
+        }
+
+        .event-modal .modal-close:hover::before {
+            color: #111827 !important;
+        }
+
+        .event-modal .modal-body {
+            padding: 40px !important;
+            background: #ffffff !important;
+            font-size: 18px !important;
+            line-height: 1.7 !important;
+        }
+
+        .event-modal .modal-body p {
+            font-size: 18px !important;
+            line-height: 1.7 !important;
+        }
+
+        .event-modal .modal-section {
+            margin-bottom: 28px !important;
+        }
+
+        .event-modal .section-title {
+            font-size: 20px !important;
+            font-weight: 650 !important;
+            color: #111827 !important;
+            letter-spacing: -0.3px !important;
+            margin-bottom: 16px !important;
+        }
+
+        /* Contact-modal style info grids for calendar - LARGER */
+        .event-modal .info-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 0 !important;
+            border: 1px solid #f0f0f0 !important;
+            border-radius: 14px !important;
+            overflow: hidden !important;
+        }
+
+        .event-modal .info-item {
+            padding: 20px 24px !important;
+            background: #ffffff !important;
+            border-right: 1px solid #f0f0f0 !important;
+            border-bottom: 1px solid #f0f0f0 !important;
+        }
+
+        .event-modal .info-item:nth-child(2n) {
+            border-right: none !important;
+        }
+
+        .event-modal .info-label {
+            font-size: 15px !important;
+            color: #9ca3af !important;
+            font-weight: 500 !important;
+            margin-bottom: 6px !important;
+        }
+
+        .event-modal .info-value {
+            font-size: 18px !important;
+            font-weight: 600 !important;
+            color: #111827 !important;
+            letter-spacing: -0.2px !important;
+        }
+
+        .event-modal .modal-actions {
+            padding: 28px 40px 40px 40px !important;
+            border-top: 1px solid #f0f0f0 !important;
+            background: #ffffff !important;
+            gap: 14px !important;
+        }
+
+        .event-modal .modal-action-btn {
+            background: #f3f4f6 !important;
+            color: #374151 !important;
+            border: none !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            padding: 16px 24px !important;
+            border-radius: 12px !important;
+        }
+
+        .event-modal .modal-action-btn:hover {
+            background: #e5e7eb !important;
+            color: #111827 !important;
+        }
+
+        .event-modal .modal-action-btn.primary {
+            background: #111827 !important;
+            color: #ffffff !important;
+        }
+
+        .event-modal .modal-action-btn.primary:hover {
+            background: #1f2937 !important;
         }
         
         .main-content {
@@ -1197,25 +1386,29 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             margin-top: 2.5rem;
             padding-top: 2rem;
             border-top: 2px solid #f3f4f6;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            justify-content: center;
         }
         
         .modal-action-btn {
-            padding: 1rem 1.5rem;
+            padding: 0.875rem 1.25rem;
             border: none;
             border-radius: 12px;
-            font-weight: 700;
-            font-size: 0.9rem;
+            font-weight: 600;
+            font-size: 0.875rem;
             cursor: pointer;
             transition: all 0.3s;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 0.625rem;
+            gap: 0.5rem;
             position: relative;
             overflow: hidden;
+            white-space: nowrap;
+            min-width: fit-content;
+            flex: 0 1 auto;
         }
         
         .modal-action-btn::before {
@@ -1513,7 +1706,12 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             }
             
             .modal-actions {
-                grid-template-columns: 1fr;
+                flex-direction: column;
+            }
+            
+            .modal-action-btn {
+                width: 100%;
+                justify-content: center;
             }
             
             .modal-subtitle {
@@ -1596,9 +1794,9 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                     <input type="text" placeholder="Search events..." id="searchInput" onkeyup="handleSearch(event)">
                 </div>
                 <button class="today-btn" onclick="goToToday()">Today</button>
-                <button class="add-event-btn" onclick="openAddEventModal()">
-                    <i class="bi bi-plus-lg"></i>
-                    Add Event
+                <button class="add-event-btn" onclick="exportFilteredEvents()">
+                    <i class="bi bi-download"></i>
+                    Export
                 </button>
             </div>
         </div>
@@ -1716,9 +1914,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                         </div>
                     </div>
                 </div>
-                <button class="modal-close" onclick="closeModal()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
+                <button class="modal-close" onclick="closeModal()"></button>
             </div>
             <div class="modal-body" id="modalBody">
                 <!-- Event details will be inserted here -->
@@ -2327,7 +2523,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                     bodyHTML += `
                         <div class="detail-card highlight">
                             <div class="detail-label">
-                                <i class="bi bi-currency-dollar"></i>
+                                <span class="currency-symbol">₱</span>
                                 Amount
                             </div>
                             <div class="detail-value extra-large">
@@ -2892,9 +3088,102 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             }
         });
         
-        // Add Event Modal
-        function openAddEventModal() {
-            alert('Add Event Feature\n\nThis feature allows you to create manual calendar events.\n\nNote: Most events are automatically created from:\n• Bookings (pickups/returns)\n• Payments\n• Verifications\n• Vehicle listings\n• Reports\n• Refunds\n\nManual event creation can be implemented based on your specific needs.');
+        // Export currently loaded events (already filtered by current view date range).
+        // If user typed something in the search box, we further filter exported rows by that query.
+        function exportFilteredEvents() {
+            try {
+                const query = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+
+                let eventsToExport = Array.isArray(calendarEvents) ? [...calendarEvents] : [];
+
+                if (query.length >= 2) {
+                    eventsToExport = eventsToExport.filter(e => {
+                        const haystack = [
+                            e.type,
+                            e.title,
+                            e.description,
+                            e.status,
+                            e.vehicle_type,
+                            e.payment_method,
+                            e.event_type
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        return haystack.includes(query);
+                    });
+                }
+
+                if (eventsToExport.length === 0) {
+                    alert('No events to export for the current view/search.');
+                    return;
+                }
+
+                // Sort by date+time for a clean export
+                eventsToExport.sort((a, b) => {
+                    const aKey = `${a.date || ''} ${a.time || ''}`;
+                    const bKey = `${b.date || ''} ${b.time || ''}`;
+                    return aKey.localeCompare(bKey);
+                });
+
+                const header = ['Date', 'Time', 'Type', 'Title', 'Description', 'Status', 'Amount'];
+                const rows = [header];
+
+                for (const e of eventsToExport) {
+                    const amountNumber = (e.amount !== undefined && e.amount !== null && e.amount !== '')
+                        ? Number(e.amount)
+                        : NaN;
+                    const amount = Number.isFinite(amountNumber) ? `₱${amountNumber.toFixed(2)}` : '';
+
+                    rows.push([
+                        e.date || '',
+                        e.time || '',
+                        e.type || '',
+                        e.title || '',
+                        e.description || '',
+                        e.status || '',
+                        amount
+                    ]);
+                }
+
+                const filename = buildCalendarExportFilename(query);
+                downloadCSV(rows, filename);
+            } catch (err) {
+                console.error('Export error:', err);
+                alert('Export failed. Please try again.');
+            }
+        }
+
+        function buildCalendarExportFilename(query) {
+            // Create a filename that matches the current view range text
+            const rangeText = (document.getElementById('dateRange')?.textContent || 'calendar').trim();
+            const safeRange = rangeText.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase();
+            const safeQuery = query && query.length >= 2 ? `_search_${query.replace(/[^a-z0-9]+/gi, '_')}` : '';
+            const ts = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+            return `calendar_export_${safeRange}${safeQuery}_${stamp}.csv`;
+        }
+
+        function downloadCSV(rows, filename) {
+            // RFC4180-ish CSV escaping
+            const csv = rows.map(r => r.map(cell => {
+                const s = String(cell ?? '');
+                if (/[\n\r",]/.test(s)) {
+                    return '"' + s.replace(/"/g, '""') + '"';
+                }
+                return s;
+            }).join(',')).join('\r\n');
+
+            // Add UTF-8 BOM for Excel compatibility
+            const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
         
         // Close search results on click outside

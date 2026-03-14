@@ -257,7 +257,6 @@ try {
             r.id,
             r.report_type,
             r.status,
-            r.subject,
             DATE(r.created_at) as report_date,
             TIME_FORMAT(r.created_at, '%H:%i') as report_time,
             COALESCE(u.fullname, 'Anonymous') as reporter_name
@@ -278,7 +277,7 @@ try {
                     'id' => 40000 + (int)$row['id'],
                     'report_id' => (int)$row['id'],
                     'type' => 'report',
-                    'title' => '⚠️ Report: ' . ($row['subject'] ?? $row['report_type']),
+                    'title' => '⚠️ Report: ' . ucfirst($row['report_type']),
                     'description' => 'Reporter: ' . $row['reporter_name'],
                     'date' => $row['report_date'],
                     'time' => $row['report_time'],
@@ -300,7 +299,6 @@ try {
                 r.booking_id,
                 r.refund_amount as amount,
                 r.status,
-                r.reason,
                 DATE(r.created_at) as refund_date,
                 TIME_FORMAT(r.created_at, '%H:%i') as refund_time,
                 COALESCE(u.fullname, 'Unknown User') as user_name
@@ -323,7 +321,7 @@ try {
                         'refund_id' => (int)$row['id'],
                         'type' => 'refund',
                         'title' => '💰 Refund: ₱' . number_format($row['amount'], 2),
-                        'description' => $row['user_name'] . ' - ' . ($row['reason'] ?? 'Refund request'),
+                        'description' => $row['user_name'] . ' - Refund request',
                         'date' => $row['refund_date'],
                         'time' => $row['refund_time'],
                         'status' => $row['status'],

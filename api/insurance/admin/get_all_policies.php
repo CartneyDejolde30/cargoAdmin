@@ -25,6 +25,16 @@ if (!isset($conn) || !$conn) {
     exit;
 }
 
+// Auto-expire policies before fetching
+$expireStmt = $conn->prepare("
+    UPDATE insurance_policies 
+    SET status = 'expired' 
+    WHERE status = 'active' 
+    AND policy_end < NOW()
+");
+$expireStmt->execute();
+$expireStmt->close();
+
 // TODO: Add admin authentication check
 // require_once __DIR__ . '/../../../include/auth_check.php';
 
@@ -49,10 +59,14 @@ try {
             u.email as renter_email,
             u.phone as renter_contact,
             o.fullname AS owner_name,
-            CASE 
-                WHEN ip.vehicle_type = 'car' THEN CONCAT(c.brand, ' ', c.model)
-                WHEN ip.vehicle_type = 'motorcycle' THEN CONCAT(m.brand, ' ', m.model)
-            END AS vehicle_name,
+            COALESCE(
+                CASE 
+                    WHEN ip.vehicle_type = 'car' OR (ip.vehicle_type = '' AND b.vehicle_type = 'car') THEN CONCAT(COALESCE(c.brand, bc.brand), ' ', COALESCE(c.model, bc.model))
+                    WHEN ip.vehicle_type = 'motorcycle' OR (ip.vehicle_type = '' AND b.vehicle_type = 'motorcycle') THEN CONCAT(COALESCE(m.brand, bm.brand), ' ', COALESCE(m.model, bm.model))
+                    ELSE NULL
+                END,
+                'Unknown Vehicle'
+            ) AS vehicle_name,
             DATEDIFF(ip.policy_end, NOW()) AS days_remaining,
             CASE 
                 WHEN NOW() > ip.policy_end THEN 1
@@ -65,6 +79,8 @@ try {
         JOIN users o ON ip.owner_id = o.id
         LEFT JOIN cars c ON ip.vehicle_id = c.id AND ip.vehicle_type = 'car'
         LEFT JOIN motorcycles m ON ip.vehicle_id = m.id AND ip.vehicle_type = 'motorcycle'
+        LEFT JOIN cars bc ON b.car_id = bc.id AND b.vehicle_type = 'car'
+        LEFT JOIN motorcycles bm ON b.car_id = bm.id AND b.vehicle_type = 'motorcycle'
         WHERE 1=1
     ";
     
@@ -147,6 +163,12 @@ try {
     
     $policies = [];
     while ($row = $result->fetch_assoc()) {
+        // Debug: Log vehicle data retrieval
+        $vehicleName = $row['vehicle_name'];
+        if (empty($vehicleName) || $vehicleName === 'Unknown Vehicle') {
+            error_log("Vehicle data missing for policy {$row['policy_number']}: Type={$row['vehicle_type']}, ID={$row['vehicle_id']}");
+        }
+        
         $policies[] = [
             'policy_id' => $row['id'],
             'policy_number' => $row['policy_number'],
@@ -168,8 +190,10 @@ try {
             ],
             'owner_name' => $row['owner_name'],
             'vehicle' => [
-                'type' => $row['vehicle_type'],
-                'name' => $row['vehicle_name']
+                'type' => $row['vehicle_type'] ?? 'Unknown',
+                'name' => $row['vehicle_name'] ?? 'Unknown Vehicle',
+                // Debug info
+                '_debug_vehicle_id' => $row['vehicle_id'] ?? null
             ],
             'booking' => [
                 'status' => $row['booking_status'],

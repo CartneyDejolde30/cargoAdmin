@@ -8,6 +8,7 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
 
 require_once __DIR__ . "/../include/db.php";
+require_once __DIR__ . "/security/suspension_guard.php";
 
 $response = ["success" => false, "message" => ""];
 
@@ -39,6 +40,15 @@ foreach ($required as $field) {
 $bookingId   = intval($_POST["booking_id"]);
 $userId      = intval($_POST["user_id"]);
 $amount      = floatval($_POST["total_amount"]);
+
+// Validate amount is a positive number
+if ($amount <= 0) {
+    echo json_encode(["success" => false, "message" => "Invalid payment amount"]);
+    exit;
+}
+
+// Block suspended users
+require_not_suspended($conn, $userId);
 
 $method      = mysqli_real_escape_string($conn, $_POST["payment_method"]);
 $gcashNo     = mysqli_real_escape_string($conn, $_POST["gcash_number"]);
@@ -75,10 +85,53 @@ if ($result->num_rows === 0) {
 
 $booking = $result->fetch_assoc();
 
+/* Check payment reference is not already used for another booking */
+$refCheck = $conn->prepare("
+  SELECT id FROM payments WHERE payment_reference = ? AND booking_id != ?
+");
+$refCheck->bind_param("si", $refNo, $bookingId);
+$refCheck->execute();
+if ($refCheck->get_result()->num_rows > 0) {
+    echo json_encode(["success" => false, "message" => "This GCash reference number has already been used"]);
+    exit;
+}
+$refCheck->close();
+
+/* Check if payment already exists in payments table to prevent duplicates */
+$paymentCheck = $conn->prepare("
+  SELECT id, payment_reference FROM payments WHERE booking_id = ?
+");
+$paymentCheck->bind_param("i", $bookingId);
+$paymentCheck->execute();
+$existingPayments = $paymentCheck->get_result();
+
+if ($existingPayments->num_rows > 0) {
+  // Delete any payment records without payment_reference (incomplete submissions)
+  $deleteIncomplete = $conn->prepare("
+    DELETE FROM payments WHERE booking_id = ? AND payment_reference IS NULL
+  ");
+  $deleteIncomplete->bind_param("i", $bookingId);
+  $deleteIncomplete->execute();
+  
+  // Check again if there's a payment with valid reference
+  $paymentCheck2 = $conn->prepare("
+    SELECT id FROM payments WHERE booking_id = ? AND payment_reference IS NOT NULL
+  ");
+  $paymentCheck2->bind_param("i", $bookingId);
+  $paymentCheck2->execute();
+  if ($paymentCheck2->get_result()->num_rows > 0) {
+    echo json_encode([
+      "success" => false,
+      "message" => "Payment already submitted for this booking"
+    ]);
+    exit;
+  }
+}
+
 if ($booking["payment_status"] !== "pending") {
   echo json_encode([
     "success" => false,
-    "message" => "Payment already submitted"
+    "message" => "Payment already processed"
   ]);
   exit;
 }
@@ -129,7 +182,7 @@ try {
   $paymentId = $stmt->insert_id;
 
   /* =========================================================
-     UPDATE BOOKING WITH PAYMENT INFO
+     UPDATE BOOKING WITH PAYMENT INFO & SECURITY DEPOSIT
      ✅ FIXED: Handle varbinary columns properly
      ========================================================= */
   $update = "
@@ -137,12 +190,16 @@ try {
     SET 
       payment_id     = ?,
       payment_method = ?,
+      status         = 'pending',
       payment_status = 'pending',
       gcash_number   = ?,
       gcash_reference= ?,
-      payment_date   = NOW()
+      payment_date   = NOW(),
+      security_deposit_status = 'held',
+      security_deposit_held_at = NOW()
     WHERE id = ?
   ";
+
 
   $stmt = $conn->prepare($update);
   

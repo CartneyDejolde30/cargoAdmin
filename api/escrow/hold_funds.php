@@ -1,18 +1,20 @@
 <?php
-require_once 'include/db.php';
+require_once __DIR__ . '/../../include/config.php';
+require_once __DIR__ . '/../../include/db.php';
 
-function holdFundsInEscrow($bookingId, $conn = null) {
+function holdFundsInEscrow($bookingId, $connection = null) {
+    global $conn;
     $shouldClose = false;
-    if (!$conn) {
-        $conn = new mysqli("localhost", "root", "", "dbcargo");
-        $shouldClose = true;
+    if (!$connection) {
+        $connection = $conn; // Use centralized connection
+        $shouldClose = false; // Don't close shared connection
     }
     
     try {
-        mysqli_begin_transaction($conn);
+        mysqli_begin_transaction($connection);
         
         // Get booking and payment
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             SELECT b.total_amount, b.owner_id, p.id as payment_id
             FROM bookings b
             JOIN payments p ON p.booking_id = b.id
@@ -35,7 +37,7 @@ function holdFundsInEscrow($bookingId, $conn = null) {
         $ownerPayout = $totalAmount - $platformFee;
         
         // Insert into escrow
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO escrow (booking_id, payment_id, amount, status, held_at)
             VALUES (?, ?, ?, 'held', NOW())
         ");
@@ -43,7 +45,7 @@ function holdFundsInEscrow($bookingId, $conn = null) {
         $stmt->execute();
         
         // Update booking
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             UPDATE bookings 
             SET escrow_status = 'held',
                 platform_fee = ?,
@@ -55,7 +57,7 @@ function holdFundsInEscrow($bookingId, $conn = null) {
         $stmt->execute();
         
         // Log
-        $stmt = $conn->prepare("
+        $stmt = $connection->prepare("
             INSERT INTO payment_transactions 
             (booking_id, transaction_type, amount, description)
             VALUES (?, 'escrow_hold', ?, 'Funds held in escrow')
@@ -63,7 +65,7 @@ function holdFundsInEscrow($bookingId, $conn = null) {
         $stmt->bind_param("id", $bookingId, $totalAmount);
         $stmt->execute();
         
-        mysqli_commit($conn);
+        mysqli_commit($connection);
         
         error_log("Escrow: Held ₱$totalAmount for booking #$bookingId");
         
@@ -74,12 +76,12 @@ function holdFundsInEscrow($bookingId, $conn = null) {
         ];
         
     } catch (Exception $e) {
-        mysqli_rollback($conn);
+        mysqli_rollback($connection);
         error_log("Escrow hold failed: " . $e->getMessage());
         return ['error' => $e->getMessage()];
     } finally {
-        if ($shouldClose) {
-            $conn->close();
+        if ($shouldClose && $connection) {
+            $connection->close();
         }
     }
 }

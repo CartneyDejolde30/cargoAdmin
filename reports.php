@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'include/db.php';
+require_once 'include/admin_profile.php';
 
 // ---------------------------
 // AUTH CHECK
@@ -191,6 +192,8 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="include/admin-styles.css" rel="stylesheet">
+    <link href="include/modal-theme-standardized.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="include/notifications.css" rel="stylesheet">
     <style>
         .priority-badge {
@@ -213,6 +216,179 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
             margin-bottom: 10px;
         }
         .export-btn { margin-left: 10px; }
+        
+        .action-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .action-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .action-card h6 {
+            margin-bottom: 15px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        /* modal-action-btn styles now handled by modal-theme-standardized.css (contact-modal design) */
+
+        /* Force contact-modal design overrides - MUCH LARGER TEXT */
+        .modal-dialog {
+          max-width: 1000px !important;
+        }
+
+        .modal-dialog-scrollable .modal-content {
+          max-height: 90vh !important;
+        }
+
+        .modal-header {
+          background: #ffffff !important;
+          color: #111827 !important;
+          padding: 40px 40px 32px 40px !important;
+          border-bottom: none !important;
+        }
+
+        .modal-header h3,
+        .modal-header h5,
+        .modal-header .modal-title {
+          font-size: 32px !important;
+          font-weight: 700 !important;
+          color: #111827 !important;
+          letter-spacing: -0.5px !important;
+          font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 14px !important;
+        }
+
+        .modal-header .modal-title i,
+        .modal-header h3 i,
+        .modal-header h5 i {
+          font-size: 34px !important;
+          color: #6b7280 !important;
+        }
+
+        .modal-header .btn-close {
+          width: 40px !important;
+          height: 40px !important;
+          background: #f3f4f6 !important;
+          border-radius: 10px !important;
+          opacity: 1 !important;
+          filter: none !important;
+          padding: 0 !important;
+          background-image: none !important;
+          position: relative !important;
+        }
+
+        .modal-header .btn-close::after {
+          content: '✕' !important;
+          position: absolute !important;
+          top: 50% !important;
+          left: 50% !important;
+          transform: translate(-50%, -50%) !important;
+          font-size: 20px !important;
+          color: #6b7280 !important;
+          font-weight: 400 !important;
+          line-height: 1 !important;
+        }
+
+        .modal-header .btn-close:hover {
+          background: #e5e7eb !important;
+        }
+
+        .modal-header .btn-close:hover::after {
+          color: #111827 !important;
+        }
+
+        .modal-body {
+          padding: 40px !important;
+          font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+          font-size: 18px !important;
+          line-height: 1.7 !important;
+        }
+
+        .modal-body p {
+          font-size: 18px !important;
+          line-height: 1.7 !important;
+          margin-bottom: 14px !important;
+        }
+
+        .modal-body .text-muted,
+        .modal-body small {
+          font-size: 16px !important;
+          color: #6b7280 !important;
+        }
+
+        .modal-body strong {
+          font-weight: 600 !important;
+          color: #111827 !important;
+        }
+
+        .modal-body h6,
+        .modal-body .section-title {
+          font-size: 20px !important;
+          font-weight: 650 !important;
+          color: #111827 !important;
+          margin-bottom: 16px !important;
+          margin-top: 28px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+        }
+
+        .modal-body h6:first-child,
+        .modal-body .section-title:first-child {
+          margin-top: 0 !important;
+        }
+
+        .modal-body h6 i,
+        .modal-body .section-title i {
+          font-size: 22px !important;
+          color: #9ca3af !important;
+        }
+
+        .modal-body img {
+          max-width: 100% !important;
+          border-radius: 12px !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        }
+
+        .modal-footer {
+          padding: 28px 40px 40px 40px !important;
+          border-top: 1px solid #f0f0f0 !important;
+          background: #ffffff !important;
+          gap: 14px !important;
+        }
+
+        .modal-footer .btn {
+          font-size: 16px !important;
+          font-weight: 600 !important;
+          padding: 16px 32px !important;
+          border-radius: 12px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+        }
+
+        .modal-footer .btn i {
+          font-size: 18px !important;
+        }
+        
+        tr[style*="cursor: pointer"]:hover td {
+            background-color: #f8f9fa;
+        }
     </style>
 </head>
 <body>
@@ -234,7 +410,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
         </button>
     </div>
     <div class="user-avatar">
-        <img src="https://ui-avatars.com/api/?name=Admin+User&background=1a1a1a&color=fff" alt="Admin">
+        <img src="<?= $currentAdminAvatarUrl ?>" alt="<?= htmlspecialchars($currentAdminName) ?>" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=<?= urlencode($currentAdminName) ?>&background=1a1a1a&color=fff';">
     </div>
 </div>
         </div>
@@ -391,7 +567,7 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                             <th>Reason</th>
                             <th>Status</th>
                             <th>Age</th>
-                            <th>Actions</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -401,8 +577,8 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                                 $isOverdue = $row['status'] === 'pending' && $row['hours_pending'] > 48;
                                 $rowClass = $isOverdue ? 'table-danger' : ($row['status'] === 'pending' ? 'table-warning' : '');
                                 ?>
-                                <tr class="<?= $rowClass ?>">
-                                    <td>
+                                <tr class="<?= $rowClass ?>" style="cursor: pointer;" onclick="openReportActionModal(<?php echo $row['id']; ?>, '<?php echo $row['status']; ?>')" title="Click to view actions">
+                                    <td onclick="event.stopPropagation();">
                                         <input type="checkbox" class="report-checkbox" value="<?= $row['id'] ?>">
                                     </td>
                                     <td><strong>#<?php echo $row['id']; ?></strong></td>
@@ -468,28 +644,10 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
                                         }
                                         ?>
                                     </td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button class="action-btn view" onclick="viewReport(<?php echo $row['id']; ?>)" title="View Details">
-                                                <i class="bi bi-eye"></i>
-                                            </button>
-                                            <?php if ($row['status'] === 'pending'): ?>
-                                                <button class="action-btn" style="background: #ffc107;" onclick="updateStatus(<?php echo $row['id']; ?>, 'under_review')" title="Mark Under Review">
-                                                    <i class="bi bi-eye-fill"></i>
-                                                </button>
-                                            <?php endif; ?>
-                                            <?php if ($row['status'] === 'pending' || $row['status'] === 'under_review'): ?>
-                                                <button class="action-btn approve" onclick="resolveReport(<?php echo $row['id']; ?>)" title="Resolve">
-                                                    <i class="bi bi-check-lg"></i>
-                                                </button>
-                                                <button class="action-btn reject" onclick="dismissReport(<?php echo $row['id']; ?>)" title="Dismiss">
-                                                    <i class="bi bi-x-lg"></i>
-                                                </button>
-                                            <?php endif; ?>
-                                            <button class="action-btn" style="background: #6c757d;" onclick="updatePriority(<?php echo $row['id']; ?>)" title="Change Priority">
-                                                <i class="bi bi-flag"></i>
-                                            </button>
-                                        </div>
+                                    <td onclick="event.stopPropagation();">
+                                        <button class="action-btn view" onclick="openReportActionModal(<?php echo $row['id']; ?>, '<?php echo $row['status']; ?>')" title="Open Actions">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endwhile; ?>
@@ -530,20 +688,38 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
     </main>
 </div>
 
-<!-- Enhanced View Report Modal -->
+<!-- Enhanced View Report Modal - MUCH LARGER -->
 <div class="modal fade" id="viewReportModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Report Details</h5>
+                <h5 class="modal-title"><i class="bi bi-flag-fill"></i> Report Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="reportDetailsContent">
-                <div class="text-center">
-                    <div class="spinner-border" role="status">
+                <div class="text-center" style="padding: 60px;">
+                    <div class="spinner-border" role="status" style="width: 3rem; height: 3rem; color: #6b7280;">
                         <span class="visually-hidden">Loading...</span>
                     </div>
+                    <p style="margin-top: 20px; font-size: 16px; color: #6b7280;">Loading report details...</p>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Actions Modal -->
+<div class="modal fade" id="reportActionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cogs"></i> Manage Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="reportActionsModalBody">
+                <!-- Loaded via JavaScript -->
             </div>
         </div>
     </div>
@@ -551,7 +727,103 @@ $icon = $favicons[$page] ?? 'icons/dashboard.svg';
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const BASE_URL = window.location.origin + '/carGOAdmin/';
+const BASE_URL = window.location.origin + '/cargoAdmin/';
+
+// Open report actions modal
+function openReportActionModal(reportId, status) {
+    fetch(`api/get_report_details.php?id=${reportId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const report = data.report;
+                const statusClass = {
+                    'pending': 'warning',
+                    'under_review': 'info',
+                    'resolved': 'success',
+                    'dismissed': 'secondary'
+                }[report.status] || 'secondary';
+
+                const priorityClass = {
+                    'high': 'danger',
+                    'medium': 'warning',
+                    'low': 'secondary'
+                }[report.priority] || 'secondary';
+                
+                let actionsHtml = `
+                    <div class="action-card">
+                        <h6><i class="bi bi-info-circle"></i> Report Overview</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Report ID:</strong> #${report.id}</p>
+                                <p><strong>Type:</strong> <span class="badge bg-primary">${report.report_type}</span></p>
+                                <p><strong>Reporter:</strong> ${report.reporter_name}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Status:</strong> <span class="badge bg-${statusClass}">${report.status}</span></p>
+                                <p><strong>Priority:</strong> <span class="badge bg-${priorityClass}">${report.priority || 'medium'}</span></p>
+                                <p><strong>Reported Item:</strong> ${report.reported_item_name}</p>
+                            </div>
+                        </div>
+                        <p><strong>Reason:</strong> ${report.reason}</p>
+                    </div>
+                    
+                    <div class="action-card">
+                        <h6><i class="bi bi-eye"></i> View Information</h6>
+                        <div class="action-grid">
+                            <button class="modal-action-btn" style="background: #e3f2fd; color: #1976d2;" onclick="viewReportFromActions(${report.id})">
+                                <i class="bi bi-file-text"></i> View Full Details
+                            </button>
+                            <button class="modal-action-btn" style="background: #6c757d; color: white;" onclick="updatePriority(${report.id})">
+                                <i class="bi bi-flag"></i> Change Priority
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // Status-specific actions
+                if (report.status === 'pending') {
+                    actionsHtml += `
+                        <div class="action-card">
+                            <h6><i class="bi bi-pencil"></i> Status Actions</h6>
+                            <div class="action-grid">
+                                <button class="modal-action-btn" style="background: #ffc107; color: #000;" onclick="updateStatus(${report.id}, 'under_review')">
+                                    <i class="bi bi-eye-fill"></i> Mark Under Review
+                                </button>
+                                <button class="modal-action-btn" style="background: #28a745; color: white;" onclick="resolveReport(${report.id})">
+                                    <i class="bi bi-check-lg"></i> Resolve Report
+                                </button>
+                                <button class="modal-action-btn" style="background: #dc3545; color: white;" onclick="dismissReport(${report.id})">
+                                    <i class="bi bi-x-lg"></i> Dismiss Report
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else if (report.status === 'under_review') {
+                    actionsHtml += `
+                        <div class="action-card">
+                            <h6><i class="bi bi-pencil"></i> Resolution Actions</h6>
+                            <div class="action-grid">
+                                <button class="modal-action-btn" style="background: #28a745; color: white;" onclick="resolveReport(${report.id})">
+                                    <i class="bi bi-check-lg"></i> Resolve Report
+                                </button>
+                                <button class="modal-action-btn" style="background: #dc3545; color: white;" onclick="dismissReport(${report.id})">
+                                    <i class="bi bi-x-lg"></i> Dismiss Report
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('reportActionsModalBody').innerHTML = actionsHtml;
+                new bootstrap.Modal(document.getElementById('reportActionsModal')).show();
+            } else {
+                alert('Error loading report details');
+            }
+        })
+        .catch(err => {
+            alert('Error: ' + err.message);
+        });
+}
 
 
 
@@ -630,6 +902,20 @@ function viewReport(reportId) {
         .catch(err => {
             alert('Error: ' + err.message);
         });
+}
+
+// View report from actions modal - closes actions modal first
+function viewReportFromActions(reportId) {
+    // Close the actions modal first
+    const actionsModal = bootstrap.Modal.getInstance(document.getElementById('reportActionsModal'));
+    if (actionsModal) {
+        actionsModal.hide();
+    }
+    
+    // Wait for modal to close, then open details modal
+    setTimeout(() => {
+        viewReport(reportId);
+    }, 300);
 }
 
 function updateStatus(reportId, status) {
@@ -730,38 +1016,184 @@ function formatReportDetails(report) {
         'low': 'secondary'
     }[report.priority] || 'secondary';
 
+    const statusBadgeColors = {
+        'pending': 'background: #fef3c7; color: #92400e;',
+        'under_review': 'background: #dbeafe; color: #1e40af;',
+        'resolved': 'background: #d1fae5; color: #065f46;',
+        'dismissed': 'background: #f3f4f6; color: #374151;'
+    };
+
+    const priorityBadgeColors = {
+        'high': 'background: #fee2e2; color: #991b1b;',
+        'medium': 'background: #fef3c7; color: #92400e;',
+        'low': 'background: #f3f4f6; color: #374151;'
+    };
+
    const imageSection = report.image_path
     ? `
-    <div class="card mb-3">
-        <div class="card-header"><strong>Attached Image</strong></div>
-        <div class="card-body text-center">
+    <div style="margin-bottom: 24px;">
+        <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 12px;">
+            <i class="bi bi-image" style="color: #9ca3af; margin-right: 6px;"></i>Attached Image
+        </div>
+        <div style="padding: 20px; background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 12px; text-align: center;">
             <img 
                 src="${BASE_URL}${report.image_path}"
                 class="img-fluid rounded shadow"
-                style="max-height: 350px; cursor: zoom-in;"
+                style="max-height: 450px; cursor: zoom-in; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"
                 onclick="openImageViewer('${BASE_URL}${report.image_path}')"
                 alt="Report Image"
                 onerror="this.onerror=null;this.src='https://via.placeholder.com/400x250?text=Image+Not+Found';"
             >
-            <p class="mt-2 text-muted">Click image to view full size</p>
+            <p style="font-size: 14px; color: #6b7280; margin: 12px 0 0 0;">Click image to view full size</p>
         </div>
     </div>
     `
     : `
-    <div class="card mb-3">
-        <div class="card-header"><strong>Attached Image</strong></div>
-        <div class="card-body text-center text-muted">
-            No image attached to this report
+    <div style="margin-bottom: 24px;">
+        <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 12px;">
+            <i class="bi bi-image" style="color: #9ca3af; margin-right: 6px;"></i>Attached Image
+        </div>
+        <div style="padding: 20px; background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 12px; text-align: center; color: #9ca3af;">
+            <i class="bi bi-image" style="font-size: 48px; opacity: 0.3; display: block; margin-bottom: 12px;"></i>
+            <p style="font-size: 14px; margin: 0;">No image attached to this report</p>
         </div>
     </div>
     `;
 
 
     return `
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card mb-3">
-                    <div class="card-header"><strong>Report Information</strong></div>
+        <!-- Report Header -->
+        <div class="profile-row" style="display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 12px; margin-bottom: 24px;">
+            <div class="avatar" style="width: 52px; height: 52px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; color: #6b7280; flex-shrink: 0;">
+                <i class="bi bi-flag-fill" style="font-size: 24px; color: #dc3545;"></i>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 15px; font-weight: 650; color: #111827; display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    Report #${report.id}
+                    <span style="${statusBadgeColors[report.status] || statusBadgeColors.pending} padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${report.status.replace('_', ' ')}</span>
+                    <span style="${priorityBadgeColors[report.priority || 'medium']} padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${report.priority || 'medium'} priority</span>
+                </div>
+                <div style="font-size: 12.5px; color: #6b7280;">Reported on ${report.created_at || 'N/A'}</div>
+            </div>
+        </div>
+
+        <!-- Info Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #f0f0f0; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
+            <!-- Reporter Section -->
+            <div style="padding: 20px 24px; border-right: 1px solid #f0f0f0;">
+                <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 14px;">
+                    <i class="bi bi-person-fill" style="color: #9ca3af; margin-right: 6px;"></i>Reporter Information
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f7f8f9;">
+                        <span style="font-size: 14px; color: #9ca3af;">Name:</span>
+                        <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.reporter_name}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f7f8f9;">
+                        <span style="font-size: 14px; color: #9ca3af;">Email:</span>
+                        <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.reporter_email}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 0;">
+                        <span style="font-size: 14px; color: #9ca3af;">Phone:</span>
+                        <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.reporter_phone || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Report Details Section -->
+            <div style="padding: 20px 24px;">
+                <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 14px;">
+                    <i class="bi bi-info-circle-fill" style="color: #9ca3af; margin-right: 6px;"></i>Report Details
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f7f8f9;">
+                        <span style="font-size: 14px; color: #9ca3af;">Type:</span>
+                        <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.report_type}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f7f8f9;">
+                        <span style="font-size: 14px; color: #9ca3af;">Reported Item:</span>
+                        <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.reported_item_name}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 0;">
+                        <span style="font-size: 14px; color: #9ca3af;">Item ID:</span>
+                        <span style="font-size: 15px; color: #111827; font-weight: 500;">#${report.reported_id}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div style="margin-bottom: 24px;">
+            <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 12px;">
+                <i class="bi bi-file-text-fill" style="color: #9ca3af; margin-right: 6px;"></i>Description
+            </div>
+            <div style="padding: 16px 18px; background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 12px;">
+                <p style="font-size: 16px; color: #374151; line-height: 1.7; margin: 0;">${report.description || 'No description provided'}</p>
+            </div>
+        </div>
+
+        <!-- Image Section -->
+        ${imageSection}
+
+        <!-- Review Information -->
+        ${report.reviewer_name ? `
+        <div style="margin-bottom: 24px;">
+            <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 12px;">
+                <i class="bi bi-clipboard-check-fill" style="color: #9ca3af; margin-right: 6px;"></i>Review Information
+            </div>
+            <div style="padding: 16px 18px; background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 14px; color: #9ca3af;">Reviewed by:</span>
+                    <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.reviewer_name}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 14px; color: #9ca3af;">Review date:</span>
+                    <span style="font-size: 15px; color: #111827; font-weight: 500;">${report.reviewed_at || 'N/A'}</span>
+                </div>
+                ${report.admin_notes ? `
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0;">
+                    <span style="font-size: 14px; color: #9ca3af; display: block; margin-bottom: 6px;">Notes:</span>
+                    <p style="font-size: 15px; color: #374151; margin: 0; line-height: 1.6;">${report.admin_notes}</p>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+        ` : ''}
+
+        <!-- Timeline -->
+        ${report.timeline && report.timeline.length ? `
+        <div>
+            <div style="font-size: 14px; font-weight: 650; color: #111827; margin-bottom: 12px;">
+                <i class="bi bi-clock-history" style="color: #9ca3af; margin-right: 6px;"></i>Activity Timeline
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${report.timeline.map(item => `
+                    <div style="display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px; background: #f9fafb; border: 1px solid #f0f0f0; border-radius: 10px;">
+                        <div style="width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #d1d5db; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;">
+                            <svg style="width: 11px; height: 11px; color: #6b7280;" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="2,6 5,9 10,3"/>
+                            </svg>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 2px;">
+                                ${item.action} <span style="font-weight: 400; color: #6b7280;">by ${item.performed_by}</span>
+                            </div>
+                            <div style="font-size: 13px; color: #9ca3af; line-height: 1.5;">
+                                ${item.created_at}${item.notes ? `<br><span style="color: #374151;">${item.notes}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
+
+        <!-- Old Layout (hidden, kept for compatibility) -->
+        <div style="display: none;">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header"><strong>Report Information</strong></div>
                     <div class="card-body">
                         <p><strong>Report ID:</strong> #${report.id}</p>
                         <p><strong>Type:</strong> <span class="badge bg-primary">${report.report_type}</span></p>
@@ -792,8 +1224,6 @@ function formatReportDetails(report) {
                     </div>
                 </div>
 
-                ${imageSection}
-
                 ${report.reviewer_name ? `
                 <div class="card mb-3">
                     <div class="card-header"><strong>Review Information</strong></div>
@@ -806,21 +1236,6 @@ function formatReportDetails(report) {
                 ` : ''}
             </div>
         </div>
-
-        ${report.timeline && report.timeline.length ? `
-        <div class="card">
-            <div class="card-header"><strong>Activity Timeline</strong></div>
-            <div class="card-body report-timeline">
-                ${report.timeline.map(item => `
-                    <div class="timeline-item">
-                        <strong>${item.action}</strong> by ${item.performed_by} 
-                        <br><small class="text-muted">${item.created_at}</small>
-                        ${item.notes ? `<br><small>${item.notes}</small>` : ''}
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-        ` : ''}
     `;
 }
 
@@ -830,13 +1245,14 @@ function openImageViewer(src) {
         <div class="modal fade" id="imageViewerModal" tabindex="-1">
             <div class="modal-dialog modal-fullscreen">
                 <div class="modal-content bg-dark">
-                    <div class="modal-header border-0">
-                        <button class="btn btn-light ms-auto" data-bs-dismiss="modal">
-                            <i class="bi bi-x-lg"></i>
+                    <div class="modal-header border-0" style="padding: 40px;">
+                        <h3 class="text-white" style="font-size: 28px; font-weight: 700;">Report Image</h3>
+                        <button class="btn btn-light ms-auto" data-bs-dismiss="modal" style="width: 50px; height: 50px; border-radius: 12px; font-size: 24px; background: rgba(255,255,255,0.2); color: white; border: none; background-image: none;">
+                            ✕
                         </button>
                     </div>
-                    <div class="modal-body d-flex justify-content-center align-items-center">
-                        <img src="${src}" class="img-fluid rounded shadow-lg">
+                    <div class="modal-body d-flex justify-content-center align-items-center" style="padding: 40px;">
+                        <img src="${src}" class="img-fluid rounded shadow-lg" style="max-width: 90%; max-height: 80vh; border-radius: 16px;">
                     </div>
                 </div>
             </div>

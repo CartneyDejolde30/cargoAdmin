@@ -1,7 +1,6 @@
 <?php
 // ========================================
-// OPTION 1: Show ALL approved bookings (active + upcoming)
-// Replace api/bookings/get_owner_active_bookings.php
+// UPDATED VERSION - Forces trip_status based on trip_started_at
 // ========================================
 error_reporting(0);
 ini_set('display_errors', 0);
@@ -10,6 +9,9 @@ if (ob_get_level()) ob_end_clean();
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 require_once '../../include/db.php';
 
@@ -29,14 +31,25 @@ SELECT
     b.pickup_time,
     b.return_time,
     b.total_amount,
+    b.price_per_day,
+    b.insurance_premium,
+    b.security_deposit_amount,
     b.status,
     b.rental_period,
     b.created_at,
+    b.trip_started_at,
     
     -- Refund fields
     b.refund_status,
     b.refund_requested,
     b.refund_amount,
+    
+    -- Odometer fields
+    b.odometer_start,
+    b.odometer_end,
+    b.odometer_start_photo,
+    b.odometer_end_photo,
+    b.trip_started,
     
     -- Car Details
     COALESCE(c.brand, m.brand) AS brand,
@@ -44,7 +57,11 @@ SELECT
     COALESCE(c.car_year, m.motorcycle_year) AS car_year,
     COALESCE(c.image, m.image) AS car_image,
     COALESCE(c.location, m.location) AS location,
+    COALESCE(c.latitude, m.latitude) AS latitude,
+    COALESCE(c.longitude, m.longitude) AS longitude,
     COALESCE(c.price_per_day, m.price_per_day) AS price_per_day,
+    COALESCE(c.has_unlimited_mileage, m.has_unlimited_mileage) AS has_unlimited_mileage,
+    COALESCE(c.daily_mileage_limit, m.daily_mileage_limit) AS daily_mileage_limit,
     
     -- Renter Details
     u.fullname AS renter_name,
@@ -53,24 +70,17 @@ SELECT
     
     -- Calculate days remaining
     DATEDIFF(b.return_date, CURDATE()) AS days_remaining,
-    DATEDIFF(CURDATE(), b.pickup_date) AS days_elapsed,
-    
-    -- Determine if currently active or upcoming
-    CASE 
-        WHEN b.pickup_date <= CURDATE() AND b.return_date >= CURDATE() THEN 'in_progress'
-        WHEN b.pickup_date > CURDATE() THEN 'upcoming'
-        ELSE 'past'
-    END AS trip_status
+    DATEDIFF(CURDATE(), b.pickup_date) AS days_elapsed
     
 FROM bookings b
 LEFT JOIN cars c ON b.car_id = c.id AND b.vehicle_type = 'car'
 LEFT JOIN motorcycles m ON b.car_id = m.id AND b.vehicle_type = 'motorcycle'
 LEFT JOIN users u ON b.user_id = u.id
 WHERE b.owner_id = ?
-AND b.status = 'approved'
+AND b.status IN ('approved', 'ongoing')
 AND (
-    b.return_date >= CURDATE() 
-    OR DATEDIFF(CURDATE(), b.return_date) <= 7  -- Show expired bookings up to 7 days past due
+    b.return_date >= CURDATE()
+    OR DATEDIFF(CURDATE(), b.return_date) <= 7
 )
 ORDER BY 
     CASE 
@@ -91,12 +101,82 @@ while ($row = $result->fetch_assoc()) {
     
     $carImage = $row['car_image'] ?? '';
     if (!empty($carImage) && strpos($carImage, 'http') !== 0) {
-        $carImage = 'http://10.77.127.2/carGOAdmin/' . $carImage;
+        if (!defined('BASE_URL')) {
+            require_once __DIR__ . '/../../include/config.php';
+        }
+        $carImage = BASE_URL . '/' . $carImage;
     }
     
-    $totalDays = max(1, (strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400);
-    $daysElapsed = max(0, intval($row['days_elapsed']));
-    $progress = min(100, ($daysElapsed / $totalDays) * 100);
+    // Calculate total rental days
+    $totalDays = max(1, (int)((strtotime($row['return_date']) - strtotime($row['pickup_date'])) / 86400) + 1);
+
+    // Compute price breakdown
+    $aPpd      = (float)($row['price_per_day'] ?? 0);
+    $aBase     = $aPpd * $totalDays;
+    $aIns      = (float)($row['insurance_premium'] ?? 0);
+    $aPeriod   = $row['rental_period'] ?? 'Day';
+    $aDiscount = 0.0;
+    if ($aPeriod === 'Weekly' && $totalDays >= 7) {
+        $aDiscount = $aBase * 0.12;
+    } elseif ($aPeriod === 'Monthly' && $totalDays >= 30) {
+        $aDiscount = $aBase * 0.25;
+    }
+    $aDiscounted = $aBase - $aDiscount;
+    $aSvcFee   = ($aDiscounted + $aIns) * 0.05;
+    $aSecDep   = (float)($row['security_deposit_amount'] ?? 0);
+
+    // Determine trip status with return time awareness
+    $tripStatus = 'past';
+    $nowTs = time();
+    $pickupTs = strtotime(trim(($row['pickup_date'] ?? '') . ' ' . ($row['pickup_time'] ?? '00:00:00')));
+    $returnTs = strtotime(trim(($row['return_date'] ?? '') . ' ' . ($row['return_time'] ?? '23:59:59')));
+    $hasStarted = ($row['trip_started_at'] !== null);
+    $hasEndedReading = (!empty($row['odometer_end']));
+    if ($hasStarted && $returnTs !== false && $nowTs >= $returnTs && !$hasEndedReading) {
+        $tripStatus = 'overdue';
+    } elseif ($hasStarted) {
+        $tripStatus = 'in_progress';
+    } elseif ($pickupTs !== false && $nowTs < $pickupTs) {
+        $tripStatus = 'upcoming';
+    }
+    
+    // Calculate progress based on actual trip start
+    $progress = 0;
+    $daysElapsed = 0;
+
+    if ($row['trip_started_at'] !== null) {
+        // Trip has started - calculate from trip_started_at to actual return datetime
+        $tripStartTime = strtotime($row['trip_started_at']);
+        // Use actual return_time (not hardcoded 23:59:59) so same-day trips progress correctly
+        $actualReturnTime = !empty($row['return_time']) ? $row['return_time'] : '23:59:59';
+        $tripEndTime = strtotime($row['return_date'] . ' ' . $actualReturnTime);
+        $currentTime = time();
+
+        $totalTripSeconds = max(1, $tripEndTime - $tripStartTime);
+        $elapsedSeconds = max(0, $currentTime - $tripStartTime);
+
+        $progress = min(100, ($elapsedSeconds / $totalTripSeconds) * 100);
+        $daysElapsed = max(0, floor($elapsedSeconds / 86400));
+    } else {
+        $progress = 0;
+        $daysElapsed = 0;
+    }
+
+    // Compute a human-readable "time remaining" label
+    $timeRemainingLabel = '';
+    if ($returnTs !== false && $nowTs < $returnTs) {
+        $secsLeft = $returnTs - $nowTs;
+        if ($secsLeft < 3600) {
+            $timeRemainingLabel = max(1, (int)ceil($secsLeft / 60)) . ' min left';
+        } elseif ($secsLeft < 86400) {
+            $timeRemainingLabel = max(1, (int)ceil($secsLeft / 3600)) . ' hr left';
+        } else {
+            $daysLeft = (int)ceil($secsLeft / 86400);
+            $timeRemainingLabel = $daysLeft . ' day' . ($daysLeft !== 1 ? 's' : '') . ' left';
+        }
+    } elseif ($tripStatus === 'overdue') {
+        $timeRemainingLabel = 'Overdue';
+    }
     
     $bookings[] = [
         'booking_id' => $row['booking_id'],
@@ -104,6 +184,8 @@ while ($row = $result->fetch_assoc()) {
         'car_full_name' => $carName . ' ' . $row['car_year'],
         'car_image' => $carImage,
         'location' => $row['location'] ?? '',
+        'latitude' => !empty($row['latitude']) ? (float)$row['latitude'] : null,
+        'longitude' => !empty($row['longitude']) ? (float)$row['longitude'] : null,
         'price_per_day' => $row['price_per_day'] ?? 0,
         'renter_name' => $row['renter_name'] ?? 'Unknown',
         'renter_email' => $row['renter_email'] ?? '',
@@ -112,13 +194,45 @@ while ($row = $result->fetch_assoc()) {
         'return_date' => date('M d, Y', strtotime($row['return_date'])),
         'pickup_time' => date('h:i A', strtotime($row['pickup_time'])),
         'return_time' => date('h:i A', strtotime($row['return_time'])),
-        'total_amount' => number_format($row['total_amount'], 0),
-        'rental_period' => $row['rental_period'],
+
+        // Raw values (for strict client-side validation / parsing)
+        'pickup_date_raw' => $row['pickup_date'],
+        'pickup_time_raw' => $row['pickup_time'],
+        'return_date_raw' => $row['return_date'],
+        'return_time_raw' => $row['return_time'],
+        
+        // Individual time fields for display
+        'pickup_time_display' => date('h:i A', strtotime($row['pickup_time'])),
+        'return_time_display' => date('h:i A', strtotime($row['return_time'])),
+        'total_amount'      => number_format($row['total_amount'], 2, '.', ''),
+        'price_per_day'     => $aPpd,
+        'security_deposit'  => $aSecDep,
+        'rental_period'     => $aPeriod,
+        // Price breakdown
+        'base_rental'       => round($aBase, 2),
+        'discount'          => round($aDiscount, 2),
+        'insurance_premium' => round($aIns, 2),
+        'service_fee'       => round($aSvcFee, 2),
+        'grand_total'       => round((float)$row['total_amount'] + $aSecDep, 2),
+        'rental_days'       => (int)$totalDays,
         'days_remaining' => max(0, intval($row['days_remaining'])),
+        'time_remaining_label' => $timeRemainingLabel,
         'days_elapsed' => $daysElapsed,
         'trip_progress' => round($progress, 1),
-        'trip_status' => $row['trip_status'],
+        'trip_status' => $tripStatus,
+        'has_unlimited_mileage' => isset($row['has_unlimited_mileage']) ? (int)$row['has_unlimited_mileage'] : 0,
+        'daily_mileage_limit' => $row['daily_mileage_limit'] ?? null,
+        'is_overdue' => ($tripStatus === 'overdue'),
+        'hours_overdue' => ($tripStatus === 'overdue' && $returnTs !== false) ? max(0, floor(($nowTs - $returnTs) / 3600)) : 0,
+        'trip_started_at' => $row['trip_started_at'] ?? null,
         'status' => 'active',
+        
+        // Odometer fields
+        'odometer_start' => $row['odometer_start'],
+        'odometer_end' => $row['odometer_end'],
+        'odometer_start_photo' => $row['odometer_start_photo'],
+        'odometer_end_photo' => $row['odometer_end_photo'],
+        'trip_started' => $row['trip_started'],
         
         // Refund status fields
         'refund_status' => $row['refund_status'] ?? 'not_requested',
@@ -134,3 +248,4 @@ echo json_encode([
 
 $stmt->close();
 $conn->close();
+?>

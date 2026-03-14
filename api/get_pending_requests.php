@@ -10,14 +10,21 @@ if ($owner_id <= 0) {
     exit;
 }
 
-$baseURL = "http://10.77.127.2/carGOAdmin/uploads/";
+// Load config for UPLOADS_URL
+if (!defined('UPLOADS_URL')) {
+    require_once __DIR__ . '/../include/config.php';
+}
+$baseURL = UPLOADS_URL . "/";
 
-// SQL query
+// SQL query - Support both cars and motorcycles
 $sql = "SELECT 
           b.id AS booking_id,
           b.car_id,
-          c.brand AS car_name,
-          c.image AS car_image,
+          b.vehicle_type,
+          COALESCE(c.brand, m.brand) AS car_name,
+          COALESCE(c.image, m.image) AS car_image,
+          COALESCE(c.model, m.model) AS model,
+          COALESCE(c.car_year, m.motorcycle_year) AS year,
           b.user_id,
           b.full_name,
           b.email,
@@ -32,8 +39,9 @@ $sql = "SELECT
           b.status,
           b.created_at
         FROM bookings b
-        JOIN cars c ON c.id = b.car_id
-        WHERE b.owner_id = ? AND b.status = 'pending'
+        LEFT JOIN cars c ON b.vehicle_type = 'car' AND b.car_id = c.id
+        LEFT JOIN motorcycles m ON b.vehicle_type = 'motorcycle' AND b.car_id = m.id
+        WHERE b.owner_id = ? AND b.status = 'pending' AND b.payment_status = 'paid'
         ORDER BY b.created_at DESC";
 
 $stmt = $conn->prepare($sql);
