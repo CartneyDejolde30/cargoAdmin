@@ -144,7 +144,7 @@ try {
         SELECT id FROM bookings
         WHERE car_id = ?
           AND vehicle_type = ?
-          AND status NOT IN ('cancelled', 'rejected')
+          AND status NOT IN ('cancelled', 'rejected', 'completed')
           AND CONCAT(pickup_date, ' ', pickup_time) < ?
           AND CONCAT(return_date, ' ', return_time) > ?
         LIMIT 1
