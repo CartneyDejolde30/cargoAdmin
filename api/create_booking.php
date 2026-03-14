@@ -137,17 +137,20 @@ try {
     /* =========================================================
        4b️⃣ CHECK FOR OVERLAPPING BOOKINGS (with row-level lock)
     ========================================================= */
+    $newPickupDatetime = $pickupDate . ' ' . $pickupTime;
+    $newReturnDatetime = $returnDate . ' ' . $returnTime;
+
     $overlapStmt = $conn->prepare("
         SELECT id FROM bookings
         WHERE car_id = ?
           AND vehicle_type = ?
           AND status NOT IN ('cancelled', 'rejected')
-          AND pickup_date < ?
-          AND return_date > ?
+          AND CONCAT(pickup_date, ' ', pickup_time) < ?
+          AND CONCAT(return_date, ' ', return_time) > ?
         LIMIT 1
         FOR UPDATE
     ");
-    $overlapStmt->bind_param("isss", $vehicleId, $vehicleType, $returnDate, $pickupDate);
+    $overlapStmt->bind_param("isss", $vehicleId, $vehicleType, $newReturnDatetime, $newPickupDatetime);
     $overlapStmt->execute();
     $overlapResult = $overlapStmt->get_result();
     if ($overlapResult->num_rows > 0) {
