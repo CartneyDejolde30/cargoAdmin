@@ -68,7 +68,7 @@ if (!$booking) {
     exit;
 }
 
-$allowedStatuses = ['approved', 'active', 'completed'];
+$allowedStatuses = ['approved', 'active', 'ongoing', 'completed'];
 if (!in_array($booking['status'], $allowedStatuses)) {
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "Damage reports can only be submitted for active or completed bookings"]);
