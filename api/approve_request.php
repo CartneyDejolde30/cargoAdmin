@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 include "../include/db.php";
+require_once __DIR__ . "/../include/send_notification.php";
 
 $booking_id = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
 
@@ -182,6 +183,13 @@ $notif_r = $conn->prepare("
 $notif_r->bind_param("isss", $renter_id, $title_renter, $body_renter, $type_renter);
 $notif_r->execute();
 $notif_r->close();
+
+// PUSH NOTIFICATION → RENTER
+sendPushToUser($conn, $renter_id, $title_renter, $body_renter, [
+    'type'       => 'booking_approved',
+    'booking_id' => (string)$booking_id,
+    'screen'     => 'my_bookings',
+]);
 
 // SAVE NOTIFICATION FOR OWNER
 $title_owner = "Booking Approved";

@@ -7,6 +7,7 @@ header("Access-Control-Allow-Headers: Content-Type");
 
 require_once __DIR__ . "/../include/db.php";
 require_once __DIR__ . "/security/suspension_guard.php";
+require_once __DIR__ . "/../include/send_notification.php";
 
 $response = ["success" => false, "message" => ""];
 
@@ -241,6 +242,24 @@ try {
        7️⃣ COMMIT
     ========================================================= */
     mysqli_commit($conn);
+
+    // PUSH NOTIFICATION → OWNER (new booking request)
+    $renterName = $fullName ?: 'A renter';
+    sendPushToUser($conn, $ownerId, '🚗 New Booking Request', "{$renterName} wants to book your vehicle.", [
+        'type'       => 'new_booking',
+        'booking_id' => (string)$bookingId,
+        'screen'     => 'booking_requests',
+    ]);
+
+    // DB NOTIFICATION → OWNER
+    $notifOwner = $conn->prepare(
+        "INSERT INTO notifications (user_id, title, message, type, read_status, created_at)
+         VALUES (?, 'New Booking Request', ?, 'booking', 'unread', NOW())"
+    );
+    $ownerMsg = "{$renterName} has requested to book your vehicle. Booking #BK-" . str_pad($bookingId, 4, '0', STR_PAD_LEFT);
+    $notifOwner->bind_param("is", $ownerId, $ownerMsg);
+    $notifOwner->execute();
+    $notifOwner->close();
 
     echo json_encode([
         "success" => true,

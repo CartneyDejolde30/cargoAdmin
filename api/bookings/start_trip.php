@@ -8,6 +8,7 @@ header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
 
 require_once '../../include/db.php';
+require_once '../../include/send_notification.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
@@ -134,7 +135,14 @@ if ($stmt->execute()) {
     
     $stmt->bind_param("sss", $userId, $title, $message);
     $stmt->execute();
-    
+
+    // PUSH NOTIFICATION → RENTER
+    sendPushToUser($conn, $userId, $title, $message, [
+        'type'       => 'trip_started',
+        'booking_id' => (string)$booking_id,
+        'screen'     => 'active_bookings',
+    ]);
+
     echo json_encode([
         'success' => true,
         'message' => 'Trip started successfully! Vehicle has been picked up.',

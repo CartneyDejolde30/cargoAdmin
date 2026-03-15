@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 include "../include/db.php";
+require_once __DIR__ . "/../include/send_notification.php";
 
 $booking_id = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
 $reason     = isset($_POST['reason']) ? trim($_POST['reason']) : "";
@@ -66,6 +67,13 @@ $notifR = $conn->prepare("
 $notifR->bind_param("isss", $renter_id, $title_r, $msg_r, $type_r);
 $notifR->execute();
 $notifR->close();
+
+// PUSH NOTIFICATION → RENTER
+sendPushToUser($conn, $renter_id, $title_r, $msg_r, [
+    'type'       => 'booking_rejected',
+    'booking_id' => (string)$booking_id,
+    'screen'     => 'my_bookings',
+]);
 
 // Owner log notification
 $title_o = "Booking Rejected";

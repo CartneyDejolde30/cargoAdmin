@@ -5,6 +5,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 
 require_once '../../include/db.php';
+require_once '../../include/send_notification.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
@@ -195,7 +196,14 @@ try {
         $notifStmt->bind_param("sss", $userId, $title, $message);
         $notifStmt->execute();
         $notifStmt->close();
-        
+
+        // PUSH NOTIFICATION → RENTER
+        sendPushToUser($conn, $userId, $title, $message, [
+            'type'       => 'trip_ended',
+            'booking_id' => (string)$booking_id,
+            'screen'     => 'my_bookings',
+        ]);
+
         $response = [
             'success' => true,
             'message' => 'Trip marked as completed successfully',
